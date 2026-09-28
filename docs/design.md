@@ -1,0 +1,203 @@
+# Publy 产品设计
+
+> 状态：M0 设计定稿。本文档是产品的唯一权威设计，实现与文档冲突时以本文档为准；要改实现先改文档。
+
+## 0. 一句话
+
+**Publy 是面向 agent 时代的微信公众号发布管线：一个 CLI 负责排版与小绿书渲染，一个托管服务负责稳定的微信发布，一个主题商店负责排版资产分发。**
+
+写作留在 Obsidian / 任意 Markdown 编辑器，其余一切（排版、卡片渲染、上传、群发、定时、多账号）收进一条 `publy` 命令。
+
+## 1. 判断：为什么是「CLI + 服务」，而不是又一个编辑器
+
+### 1.1 现有竞品全是给人用的 GUI
+
+| 竞品 | 形态 | 共同假设 |
+|---|---|---|
+| [doocs/md](https://github.com/doocs/md)（md.doocs.org） | 浏览器编辑 → 复制 → 手动粘贴进公众号后台 | 操作者是坐在浏览器前的人 |
+| [Raphael](https://github.com/liuxiaopai-ai/raphael-publish)（publish.raphael.app） | 30 套主题、Notion/飞书粘贴清洗，仍是网页复制流 | 同上 |
+| mdnice / 壹伴 | 商业化成熟（付费主题/浏览器插件），形态不变 | 同上 |
+
+agent 时代这个假设失效：创作发生在 Obsidian，执行发生在 CLI/agent，人只做审阅。GUI 排版器没有服务端，也就没有护城河和收入——doocs/md 30k+ star 依然收不了钱。
+
+### 1.2 wenyan 的教训
+
+wenyan（文颜）验证了 CLI + server 路线可行（tlai-wechat-publish 技能即构建其上），但产品摊得太开：macOS App、跨平台桌面版、CLI、MCP、Docker 多端并进；主题靠本地 CSS / gist 注册，没有主题广场。多端并进的结果是每一端都是半成品。
+
+Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务端）**。自托管 server 与云服务同协议——既是用户的逃生门，也是信任背书。
+
+### 1.3 为什么「发布服务」能收钱
+
+公众号 API 的脏活恰好全是运维活：
+
+- IP 白名单要求出口 IP 稳定——家用/办公网络天然不可行
+- AppSecret 托管与轮换
+- access_token 两小时过期，多进程集中刷新需要分布式锁
+- 素材上传、群发配额（订阅号 1 次/天）、失败重试与幂等
+
+这些对个人是负担，对服务是产品。GUI 工具收钱靠去广告和主题数量；Publy 收钱靠**发布可靠性**——这是硬成本，用户愿意为省掉的运维付费（mdnice/壹伴已验证过这个人群的付费意愿）。
+
+### 1.4 小绿书是空白区
+
+所有排版工具都在做「文章」，没有工具认真做「小绿书」：
+
+- 现有小绿书工作流（tlai-wechat-card）靠 AI 生图烘焙文字：慢、贵、汉字经常出错
+- 确定性渲染（HTML/CSS 模板 → PNG）可以做到：像素级正确的汉字、主题化、秒级、零边际成本
+
+小绿书是 Publy 的差异化楔子：先建立「最好用的小绿书管线」心智，再带动文章发布服务。
+
+## 2. 产品形态：三个工件，一个协议
+
+| 工件 | 形态 | 开源性 | 角色 |
+|---|---|---|---|
+| **publy CLI** | npm 包，`npx publy` | 开源（AGPL） | 本地排版 + 小绿书渲染 + 服务客户端；agent 的唯一操作面 |
+| **Publy Cloud** | 托管 REST 服务 | 闭源 | IP 白名单、密钥托管、多账号、定时、webhook；**收费物** |
+| **主题商店** | npm 包 + 注册表索引 | 主题与索引均开源 | 文章主题与卡片主题的分发、预览、提交 |
+
+**协议对等**：`packages/server`（自托管参考实现，开源，Docker 一键起）与 Publy Cloud 实现同一份 REST 协议。信任设计：用户随时可以迁出去，云服务的价值在省心而非锁定。
+
+### 2.1 明确不做（范围纪律）
+
+- ❌ 文章 GUI/Web 编辑器——`render` 输出的 HTML 可贴进任何现有编辑器，编辑器市场已有充分供给
+- ❌ 桌面 App
+- ❌ 图床——图片随文章仓库/Obsidian 存放，发布时经素材接口上传
+- ❌ 知乎/头条等多平台适配——wenyan 式「都支持一点」是杂的根源；只做微信，做穿
+- ❌ MCP server（首版）——REST + CLI 已可被任何 agent 驱动，后续可加薄封装
+- ❌ 账号密码模拟 / 扫码爬虫——**合规红线**：只走官方 MP API
+
+## 3. CLI 契约（agent-first）
+
+设计原则：一切命令非交互可完成；`--json` 输出机器可读结果；退出码稳定；破坏性操作显式确认。
+
+```bash
+publy render a.md --theme claude -o out.html   # Markdown → 公众号 HTML（免费路径，可贴入后台）
+publy preview a.md --theme claude              # 本地预览（HTML + 截图，供 agent 自检）
+publy card post.md --theme naive -o cards/     # 小绿书：Markdown → N 张卡片 PNG + caption
+publy card post.md --lint                      # 校验：caption ≤1000 字、图片 3–9 张、比例 3:4
+publy publish a.md                             # 发布文章（经云端或自托管服务）
+publy publish post.md                          # 发布小绿书（图片消息）
+publy publish a.md --at "2026-10-01 09:00"     # 定时（服务端 job）
+publy theme add @scope/theme-x | theme ls | theme preview <name>
+publy account add --app-id wx... --secret-env WX_SECRET   # 密钥走环境变量引用，不明文落盘
+publy quota                                    # 群发配额余量
+```
+
+- 所有命令支持 `--json`。退出码：`0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败 / `5` 服务端错误 / `6` 配额不足
+- 输入兼容 Obsidian：`![[img.png|650]]`、`[[wikilink|别名]]` 原生解析（`--media-dir` 指定资源目录）；frontmatter 的 `title` / `cover` / `type` / `theme` 直接消费
+- 密钥管理：配置文件只存环境变量名引用（`--secret-env`），与 tlai 技能的 `${VAR}` 约定一致
+
+### 3.1 从 tlai 技能继承的实战经验（内置为默认行为）
+
+这些是现有公众号推送技能踩坑沉淀，全部固化为 CLI 默认行为：
+
+- **零修改原文**：所有变换发生在内存/输出物，绝不回写源文件
+- SVG 自动补白底（公众号把透明背景渲染成黑色的坑）
+- 链接转文末脚注（默认开，`--no-footnote` 关闭）
+- `--footer` 文末引流文案注入
+- 封面比例 2.35:1 裁切
+- 账号 ↔ 主题绑定（`accounts[]` 配置，`--account` 选择）
+- 小绿书预检清单（错别字/风格一致性提醒）保留为 `preview` 流程的人工/agent 环节
+
+## 4. 小绿书管线（楔子功能）
+
+### 4.1 创作格式：一个 Markdown 文件即一篇小绿书
+
+```markdown
+---
+title: 居家咖啡指南
+mode: cards            # cards 图文卡片 | text 图文分离
+theme: naive           # 卡片主题
+tags: [咖啡, 生活]
+caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末尾）
+---
+
+## cover               # 第一节 = 封面卡（版式原型 Sparse）
+居家咖啡，从磨豆开始
+
+## point               # 中间节 = 内容卡
+水粉比 1:15
+水温 92°C
+
+## list                # 版式原型 Dense：清单/步骤
+...
+
+## ending              # 最后一节 = 结尾互动卡（Sparse）
+关注我，下期讲手冲参数
+```
+
+节名对应四种版式原型（对齐 tlai-wechat-card 的成熟经验）：`cover`（Sparse）/ `point`（Balanced）/ `list`（Dense）/ `ending`（Sparse）。主题控制每种原型的排版实现。
+
+`text` 模式沿用现状：正文列图（`![[...]]`）+ 一段配文，发布为图片消息，图片不做渲染。
+
+### 4.2 确定性渲染（双引擎）
+
+- **默认引擎 satori**：HTML/CSS 模板 → SVG → PNG（resvg），无浏览器依赖、秒级出图。约束：CSS 子集；CJK 字体使用预分包字体
+- **兜底引擎 browser**：`--engine browser` 走无头 Chromium 截图，支持完整 CSS；主题在 `manifest.json` 中声明所需引擎
+- 输出 1080×1440（3:4）；文字自适应缩放（放不下逐级降字号）；页码/水印由主题控制
+
+### 4.3 预览与校验：人/agent 各司其职
+
+- `publy card --preview` 生成拼版预览页；agent 截图自检，并提醒人工核对错别字（AI 生图时代的教训保留为流程）
+- `--lint` 硬校验：caption 字数、图片数量、比例、标签格式；发布前不通过即拒绝（退出码 4）
+
+### 4.4 发布
+
+素材接口上传 N 张图 → 图片消息群发（首图为封面）→ 返回发布链接。**幂等**：同 idempotency-key 重试不会重复群发——群发配额（订阅号 1 次/天）极其宝贵。
+
+## 5. 主题商店
+
+### 5.1 主题包
+
+- 文章主题 = npm 包 `publy-theme-*`：`theme.css` + `manifest.json`（engine、适用范围 article|card）+ `sample.md` + `preview.png`（CI 渲染）
+- 卡片主题：`cards/*.html`（模板）+ `manifest.json`（engine: satori | browser、版式原型覆盖）+ 同上
+- 语义化版本；本地 CSS 文件可用 `--custom-theme` 直接兜底，不强绑 npm
+
+### 5.2 注册表
+
+- GitHub 仓库 `publy-themes`：`index.json` 精选清单（名称、npm 包、截图、作者）
+- 提交 = PR；CI 自动渲染 sample 生成预览图进 gallery 页
+- `publy theme search / add / preview` 读注册表；`add` 实际安装走 npm
+- 解决 gist 注册的痛点：版本化、一条命令安装、装前可预览、贡献有常规入口
+
+### 5.3 商业化（二期）
+
+付费主题上架，70/30 分成；先用免费主题养生态。
+
+## 6. 服务协议与架构
+
+### 6.1 协议（cloud 与自托管同构）
+
+```
+POST /v1/publish           # 文章或小绿书（multipart：md + 资源）
+POST /v1/publish:schedule  # 定时任务
+GET  /v1/jobs/:id          # 状态/结果（webhook 可选推送）
+POST /v1/media             # 素材上传
+GET  /v1/accounts  POST /v1/accounts
+GET  /v1/quota
+```
+
+鉴权：API key（可按账号拆分授权范围）。幂等：`Idempotency-Key` 头。
+
+### 6.2 服务端职责
+
+IP 白名单管理、AppSecret 加密托管（KMS，永不下发）、access_token 集中刷新（分布式锁）、群发队列（重试/退避/幂等）、审计日志（谁在何时发了什么）。
+
+### 6.3 Monorepo（pnpm + TypeScript）
+
+```
+packages/
+  core/     # 渲染器（md → 公众号 HTML）、卡片引擎、主题加载、校验 —— 纯函数库
+  cli/      # commander 薄壳，npm 包名 publy
+  server/   # 自托管参考实现（Fastify，Docker）
+  shared/   # 协议类型、配置 schema（zod）
+  cloud/    # 托管控制面（闭源，后期：计费、多租户、调度器）
+```
+
+### 6.4 技术风险
+
+| 风险 | 应对 |
+|---|---|
+| Satori CJK 字体体积与加载 | cn-font-split 预分包；主题声明字体栈；browser 引擎兜底 |
+| 微信 API 变动/收紧 | 只走官方接口；协议层隔离微信细节，服务端灰度升级 |
+| 群发配额稀缺（订阅号 1 次/天） | 幂等键 + `publy quota` 预检 + 定时错峰 |
+| 用户不信任托管 AppSecret | 加密托管 + 审计透明 + 自托管逃生门；文档明示数据流 |
