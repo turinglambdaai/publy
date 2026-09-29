@@ -9,7 +9,7 @@
 ## M1 — 渲染与发布闭环 ✅
 
 - [x] `@publy/core` 渲染管线：markdown-it + hljs 高亮 + juice 内联 + Obsidian 语法（`![[img]]` / wikilink）+ SVG→PNG（resvg，白底）+ 链接转脚注 + footer 注入
-- [x] claude 主题移植（用户 wenyan 自定义主题，CSS 变量编译为字面量）
+- [x] claude / medium 主题移植（用户 wenyan 自定义主题，CSS 变量编译为字面量）
 - [x] `publy render` / `publy preview`（浏览器打开）/ `publy publish`（--json、退出码）
 - [x] `publy config set` / `publy account add|list` / `publy theme ls`
 - [x] `@publy/core` 微信客户端：token 缓存（单飞 + 600s buffer）、add_material、draft/add（文章 + newspic 小绿书两种草稿）

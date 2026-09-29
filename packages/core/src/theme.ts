@@ -15,11 +15,14 @@ export interface Theme {
   css: string;
 }
 
-export const BUILTIN_THEMES = ["claude"] as const;
+export const BUILTIN_THEMES = ["claude", "medium"] as const;
 
 function resolveVars(css: string): string {
+  // strip comments first: a trailing comment line would otherwise swallow the
+  // first variable that follows it (bit both claude and medium backgrounds)
   const vars = new Map<string, string>();
-  const rootMatch = css.match(/:root\s*{([^}]*)}/);
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const rootMatch = clean.match(/:root\s*{([^}]*)}/);
   if (rootMatch) {
     for (const line of rootMatch[1].split(";")) {
       const m = line.trim().match(/^(--[\w-]+)\s*:\s*(.+)$/);
