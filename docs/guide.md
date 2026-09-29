@@ -24,7 +24,7 @@ markdown 文件 → publy CLI → publy-server（你的服务器）→ 微信官
 ### 2. 本机安装 CLI
 
 ```bash
-npm i -g publy        # 推荐（包发布后）
+npm i -g @turinglambdaai/publy        # 推荐（包发布后）
 ```
 
 或从源码（开发期）：
