@@ -156,8 +156,8 @@ caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末
 
 ### 5.1 主题包
 
-- 文章主题 = npm 包 `publy-theme-*`：`theme.css` + `manifest.json`（engine、适用范围 article|card）+ `sample.md` + `preview.png`（CI 渲染）
-- 卡片主题：`cards/*.html`（模板）+ `manifest.json`（engine: satori | browser、版式原型覆盖）+ 同上
+- 文章主题 = npm 包 `publy-theme-*`：`theme.css`（`#publy` scope）+ `manifest.json`（适用范围 article|card）+ `sample.md` + `preview.png`（CI 渲染）
+- 卡片主题：`CardTheme` 风格配置模块（colors、fonts、watermark），引擎按四种版式原型消费配置；内置参考实现 naive / claude。卡片主题不做 HTML 模板——satori 的 flex 语义下配置化比模板更可靠
 - 语义化版本；本地 CSS 文件可用 `--custom-theme` 直接兜底，不强绑 npm
 
 ### 5.2 注册表

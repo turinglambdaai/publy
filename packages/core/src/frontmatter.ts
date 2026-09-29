@@ -10,6 +10,10 @@ export interface SourceMeta {
   theme?: string;
   author?: string;
   digest?: string;
+  /** xiaolvshu caption (image posts) */
+  caption?: string;
+  /** xiaolvshu hashtags, rendered as #tag in the caption */
+  tags?: string[];
 }
 
 export interface ParsedSource {

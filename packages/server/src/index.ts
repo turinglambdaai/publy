@@ -5,8 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Fastify from "fastify";
-import type { PublishRequest } from "@publy/shared";
-import { publishToWechat, credentialFor, TokenManager, WechatError, PublishError } from "@publy/core";
+import type { PublishRequest, PublishResponse } from "@publy/shared";
+import { publishToWechat, accountStoreFromArray, MaterialCache, TokenManager, WechatError, PublishError, type AccountStore } from "@publy/core";
 
 export interface ServerAccount {
   name: string;
@@ -18,8 +18,8 @@ export interface ServerConfig {
   port: number;
   apiKey: string;
   accounts: ServerAccount[];
-  /** dir for the access-token cache */
-  cacheDir?: string;
+  /** dir for the token cache, material cache and audit log (default: beside the config) */
+  dataDir?: string;
 }
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".publy", "server.json");
@@ -40,13 +40,36 @@ export function loadServerConfig(configPath?: string): ServerConfig {
     port: raw.port ?? 8082,
     apiKey: raw.apiKey,
     accounts: raw.accounts,
-    cacheDir: raw.cacheDir,
+    dataDir: raw.dataDir ?? path.join(path.dirname(file), "server-data"),
   };
 }
 
+const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000; // retries of the same publish dedupe for 10 minutes
+
 export function buildApp(config: ServerConfig) {
   const app = Fastify({ bodyLimit: 30 * 1024 * 1024 });
-  const tokens = new TokenManager(config.cacheDir ?? path.join(path.dirname(process.env.PUBLY_SERVER_CONFIG ?? DEFAULT_CONFIG_PATH), "server-cache"));
+  const dataDir = config.dataDir ?? path.join(os.homedir(), ".publy", "server-data");
+  fs.mkdirSync(dataDir, { recursive: true });
+
+  const accounts: AccountStore = accountStoreFromArray(config.accounts);
+  const tokens = new TokenManager(dataDir);
+  const materials = new MaterialCache(dataDir);
+
+  // idempotency store: key → { mediaId, at }; survives restarts
+  const idempotencyFile = path.join(dataDir, "idempotency.json");
+  let idempotency: Record<string, { mediaId: string; at: number }> = {};
+  try {
+    idempotency = JSON.parse(fs.readFileSync(idempotencyFile, "utf-8"));
+  } catch {
+    /* first run */
+  }
+  const saveIdempotency = () => fs.writeFileSync(idempotencyFile, JSON.stringify(idempotency), { mode: 0o600 });
+
+  // audit log: one JSON line per publish attempt
+  const historyFile = path.join(dataDir, "history.jsonl");
+  const audit = (entry: Record<string, unknown>) => {
+    fs.appendFileSync(historyFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+  };
 
   app.addHook("onRequest", async (req, reply) => {
     if (req.url === "/health") return;
@@ -58,7 +81,7 @@ export function buildApp(config: ServerConfig) {
 
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
 
-  app.get("/verify", async () => ({ ok: true, accounts: config.accounts.map((a) => a.name) }));
+  app.get("/verify", async () => ({ ok: true, accounts: accounts.list() }));
 
   app.post<{ Body: PublishRequest }>("/v1/publish", async (req, reply) => {
     const body = req.body;
@@ -70,11 +93,30 @@ export function buildApp(config: ServerConfig) {
     if (body.type !== "article" && body.type !== "image_post") {
       return reply.code(400).send({ code: "BAD_REQUEST", message: '"type" must be "article" or "image_post"' });
     }
+
+    const key = body.idempotencyKey;
+    if (key) {
+      const hit = idempotency[key];
+      if (hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS) {
+        audit({ event: "deduped", key, account: body.account, title: body.title });
+        return { mediaId: hit.mediaId, deduped: true };
+      }
+    }
+
     try {
-      const cred = credentialFor(config.accounts, body.account);
-      const result = await publishToWechat(body, cred, tokens);
+      const cred = accounts.resolve(body.account);
+      if (!cred) {
+        return reply.code(400).send({ code: "ACCOUNT_NOT_FOUND", message: `Unknown account "${body.account}"` });
+      }
+      const result: PublishResponse = await publishToWechat(body, cred, tokens, materials);
+      if (key) {
+        idempotency[key] = { mediaId: result.mediaId, at: Date.now() };
+        saveIdempotency();
+      }
+      audit({ event: "published", account: body.account, type: body.type, title: body.title, mediaId: result.mediaId, key });
       return result;
     } catch (err) {
+      audit({ event: "failed", account: body.account, type: body.type, title: body.title, error: (err as Error).message });
       if (err instanceof PublishError) {
         return reply.code(400).send({ code: err.code, message: err.message });
       }
