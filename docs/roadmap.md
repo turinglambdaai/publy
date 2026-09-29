@@ -31,21 +31,30 @@
 ## M2 — 稳定性 ✅（除自吞狗粮周期）
 
 - [x] 幂等键（内容寻址，服务端 10 分钟窗口去重）
-- [x] 审计日志（server-data/history.jsonl，逐条发布/去重/失败记录）
+- [x] 审计日志（server-data/history.jsonl + `publy history` / GET /v1/history）
 - [x] 封面 2.35:1 中心裁切（server 端 resvg 视口裁切，零图像库依赖）
 - [x] 素材 hash 缓存（同 appId 同字节内容免重传，material-cache.json）
 - [x] `AccountStore` 接口抽象（文件实现，M4 换数据库）
-- [x] 公司网络大 POST 拦截解法：SSH 隧道（22 端口加密流，启动文件夹开机静默自启）——2026-09-29 实测：直连大 POST 均被中间设备掐断（几十 KB 阈值），隧道 200KB+ 全通
-- [x] **wenyan 全面退役**（2026-09-29）：服务器 tmux 会话停止 + npm 卸载 + 数据目录改名 `.retired-20260929` 观察；本机 npm 卸载 + 数据目录删除；`tlai-wechat-publish` 技能 v1.0.0 重写为纯 publy 流程（预处理/临时文件全删，publy 原生零修改原文）
-- [x] CLI 全局命令 `publy`（npm 全局 bin 直指 workspace dist，改码即生效）；修复 ESM 主模块判断在 Windows 路径/junction 下静默失效（改用 `pathToFileURL`）
-- [ ] CLI `publy tunnel` 自动隧道（直连失败自动建）——产品 insight：目标客户大量在企业网络内，这是刚需特性
+- [x] 公司网络大 POST 拦截解法：SSH 隧道（启动文件夹自启）→ **2026-09-30 产品化：`publy tunnel` 幂等命令 + publish 失败自动拉隧道重试**
+- [x] **wenyan 全面退役**（2026-09-29）：服务器 tmux 停止 + npm 卸载 + 数据目录改名 `.retired-20260929` 观察；本机 npm 卸载 + 数据目录删除；`tlai-wechat-publish` 技能 v1.0.0 重写
+- [x] CLI 全局命令 `publy`（dev 期为直指 dist 的 shim；npm 发包后为 `npm i -g publy`）
+- [x] **强 API key 轮换**（2026-09-30：24 字节随机 hex 替换 wenyan 时代弱 key，双端同步）
+- [x] **定时发布**（2026-09-30）：`publy publish --at "..."` → 服务端 jobs.json 持久化 + 失败重试 3 次 + `publy jobs list/cancel` + webhook 通知
+- [x] **webhook**（2026-09-30）：server.json 账号级 webhook URL，publish/failed 事件推送
+- [x] **测试与 CI**（2026-09-30）：33 个单测（core 26 含真实渲染、server 7 含 fastify inject 协议测试），GitHub Actions ubuntu+windows 矩阵
+- [x] **npm 包就绪**（2026-09-30）：esbuild 捆绑 workspace 依赖，单包自包含（子集字体/主题/样例随包零网络），publy@1.0.0 pack 验证 6MB；待 npm 账号发布
+- [x] **小绿书 text 模式 caption 走 markdown 渲染** + digest 自动生成（首段前 120 字）
+- [x] **字体子集化**（2026-09-30）：pyftsubset GB2312+ASCII 共 7549 字符 → 3.4MB/字重（原 32MB），随包分发零网络，越界字符自动回退全量字体
+- [x] `--custom-theme <path>`：任意 CSS 文件即主题（变量自动解析）
+- [ ] HTTPS：Caddy 2.6.2 已装已配（publy-api.jrtx.site → 8081），等 DNS A 记录 + 安全组 443/80 开放
 - [ ] **自吞狗粮进行中**：连续 2 周仅经 publy 发布（自 2026-09-29 起算，wenyan 已不可回退）
 
-## M3 — Obsidian 插件（客户端 A）✅ 骨架
+## M3 — Obsidian 插件（客户端 A）进行中
 
 - [x] 插件骨架：设置页（server/api_key/account/mediaDir）、ribbon 按钮、命令「Publish current note」「Preview rendered HTML」
 - [x] esbuild 构建 + resvg 原生模块随插件分发（dist/ 即装即用）
-- [ ] 小绿书实时预览（编辑器侧边拼版）——下一步
+- [x] 命令「Preview xiaolvshu card deck」：当前笔记渲染卡片拼版并打开（2026-09-30）
+- [ ] 编辑器内实时预览（侧边栏常驻拼版）
 - [ ] 发布到 Obsidian 社区目录
 
 ## M4 — 公开商业版（进行中）

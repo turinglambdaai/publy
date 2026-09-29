@@ -1,0 +1,209 @@
+/* Publy "claude" article theme — ported from the author's wenyan custom theme.
+   Scope: everything under #publy. CSS variables are resolved to literals at load time
+   because the WeChat editor strips <style> blocks and does not support var(). */
+
+:root {
+    --publy-bg: #f8f6f0;
+    --publy-text: #2b2b2b;
+    --publy-accent: #b75c3d;
+    --publy-accent-light: rgba(183, 92, 61, 0.08);
+    --publy-accent-bg: rgba(183, 92, 61, 0.04);
+    --publy-code-bg: #f0ece4;
+    --publy-border: #e0ddd6;
+    --publy-hr: #eaeaea;
+    --publy-muted: #555;
+    --publy-em: #666;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--publy-text);
+    background-color: var(--publy-bg);
+    padding: 24px 20px 48px 20px;
+    line-height: 1.7;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+/* --- headings --- */
+#publy h1 {
+    font-size: 1.375em;
+    font-weight: 700;
+    color: var(--publy-accent);
+    line-height: 1.3;
+    margin: 28px 0 12px;
+    letter-spacing: -0.015em;
+}
+
+#publy h2 {
+    font-size: 1.125em;
+    font-weight: 700;
+    color: var(--publy-accent);
+    line-height: 1.4;
+    margin: 24px 0 10px;
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--publy-text);
+    line-height: 1.5;
+    margin: 20px 0 8px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--publy-text);
+    line-height: 1.5;
+    margin: 16px 0 8px;
+}
+
+/* --- body text --- */
+#publy p {
+    margin: 18px 0;
+    line-height: 1.7;
+    color: var(--publy-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--publy-accent);
+    background-color: var(--publy-accent-light);
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--publy-em);
+}
+
+/* --- links (in body they get converted to footnotes; kept for --no-footnote) --- */
+#publy a {
+    color: var(--publy-accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--publy-accent);
+    padding-bottom: 1px;
+}
+
+/* --- lists --- */
+#publy ul,
+#publy ol {
+    margin: 16px 0;
+    padding-left: 28px;
+}
+
+#publy li {
+    margin: 8px 0;
+    line-height: 1.7;
+    color: var(--publy-text);
+}
+
+/* --- blockquote --- */
+#publy blockquote {
+    margin: 24px 0;
+    padding: 16px 20px;
+    background-color: var(--publy-accent-bg);
+    border-left: 4px solid var(--publy-accent);
+    color: var(--publy-muted);
+    border-radius: 4px;
+}
+
+/* --- inline code --- */
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--publy-code-bg);
+    color: var(--publy-accent);
+    border-radius: 4px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+/* --- code block --- */
+#publy pre {
+    margin: 24px 0;
+    padding: 20px;
+    background-color: var(--publy-code-bg);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--publy-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+/* --- horizontal rule --- */
+#publy hr {
+    margin: 36px auto;
+    border: none;
+    height: 1px;
+    background-color: var(--publy-hr);
+    width: 100%;
+}
+
+/* --- images --- */
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 24px auto;
+    border-radius: 4px;
+}
+
+/* --- tables --- */
+#publy table {
+    width: 100%;
+    margin: 24px 0;
+    border-collapse: collapse;
+    font-size: 0.9375em;
+}
+
+#publy th {
+    background-color: var(--publy-code-bg);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--publy-text);
+    border: 1px solid var(--publy-border);
+}
+
+#publy td {
+    padding: 12px 16px;
+    border: 1px solid var(--publy-border);
+    color: var(--publy-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+/* --- footnote section rendered by the pipeline --- */
+#publy .publy-footnotes {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--publy-hr);
+    font-size: 0.85em;
+    color: var(--publy-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+    line-height: 1.6;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--publy-accent);
+    font-weight: 600;
+}

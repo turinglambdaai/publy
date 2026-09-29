@@ -57,8 +57,8 @@ function edgeWait(args, outFile, timeoutMs = 20000, { captureStdout = false } = 
   }
 }
 
-const articleSample = path.join(repoRoot, "docs", "samples", "article-sample.md");
-const cardSample = path.join(repoRoot, "docs", "samples", "card-sample.md");
+const articleSample = path.join(repoRoot, "packages", "cli", "samples", "article-sample.md");
+const cardSample = path.join(repoRoot, "packages", "cli", "samples", "card-sample.md");
 
 // --- article themes ---------------------------------------------------------
 

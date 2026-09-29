@@ -14,19 +14,46 @@ importers:
 
   packages/cli:
     dependencies:
+      '@resvg/resvg-js':
+        specifier: ^2.6.2
+        version: 2.6.2
+      cheerio:
+        specifier: ^1.0.0
+        version: 1.2.0
+      commander:
+        specifier: ^12.1.0
+        version: 12.1.0
+      gray-matter:
+        specifier: ^4.0.3
+        version: 4.0.3
+      highlight.js:
+        specifier: ^11.10.0
+        version: 11.12.0
+      juice:
+        specifier: ^11.0.0
+        version: 11.1.1
+      markdown-it:
+        specifier: ^14.1.0
+        version: 14.3.2
+      satori:
+        specifier: ^0.33.5
+        version: 0.33.5
+    devDependencies:
       '@publy/core':
         specifier: workspace:*
         version: link:../core
       '@publy/shared':
         specifier: workspace:*
         version: link:../shared
-      commander:
-        specifier: ^12.1.0
-        version: 12.1.0
-    devDependencies:
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.2.0
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.4
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

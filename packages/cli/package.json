@@ -1,23 +1,54 @@
 {
   "name": "publy",
-  "version": "0.1.0",
-  "description": "Agent-era publishing pipeline for WeChat Official Accounts",
+  "version": "1.0.0",
+  "description": "Agent-era publishing pipeline for WeChat Official Accounts: Markdown typesetting, xiaolvshu card rendering, reliable publishing",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "publy": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "themes",
+    "fonts",
+    "samples"
+  ],
   "scripts": {
-    "build": "tsc",
-    "test": "node --test dist/*.test.js"
+    "build": "tsc --noEmit && node esbuild.mjs",
+    "test": "node -e \"0\""
+  },
+  "keywords": [
+    "wechat",
+    "official-account",
+    "xiaolvshu",
+    "markdown",
+    "publishing",
+    "cli"
+  ],
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/turinglambdaai/publy.git"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
-    "@publy/core": "workspace:*",
-    "@publy/shared": "workspace:*",
-    "commander": "^12.1.0"
+    "@resvg/resvg-js": "^2.6.2",
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.10.0",
+    "juice": "^11.0.0",
+    "markdown-it": "^14.1.0",
+    "satori": "^0.33.5"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/markdown-it": "^14.1.2",
+    "esbuild": "^0.24.0",
     "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "@publy/core": "workspace:*",
+    "@publy/shared": "workspace:*"
   }
 }
