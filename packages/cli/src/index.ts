@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { exec } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, PublishRequest, PublishResponse } from "@publy/shared";
 import { parseSource, publishType, renderCards, renderMarkdown } from "@publy/core";
@@ -166,6 +167,34 @@ async function cmdAccountAdd(name: string, opts: Record<string, any>): Promise<v
   if (!config.default_account) config.default_account = name;
   saveConfig(config);
   console.log(`account ${name} saved${config.default_account === name ? " (default)" : ""}`);
+}
+
+async function cmdThemePreview(name: string): Promise<void> {
+  const { BUILTIN_THEMES, BUILTIN_CARD_THEMES, renderMarkdown, renderCards, buildPreviewHtml } = await import("@publy/core");
+  // repo layout: packages/cli/dist → docs/samples (TODO: bundle samples with the npm package)
+  const sampleDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/samples");
+
+  if (name in BUILTIN_CARD_THEMES) {
+    const raw = fs.readFileSync(path.join(sampleDir, "card-sample.md"), "utf8");
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-theme-preview-"));
+    const result = await renderCards(raw, { theme: name, outDir });
+    const previewFile = path.join(outDir, "preview.html");
+    fs.writeFileSync(previewFile, buildPreviewHtml(result));
+    console.error(`preview → ${previewFile}`);
+    openInBrowser(previewFile);
+    return;
+  }
+  if ((BUILTIN_THEMES as readonly string[]).includes(name)) {
+    const raw = fs.readFileSync(path.join(sampleDir, "article-sample.md"), "utf8");
+    const rendered = renderMarkdown(raw, { theme: name });
+    const out = path.join(os.tmpdir(), `publy-theme-preview-${name}-${Date.now()}.html`);
+    fs.writeFileSync(out, rendered.html);
+    console.error(`preview → ${out}`);
+    openInBrowser(out);
+    return;
+  }
+  console.error(`publy: unknown theme "${name}". Use \`publy theme ls\` to list built-ins.`);
+  process.exit(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,8 +427,7 @@ export function createProgram(): Command {
   });
 
   const themeCmd = program.command("theme").description("Manage themes");
-  themeCmd.command("ls").description("list built-in themes and registry entries").action(async () => {
-    const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
+  themeCmd.command("ls").description("list built-in themes and registry entries").action(async () => {    const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
     console.log("Article themes (built-in):", BUILTIN_THEMES.join(", "));
     console.log("Card themes (built-in):", Object.keys(BUILTIN_CARD_THEMES).join(", "));
     try {
@@ -414,6 +442,12 @@ export function createProgram(): Command {
       /* offline: built-ins only */
     }
   });
+
+  themeCmd
+    .command("preview")
+    .argument("<name>")
+    .description("render the theme sample locally and open it in the browser")
+    .action(async (name: string) => cmdThemePreview(name));
 
   return program;
 }
