@@ -177,6 +177,25 @@ publy theme preview claude      # 本地渲染样例文章，浏览器即看
 
 在线画廊（真实渲染预览）：[themes.publy.jrtx.site](https://themes.publy.jrtx.site/)。
 
+## 托管服务：购买与开通
+
+不想自己运维服务器？直接用托管版：**https://publy-api.jrtx.site**
+
+1. 打开购买页，选套餐（Pro ¥39/月 或 ¥390/年），填联系方式，扫码支付
+2. 支付完成页面**当场发放 API key**（也可用「找回」按联系方式查）
+3. 本机接入：
+
+```bash
+publy config set server https://publy-api.jrtx.site
+publy config set api_key publy_你的key
+```
+
+4. 公众号账号由管理员绑定（把 AppID/AppSecret 通过安全渠道提供给运营者），之后 `publy publish` 即可
+
+查看用量与额度：`publy quota`。免费档（1 账号、30 次发布/月）联系管理员开通。
+
+> 当前托管版收款通道为手工开通模式；自动支付在接入虎皮椒后开放（购买页会自动变为扫码直付）。
+
 ## 自托管服务器
 
 ```bash

@@ -61,7 +61,9 @@
 
 - [x] 主题注册表仓库 `publy-themes`（index schema + 内置主题登记 + 提交指南）
 - [x] **主题商店 gallery 上线**（2026-09-29）：themes.publy.jrtx.site/——四主题真实渲染预览（Edge headless 截样例文章 + card 引擎出图），数据内联同步渲染；`publy theme preview <name>` 本地即看；主页已挂入口
-- [ ] 云控制面：多账号、定时任务、webhook、计费（Free / Pro ¥39 / Team ¥129）
+- [x] **云控制面上线**（2026-09-30）：多用户（node:sqlite 独立 API key）、配额强制（Free 30 次/月 / Pro 5000 次/月，按自然月滚动）、账号归属与计划限制（Free 1 账号 / Pro 3 账号）、购买页 + key 找回 + `publy quota`、admin 控制台（开通/延期/停用/绑定账号/用量）、支付适配器（虎皮椒已实现，凭据待运营者注册填入；当前手工开通模式）
+- [ ] 自动收款开关：运营者注册虎皮椒 → server.json 填 payments 凭据 → 购买页变扫码直付
+- [ ] 定价页上主站 + 服务条款/隐私政策
 - [ ] 外部主题提交流程开放（npm 包规范 + CI 预览自动生成）
 - [ ] jrtx.site 产品页（已上线 publy.jrtx.site）+ 开源发布文
 
