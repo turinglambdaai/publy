@@ -27,8 +27,22 @@ export interface PublishRequest {
   contentSourceUrl?: string;
   needOpenComment?: boolean;
   onlyFansCanComment?: boolean;
-  /** client-generated key; server dedupes retries (reserved, v1.1) */
+  /** ISO datetime; when set the server queues the publish instead of running it now */
+  publishAt?: string;
+  /** client-generated key; server dedupes retries */
   idempotencyKey?: string;
+}
+
+export interface JobInfo {
+  id: string;
+  runAt: string;
+  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  attempts: number;
+  account: string;
+  type: string;
+  title: string;
+  error?: string;
+  mediaId?: string;
 }
 
 export interface PublishResponse {

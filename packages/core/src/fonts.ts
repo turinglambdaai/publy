@@ -5,6 +5,9 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const pkgDir = path.dirname(fileURLToPath(import.meta.url));
 
 export interface FontSpec {
   family: string;
@@ -65,4 +68,38 @@ export async function loadSatoriFonts(
     })),
   );
   return fonts;
+}
+
+/**
+ * Bundled GB2312+ASCII subsets ship with the package for instant card
+ * rendering; the full OTFs are the fallback for out-of-subset glyphs.
+ * Resolution works both in the repo (packages/core/fonts) and the bundled
+ * npm package (fonts/ beside dist).
+ */
+export function bundledSubsetDir(): string | null {
+  const candidates = [
+    path.resolve(pkgDir, "../fonts"),
+    path.resolve(pkgDir, "../../fonts"),
+  ];
+  for (const dir of candidates) {
+    if (fs.existsSync(path.join(dir, "NotoSansSC-subset-Regular.otf"))) return dir;
+  }
+  return null;
+}
+
+export function loadSatoriFontsWithFallback(specs: FontSpec[]): Promise<{ name: string; data: Buffer; weight: 400 | 700; style: "normal" | "italic" }[]> {
+  const subsetDir = bundledSubsetDir();
+  if (subsetDir) {
+    return Promise.all(
+      specs.map(async (spec): Promise<{ name: string; data: Buffer; weight: 400 | 700; style: "normal" | "italic" }> => {
+        const subsetName = spec.weight === 700 ? "NotoSansSC-subset-Bold.otf" : "NotoSansSC-subset-Regular.otf";
+        const subsetFile = path.join(subsetDir, subsetName);
+        if (fs.existsSync(subsetFile)) {
+          return { name: spec.family, data: await fs.promises.readFile(subsetFile), weight: spec.weight, style: "normal" };
+        }
+        return { name: spec.family, data: await fs.promises.readFile(await ensureFontFile(spec)), weight: spec.weight, style: "normal" };
+      }),
+    );
+  }
+  return loadSatoriFonts(specs);
 }

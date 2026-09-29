@@ -48,6 +48,11 @@ export function loadTheme(id: string): Theme {
   return { id, css: resolveVars(fs.readFileSync(file, "utf-8")) };
 }
 
+/** Load a user-supplied CSS file as a one-off theme (same variable resolution). */
+export function loadThemeFromCss(cssFile: string): Theme {
+  return { id: "custom", css: resolveVars(fs.readFileSync(cssFile, "utf-8")) };
+}
+
 /** highlight.js theme css, with the base .hljs block background removed so the
  *  article theme's code block styling stays authoritative. */
 export function loadHighlightCss(id: string): string {

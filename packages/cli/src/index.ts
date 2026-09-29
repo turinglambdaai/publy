@@ -3,13 +3,14 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { exec } from "node:child_process";
+import { exec, execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import type { Attachment, PublishRequest, PublishResponse } from "@publy/shared";
-import { parseSource, publishType, renderCards, renderMarkdown } from "@publy/core";
+import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
+import { captionToHtml, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
 
 const pkg = JSON.parse(
   fs.readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -29,6 +30,8 @@ export interface CliConfig {
   api_key?: string;
   default_account?: string;
   media_dirs?: string[];
+  /** SSH tunnel for networks that break large POSTs */
+  tunnel?: { ssh_target: string; local_port: number; remote_port: number };
   accounts?: CliAccount[];
 }
 
@@ -56,16 +59,44 @@ function openInBrowser(file: string): void {
   exec(cmd, () => {});
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function isPortListening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: "127.0.0.1", timeout: 800 });
+    socket.on("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on("error", () => resolve(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
 }
 
-function textToHtml(text: string): string {
-  return text
-    .split(/\n{2,}/)
-    .filter((p) => p.trim())
-    .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, "<br/>")}</p>`)
-    .join("");
+/** Start the configured SSH tunnel (idempotent) and wait for it to answer. */
+async function ensureTunnel(config: CliConfig): Promise<boolean> {
+  const t = config.tunnel;
+  if (!t) return false;
+  if (await isPortListening(t.local_port)) return true;
+  const args = [
+    "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=30",
+    "-f", "-N", "-L", `${t.local_port}:localhost:${t.remote_port}`, t.ssh_target,
+  ];
+  try {
+    execFileSync("ssh", args, { stdio: "ignore" });
+  } catch {
+    return false;
+  }
+  for (let i = 0; i < 20; i++) {
+    if (await isPortListening(t.local_port)) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +105,7 @@ async function cmdRender(file: string, opts: Record<string, any>): Promise<void>
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
     theme: opts.theme,
+    customThemePath: opts.customTheme,
     highlight: opts.highlight,
     mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
     baseDir: path.dirname(path.resolve(file)),
@@ -93,6 +125,7 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
     theme: opts.theme,
+    customThemePath: opts.customTheme,
     highlight: opts.highlight,
     mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
     baseDir: path.dirname(path.resolve(file)),
@@ -171,8 +204,11 @@ async function cmdAccountAdd(name: string, opts: Record<string, any>): Promise<v
 
 async function cmdThemePreview(name: string): Promise<void> {
   const { BUILTIN_THEMES, BUILTIN_CARD_THEMES, renderMarkdown, renderCards, buildPreviewHtml } = await import("@publy/core");
-  // repo layout: packages/cli/dist → docs/samples (TODO: bundle samples with the npm package)
-  const sampleDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docs/samples");
+  // samples ship inside the package; fall back to repo layouts for dev checkouts
+  const distDir = path.dirname(fileURLToPath(import.meta.url));
+  const sampleDirs = [path.resolve(distDir, "../samples"), path.resolve(distDir, "../../../packages/cli/samples"), path.resolve(distDir, "../../../docs/samples")];
+  const sampleDir = sampleDirs.find((d) => fs.existsSync(path.join(d, "card-sample.md")));
+  if (!sampleDir) throw new Error("bundled theme samples not found");
 
   if (name in BUILTIN_CARD_THEMES) {
     const raw = fs.readFileSync(path.join(sampleDir, "card-sample.md"), "utf8");
@@ -212,7 +248,7 @@ function textModePayload(rendered: ReturnType<typeof renderMarkdown>, raw: strin
     data: fs.readFileSync(a.path).toString("base64"),
     contentType: a.contentType,
   }));
-  return { html: textToHtml(captionText), images, coverName: images[0]?.name };
+  return { html: captionToHtml(captionText), images, coverName: images[0]?.name };
 }
 
 async function cmdPublish(file: string, opts: Record<string, any>): Promise<void> {
@@ -248,11 +284,12 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
         data: fs.readFileSync(c.file).toString("base64"),
         contentType: "image/png",
       }));
-      html = textToHtml(cardResult.caption);
+      html = captionToHtml(cardResult.caption);
       coverName = images[0]?.name;
     } else {
       const rendered = renderMarkdown(raw, {
         theme: opts.theme,
+        customThemePath: opts.customTheme,
         highlight: opts.highlight,
         mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], config),
         baseDir,
@@ -266,6 +303,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   } else {
     const rendered = renderMarkdown(raw, {
       theme: opts.theme ?? parsed.meta.theme,
+      customThemePath: opts.customTheme,
       highlight: opts.highlight,
       mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], config),
       baseDir,
@@ -322,6 +360,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     .digest("hex")
     .slice(0, 32);
 
+  // digest: explicit frontmatter, else derived from the first body paragraph
+  let digest = parsed.meta.digest;
+  if (!digest) {
+    const firstParagraph = type === "image_post"
+      ? (parsed.meta.caption ?? "")
+      : parsed.body.split(/\n{2,}/).map((b) => b.trim()).find((b) => b && !b.startsWith("#") && !b.startsWith("!") && !b.startsWith("---")) ?? "";
+    digest = stripMarkdown(firstParagraph).slice(0, 120);
+  }
+
   const payload: PublishRequest = {
     account: accountName,
     type,
@@ -330,24 +377,55 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     images,
     cover: coverName,
     author: opts.author ?? parsed.meta.author ?? account?.author,
-    digest: parsed.meta.digest,
+    digest,
     needOpenComment: true,
     idempotencyKey,
   };
+  if (opts.at) {
+    const d = new Date(opts.at);
+    if (Number.isNaN(d.getTime())) {
+      console.error(`publy: invalid --at datetime "${opts.at}"`);
+      process.exit(1);
+    }
+    payload.publishAt = d.toISOString();
+  }
 
-  const res = await fetch(new URL("/v1/publish", server).toString(), {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": apiKey },
-    body: JSON.stringify(payload),
-  });
-  const body = (await res.json()) as Partial<PublishResponse> & { code?: string; message?: string; deduped?: boolean };
+  type PublishResult = Partial<PublishResponse> & { code?: string; message?: string; deduped?: boolean; jobId?: string; runAt?: string };
+  async function postPublish(): Promise<{ res: Response; body: PublishResult }> {
+    const res = await fetch(new URL("/v1/publish", server).toString(), {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": apiKey },
+      body: JSON.stringify(payload),
+    });
+    return { res, body: (await res.json()) as PublishResult };
+  }
+
+  let result: { res: Response; body: PublishResult } | null = null;
+  try {
+    result = await postPublish();
+  } catch {
+    /* network error — maybe the tunnel is down */
+  }
+  if (!result && config.tunnel) {
+    console.error("publy: server unreachable, bringing up the SSH tunnel…");
+    if (await ensureTunnel(config)) {
+      result = await postPublish();
+    }
+  }
+  if (!result) {
+    console.error(`publy: cannot reach server ${server}（若在限制大流量的公司网络内，先 publy tunnel）`);
+    process.exit(5);
+  }
+  const { res, body } = result;
   if (!res.ok) {
     console.error(`publy: publish failed (${res.status}) ${body.code ?? ""}: ${body.message ?? "unknown error"}`);
     process.exit(5);
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false }));
+    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt }));
+  } else if (body.jobId) {
+    console.log(`已创建定时任务 ${body.jobId}，将在 ${body.runAt} 自动发布到 ${accountName}（publy jobs 查看状态）`);
   } else {
     const deduped = body.deduped ? "（幂等命中，未重复发布）" : "";
     console.log(`已发布到 ${accountName} 草稿箱，Media ID: ${body.mediaId}${deduped}`);
@@ -363,6 +441,7 @@ export function createProgram(): Command {
   const common = (cmd: Command) =>
     cmd
       .option("-t, --theme <id>", "theme id")
+      .option("--custom-theme <path>", "path to a custom theme CSS file (overrides --theme)")
       .option("--highlight <id>", "code highlight theme", "github")
       .option("--media-dir <dir>", "asset dir for Obsidian-style references (repeatable)", (v: string, prev: string[]) => [...prev, v], [] as string[])
       .option("--footer <text>", "footer text appended after the body")
@@ -396,11 +475,75 @@ export function createProgram(): Command {
     .option("--title <title>", "override article title")
     .option("--cover <path>", "override cover image path")
     .option("--author <name>", "override author byline")
+    .option("--at <datetime>", "schedule the publish (ISO or \"2026-10-01 09:00\")")
     .option("--server <url>", "publy server base url")
     .option("--api-key <key>", "server api key")
     .option("--json", "machine-readable output");
   common(publishCmd);
   publishCmd.action(async (file: string, opts) => cmdPublish(file, opts));
+
+  program
+    .command("tunnel")
+    .description("bring up the configured SSH tunnel (config.tunnel) and verify it")
+    .action(async () => {
+      const config = loadConfig();
+      if (!config.tunnel) {
+        console.error('publy: no tunnel configured. Add to ~/.publy/config.json:\n  "tunnel": { "ssh_target": "user@host", "local_port": 18081, "remote_port": 8081 }');
+        process.exit(1);
+      }
+      const ok = await ensureTunnel(config);
+      const { local_port, remote_port, ssh_target } = config.tunnel;
+      console.log(ok
+        ? `tunnel up: localhost:${local_port} → ${ssh_target}:${remote_port}`
+        : `tunnel FAILED: could not reach ${ssh_target} or bind localhost:${local_port}`);
+      process.exit(ok ? 0 : 5);
+    });
+
+  const jobsCmd = program.command("jobs").description("manage scheduled publishes");
+  jobsCmd.command("list").description("list scheduled jobs").action(async () => {
+    const config = loadConfig();
+    const res = await fetch(new URL("/v1/jobs", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
+    const body = (await res.json()) as { jobs?: JobInfo[] } & { code?: string; message?: string };
+    if (!res.ok) {
+      console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
+      process.exit(5);
+    }
+    for (const j of body.jobs ?? []) {
+      console.log(`${j.id.slice(0, 8)}  ${j.status.padEnd(8)} ${j.runAt}  ${j.title}${j.error ? ` — ${j.error}` : ""}`);
+    }
+    if (!body.jobs?.length) console.log("(no jobs)");
+  });
+  jobsCmd
+    .command("cancel")
+    .argument("<id>")
+    .description("cancel a pending job")
+    .action(async (id: string) => {
+      const config = loadConfig();
+      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}`, config.server!).toString(), {
+        method: "DELETE",
+        headers: { "x-api-key": config.api_key! },
+      });
+      const body = (await res.json()) as { ok?: boolean } & { code?: string; message?: string };
+      console.log(res.ok && body.ok ? "cancelled" : `failed: ${body.code ?? res.status} ${body.message ?? ""}`);
+      process.exit(res.ok && body.ok ? 0 : 5);
+    });
+
+  program
+    .command("history")
+    .description("show recent publish history from the server audit log")
+    .option("-n, --limit <count>", "number of entries", "20")
+    .action(async (opts) => {
+      const config = loadConfig();
+      const res = await fetch(new URL(`/v1/history?limit=${encodeURIComponent(opts.limit)}`, config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
+      const body = (await res.json()) as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] } & { code?: string };
+      if (!res.ok) {
+        console.error(`publy: ${body.code ?? res.status}`);
+        process.exit(5);
+      }
+      for (const h of body.history ?? []) {
+        console.log(`${h.ts}  ${h.event.padEnd(9)} ${(h.account ?? "").padEnd(16)} ${h.title ?? h.error ?? ""} ${h.mediaId ?? ""}`);
+      }
+    });
 
   const configCmd = program.command("config").description("Manage ~/.publy/config.json");
   configCmd

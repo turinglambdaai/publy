@@ -1,7 +1,7 @@
 // Publy Obsidian plugin — client A: write in Obsidian, publish through a Publy server.
 
 import { Plugin, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
-import { renderMarkdown } from "@publy/core";
+import { renderMarkdown, renderCards, buildPreviewHtml } from "@publy/core";
 
 interface PublySettings {
   server: string;
@@ -41,6 +41,12 @@ export default class PublyPlugin extends Plugin {
       id: "preview-current-note",
       name: "Preview rendered HTML in browser",
       callback: () => this.previewCurrentNote(),
+    });
+
+    this.addCommand({
+      id: "preview-card-deck",
+      name: "Preview xiaolvshu card deck (mode: cards notes)",
+      callback: () => this.previewCardDeck(),
     });
 
     this.addSettingTab(new PublySettingTab(this.app, this));
@@ -124,6 +130,32 @@ export default class PublyPlugin extends Plugin {
         return;
       }
       new Notice(`Publy: draft ready — media ${body.mediaId}`);
+    } catch (err) {
+      new Notice(`Publy: ${(err as Error).message}`);
+    }
+  }
+
+  private async previewCardDeck(): Promise<void> {
+    const file = this.currentFile();
+    if (!file) {
+      new Notice("Publy: no active note");
+      return;
+    }
+    const raw = await this.readWithMediaDirs(file);
+    new Notice("Publy: rendering cards…");
+    try {
+      const os = await import("node:os");
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-cards-"));
+      const result = await renderCards(raw, { outDir });
+      const previewFile = path.join(outDir, "preview.html");
+      fs.writeFileSync(previewFile, buildPreviewHtml(result));
+      const { shell } = await import("electron");
+      shell.openPath(previewFile);
+      if (!result.lint.ok) {
+        new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
+      }
     } catch (err) {
       new Notice(`Publy: ${(err as Error).message}`);
     }

@@ -3,17 +3,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
-import hljs from "highlight.js";
+import hljs from "highlight.js/lib/common";
 import * as cheerio from "cheerio";
 import juice from "juice";
 import { ATTACHMENT_SCHEME } from "@publy/shared";
 import { parseSource, publishType, type SourceMeta } from "./frontmatter.js";
 import { preprocessObsidian, resolveAsset } from "./obsidian.js";
-import { loadTheme, loadHighlightCss } from "./theme.js";
+import { loadTheme, loadThemeFromCss, loadHighlightCss } from "./theme.js";
 import { svgToPng } from "./svg.js";
 
 export interface RenderOptions {
   theme?: string;
+  /** path to a user-supplied CSS file; wins over `theme` */
+  customThemePath?: string;
   highlight?: string;
   /** dirs searched for Obsidian-style asset references */
   mediaDirs?: string[];
@@ -98,7 +100,7 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 2. markdown → html fragment
   const md = new MarkdownIt({ html: true, breaks: false, highlight });
   const bodyHtml = md.render(pre.body);
-  const theme = loadTheme(themeId);
+  const theme = opts.customThemePath ? loadThemeFromCss(opts.customThemePath) : loadTheme(themeId);
   const hljsCss = loadHighlightCss(opts.highlight ?? "github");
 
   // 3. DOM post-processing
@@ -195,4 +197,23 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
 
 function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Render a xiaolvshu caption (plain markdown paragraph text) to HTML. */
+export function captionToHtml(text: string): string {
+  const md = new MarkdownIt({ html: false, breaks: true, linkify: false });
+  return md.render(text.trim());
+}
+
+/** Strip markdown syntax for plain-text uses (digest, lint counts). */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/!\[\[[^\]]*\]\]/g, "")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+    .replace(/\[\[([^\]]+)\]\]/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/[#>*`~_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }

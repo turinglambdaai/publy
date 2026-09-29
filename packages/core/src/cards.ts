@@ -7,7 +7,7 @@ import path from "node:path";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { parseSource, type SourceMeta } from "./frontmatter.js";
-import { NOTO_SANS_SC, loadSatoriFonts, type FontSpec } from "./fonts.js";
+import { NOTO_SANS_SC, loadSatoriFonts, loadSatoriFontsWithFallback, type FontSpec } from "./fonts.js";
 import { svgToPng } from "./svg.js";
 
 export const CARD_WIDTH = 1080;
@@ -251,13 +251,25 @@ export async function renderCards(
   const fontSpecs: FontSpec[] = opts.fontFiles?.length
     ? opts.fontFiles.map((f, i) => ({ family: "Custom", weight: i === 0 ? 400 : 700, file: path.resolve(f) }))
     : theme.fonts;
-  const fonts = await loadSatoriFonts(fontSpecs);
 
   fs.mkdirSync(outDir, { recursive: true });
   const cards: CardOutput[] = [];
   for (let i = 0; i < sections.length; i++) {
     const el = renderElement(theme, sections[i], i, sections.length);
-    const svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts });
+    let svg: string;
+    try {
+      // fast path: bundled GB2312 subset (no network)
+      const fonts = opts.fontFiles?.length ? await loadSatoriFonts(fontSpecs) : await loadSatoriFontsWithFallback(fontSpecs);
+      svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts });
+    } catch (err) {
+      // glyph outside the subset: retry once with the full downloadable fonts
+      if (!opts.fontFiles?.length) {
+        const full = await loadSatoriFonts(fontSpecs);
+        svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts: full });
+      } else {
+        throw err;
+      }
+    }
     const tmpSvg = path.join(outDir, `.publy-card-${i}.svg`);
     fs.writeFileSync(tmpSvg, svg);
     const png = svgToPng(tmpSvg, CARD_WIDTH);
