@@ -14,6 +14,8 @@ export interface SourceMeta {
   caption?: string;
   /** xiaolvshu hashtags, rendered as #tag in the caption */
   tags?: string[];
+  /** xiaolvshu card mode: "cards" implies an image post */
+  mode?: string;
 }
 
 export interface ParsedSource {
@@ -28,5 +30,8 @@ export function parseSource(raw: string): ParsedSource {
 
 export function publishType(meta: SourceMeta): "article" | "image_post" {
   const t = (meta.type ?? "").toLowerCase();
-  return t === "image" || t === "image_post" ? "image_post" : "article";
+  if (t === "image" || t === "image_post") return "image_post";
+  // cards mode is inherently a xiaolvshu image post even without an explicit type
+  if ((meta.mode ?? "").toLowerCase() === "cards") return "image_post";
+  return "article";
 }

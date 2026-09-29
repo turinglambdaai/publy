@@ -139,7 +139,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   console.log(`publy-server listening on :${config.port}`);
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1].replace(/\\/g, "/")}`).href) {
+import { pathToFileURL } from "node:url";
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((err) => {
     console.error(err);
     process.exit(1);
