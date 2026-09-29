@@ -69,7 +69,7 @@
     <!-- Hero -->
     <section class="hero" id="overview">
         <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Open source · AGPL-3.0 · M0 — design final, implementation underway" data-zh="开源 · AGPL-3.0 · M0——设计定稿，实现启动中">Open source · AGPL-3.0 · M0 — design final, implementation underway</span>
+            <span class="eyebrow animate-on-scroll" data-en="Open source · AGPL-3.0 · M1 — pipeline built, self-hosted publishing in progress" data-zh="开源 · AGPL-3.0 · M1——管线已建成，自托管发布验证中">Open source · AGPL-3.0 · M1 — pipeline built, self-hosted publishing in progress</span>
             <h1 class="animate-on-scroll">
                 <span data-en="Write in Obsidian." data-zh="写作留在 Obsidian，">Write in Obsidian.</span>
                 <span class="accent" data-en="Publish with your agent." data-zh="发布交给 agent。">Publish with your agent.</span>
@@ -99,7 +99,7 @@
 <span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
 <span class="ok">✓</span> typeset · cover uploaded · <span class="str">draft ready</span>
 
-<span class="prompt">$</span> <span class="cmd">publy card post.md --theme ink</span>
+<span class="prompt">$</span> <span class="cmd">publy card post.md --theme naive</span>
 <span class="ok">✓</span> 6 cards · 3:4 · <span class="str">1.8s</span> · pixel-exact glyphs</div>
                 </div>
             </div>
@@ -189,19 +189,19 @@
 <span class="ok">✓</span> cover uploaded · <span class="str">draft ready in the official backend</span>
 
 <span class="comment"># xiaolvshu: themed 3:4 cards, deterministically rendered</span>
-<span class="prompt">$</span> <span class="cmd">publy card post.md --theme ink</span>
+<span class="prompt">$</span> <span class="cmd">publy card post.md --theme naive</span>
 <span class="ok">✓</span> 6 cards · <span class="str">1.8s</span> · pixel-exact glyphs
 
 <span class="comment"># themes: install with a preview, not a leap of faith</span>
-<span class="prompt">$</span> <span class="cmd">publy theme add @publy/theme-ink</span>
+<span class="prompt">$</span> <span class="cmd">publy theme add @publy/theme-naive</span>
 <span class="ok">✓</span> installed · <span class="str">preview at localhost:7818</span></div>
                 </div>
             </div>
 
             <div class="callout animate-on-scroll">
-                <strong data-en="Status: M0." data-zh="状态：M0。">Status: M0.</strong>
-                <span data-en=" The design is final and implementation is underway — the commands above are the CLI contract from docs/design.md, tracked in the M0 → M3 roadmap."
-                      data-zh=" 设计已定稿，实现启动中——上面的命令是 docs/design.md 里的 CLI 契约，进度见 M0 → M3 路线图。"> The commands above are the CLI contract from docs/design.md, tracked in the M0 → M3 roadmap.</span>
+                <strong data-en="Status: M1." data-zh="状态：M1。">Status: M1.</strong>
+                <span data-en=" The pipeline is real: publy render / publish, the self-hostable server (protocol v1), and the claude theme are implemented and smoke-tested. publy card and the theme store are the CLI contract from docs/design.md — tracked in the roadmap, not shipped yet."
+                      data-zh="管线是真的：publy render / publish、自托管 server（协议 v1）与 claude 主题均已实现并通过冒烟测试。publy card 与主题商店是 docs/design.md 里的 CLI 契约——在路线图中，尚未发布。"> The pipeline is real: render / publish and the self-hostable server are implemented and smoke-tested; card and themes are the CLI contract, tracked in the roadmap.</span>
             </div>
         </div>
     </section>
@@ -224,9 +224,9 @@
                        data-zh="什么保持开源，云服务卖什么，定价如何设计。">What stays open, what the cloud sells, and how pricing works.</p>
                 </a>
                 <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/roadmap.md" style="text-decoration: none; color: inherit;">
-                    <h3 data-en="Roadmap M0 → M3" data-zh="路线图 M0 → M3">Roadmap M0 → M3</h3>
-                    <p data-en="From design freeze to the hosted service and the npm theme store."
-                       data-zh="从设计定稿到托管服务与 npm 主题商店。">From design freeze to the hosted service and the theme store.</p>
+                    <h3 data-en="Roadmap" data-zh="路线图">Roadmap</h3>
+                    <p data-en="From the rendering pipeline to the hosted service, the Obsidian plugin, and the npm theme store."
+                       data-zh="从渲染管线到托管服务、Obsidian 插件与 npm 主题商店。">From the rendering pipeline to the hosted service, the Obsidian plugin, and the theme store.</p>
                 </a>
             </div>
         </div>
