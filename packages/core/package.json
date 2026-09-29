@@ -1,0 +1,24 @@
+{
+  "name": "@publy/core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test dist/*.test.js"
+  },
+  "dependencies": {
+    "@publy/shared": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
+    "cheerio": "^1.0.0",
+    "gray-matter": "^4.0.3",
+    "highlight.js": "^11.10.0",
+    "juice": "^11.0.0",
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
+    "typescript": "^5.6.0"
+  }
+}

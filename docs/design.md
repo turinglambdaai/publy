@@ -46,19 +46,27 @@ Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务�
 
 小绿书是 Publy 的差异化楔子：先建立「最好用的小绿书管线」心智，再带动文章发布服务。
 
-## 2. 产品形态：三个工件，一个协议
+## 2. 产品形态：一个引擎，两个客户端，一个服务，一个商店
 
 | 工件 | 形态 | 开源性 | 角色 |
 |---|---|---|---|
-| **publy CLI** | npm 包，`npx publy` | 开源（AGPL） | 本地排版 + 小绿书渲染 + 服务客户端；agent 的唯一操作面 |
-| **Publy Cloud** | 托管 REST 服务 | 闭源 | IP 白名单、密钥托管、多账号、定时、webhook；**收费物** |
+| **@publy/core** | npm 包（渲染引擎 + 卡片引擎） | 开源（AGPL） | 产品本体：排版、小绿书渲染、校验、微信客户端 |
+| **publy CLI** | npm 包，`npx publy` | 开源（AGPL） | 客户端 B：agent 的操作面，非 Obsidian 用户的入口 |
+| **Obsidian 插件** | Obsidian 社区插件 | 开源 | 客户端 A：写作现场——小绿书实时预览、文章预览、一键直推服务器 |
+| **Publy Cloud / 自托管 server** | REST 服务（协议 v1） | server 开源 / cloud 闭源 | 发布可靠性：IP 白名单、密钥托管、定时、多账号；**收费物** |
 | **主题商店** | npm 包 + 注册表索引 | 主题与索引均开源 | 文章主题与卡片主题的分发、预览、提交 |
 
-**协议对等**：`packages/server`（自托管参考实现，开源，Docker 一键起）与 Publy Cloud 实现同一份 REST 协议。信任设计：用户随时可以迁出去，云服务的价值在省心而非锁定。
+客户端不设上限：core 是 npm 包，任何客户端壳都可以包它；CLI 和 Obsidian 插件是两个一等公民。插件进 Obsidian 社区目录（开源免费）引流，服务器服务收费——插件免费 + 云服务收费是 Obsidian 生态成熟惯例。
+
+**渲染可见性设计**（写作的人必须看得到最终形态）：
+
+- 文章：`publy render -o out.html` 产出自包含 HTML（内联样式与微信一致），浏览器打开即所见即所得；`publy preview` = render + 自动打开
+- 小绿书：card 引擎的原生输出就是 PNG 卡片——渲染形态即文件本身；`publy card --preview` 额外产出拼版大图（9 张 + caption 模拟排版）
+- Obsidian 插件：编辑器侧边实时预览文章渲染效果与卡片拼版，写作现场直接看，这是完整答案
 
 ### 2.1 明确不做（范围纪律）
 
-- ❌ 文章 GUI/Web 编辑器——`render` 输出的 HTML 可贴进任何现有编辑器，编辑器市场已有充分供给
+- ❌ 独立 Web 排版编辑器（doocs/md / Raphael 类通用 GUI，正面竞争无护城河）；写作场内入口（Obsidian 插件）不在禁列——它不承担排版编辑职责（排版是主题 + core 的确定性渲染），只做预览与触发
 - ❌ 桌面 App
 - ❌ 图床——图片随文章仓库/Obsidian 存放，发布时经素材接口上传
 - ❌ 知乎/头条等多平台适配——wenyan 式「都支持一点」是杂的根源；只做微信，做穿
@@ -165,18 +173,34 @@ caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末
 
 ## 6. 服务协议与架构
 
-### 6.1 协议（cloud 与自托管同构）
+### 6.1 协议 v1（已实现于 packages/server 与 packages/cli）
 
 ```
-POST /v1/publish           # 文章或小绿书（multipart：md + 资源）
-POST /v1/publish:schedule  # 定时任务
-GET  /v1/jobs/:id          # 状态/结果（webhook 可选推送）
-POST /v1/media             # 素材上传
-GET  /v1/accounts  POST /v1/accounts
-GET  /v1/quota
+GET  /health              # 无鉴权
+GET  /verify              # 鉴权探针，返回账号名列表
+POST /v1/publish          # 发布（JSON，≤30MB）
 ```
 
-鉴权：API key（可按账号拆分授权范围）。幂等：`Idempotency-Key` 头。
+- 鉴权：`x-api-key` 请求头
+- `POST /v1/publish` 请求体：
+
+```json
+{
+  "account": "TuringLambdaAI",
+  "type": "article | image_post",
+  "title": "...",
+  "html": "<div id=\"publy\" style=\"...\">...</div>",
+  "images": [{ "name": "a.png", "data": "<base64>", "contentType": "image/png" }],
+  "cover": "a.png",
+  "author": "...", "digest": "...", "contentSourceUrl": "...",
+  "needOpenComment": true
+}
+```
+
+- 正文 HTML 中图片引用 `attachment://<name>`，server 上传素材后替换为微信 CDN URL（复用 media_id 语义：正文图用 `add_material` 的 url，封面用 media_id 作 thumb）
+- 响应：`{ "mediaId": "..." }`；错误 `{ "code": "...", "message": "..." }`（400 客户端错 / 401 鉴权 / 502 `WECHAT_<errcode>`）
+- server 配置 `~/.publy/server.json`：`{ port, apiKey, accounts: [{ name, appId, appSecret }], cacheDir }`；token 缓存 600s buffer + 并发单飞
+- 幂等键（`idempotencyKey`）字段已预留，v1.1 实现
 
 ### 6.2 服务端职责
 
