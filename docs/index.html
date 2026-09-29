@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publy — The agent-era publishing pipeline for WeChat</title>
+    <meta name="description" content="Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and xiaolvshu card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,500&display=swap" rel="stylesheet">
+    <script>document.documentElement.classList.add('js-anim')</script>
+    <style>
+        :root {
+            --accent: #07C160;
+            --accent-hover: #06AD56;
+            --accent-soft: rgba(7, 193, 96, 0.15);
+            --accent-tint: rgba(7, 193, 96, 0.08);
+            --accent-bright: #4ADE8C;
+        }
+
+        .showcase-img {
+            width: 100%;
+            border-radius: var(--radius-m);
+            box-shadow: var(--shadow-window);
+            border: 1px solid var(--border);
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Nav -->
+    <nav class="nav-container">
+        <div class="nav-wrapper">
+            <div class="nav-brand">
+                <svg class="nav-logo" width="28" height="28" viewBox="0 0 512 512" fill="none">
+                    <rect width="512" height="512" rx="115" fill="#07C160"/>
+                    <path d="M256 384 V176" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round"/>
+                    <path d="M162 270 L256 176 L350 270" fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Publy
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#features" class="optional" data-en="Features" data-zh="功能">Features</a></li>
+                <li><a href="#start" data-en="Design contract" data-zh="设计契约">Design contract</a></li>
+                <li><a href="#docs" class="optional" data-en="Design docs" data-zh="设计文档">Design docs</a></li>
+                <li><a href="https://github.com/turinglambdaai/publy" class="optional">GitHub</a></li>
+                <li class="lang-dropdown-wrapper">
+                    <button class="lang-btn" onclick="void 0">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                        </svg>
+                        <span id="current-lang-label" data-en="English" data-zh="简体中文">English</span>
+                    </button>
+                    <ul class="lang-menu">
+                        <li onclick="setLanguage('en')">English</li>
+                        <li onclick="setLanguage('zh')">简体中文</li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero" id="overview">
+        <div class="container">
+            <span class="eyebrow animate-on-scroll" data-en="Open source · AGPL-3.0 · M0 — design final, implementation underway" data-zh="开源 · AGPL-3.0 · M0——设计定稿，实现启动中">Open source · AGPL-3.0 · M0 — design final, implementation underway</span>
+            <h1 class="animate-on-scroll">
+                <span data-en="Write in Obsidian." data-zh="写作留在 Obsidian，">Write in Obsidian.</span>
+                <span class="accent" data-en="Publish with your agent." data-zh="发布交给 agent。">Publish with your agent.</span>
+            </h1>
+            <p class="lead animate-on-scroll"
+                data-en="Publy is the agent-era publishing pipeline for WeChat Official Accounts: a CLI for Markdown typesetting and xiaolvshu card rendering, a hosted service for stable publishing, and a theme store for distribution — no GUI, no copy-pasting into the WeChat backend."
+                data-zh="Publy 是 agent 时代的微信公众号发布管线：一个 CLI 负责排版与小绿书渲染，一个托管服务负责稳定发布，一个主题商店负责排版资产分发——没有 GUI，没有「复制粘贴进公众号后台」。">
+                Publy is the agent-era publishing pipeline for WeChat Official Accounts: a CLI for typesetting and card rendering, a hosted service for stable publishing, and a theme store.
+            </p>
+
+            <div class="hero-buttons animate-on-scroll">
+                <a href="#start" data-en="See the design contract" data-zh="看设计契约" class="btn btn-primary">See the design contract</a>
+                <a href="https://github.com/turinglambdaai/publy" class="btn btn-secondary" data-en="View on GitHub" data-zh="在 GitHub 查看">View on GitHub</a>
+            </div>
+
+            <div class="hero-visual animate-on-scroll">
+                <div class="code-window">
+                    <div class="window-header">
+                        <div class="window-controls">
+                            <div class="traffic-light close"></div>
+                            <div class="traffic-light minimize"></div>
+                            <div class="traffic-light maximize"></div>
+                        </div>
+                        <div class="window-title">terminal</div>
+                    </div>
+                    <div class="code-body"><span class="comment"># the whole publishing flow, from the editor</span>
+<span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
+<span class="ok">✓</span> typeset · cover uploaded · <span class="str">draft ready</span>
+
+<span class="prompt">$</span> <span class="cmd">publy card post.md --theme ink</span>
+<span class="ok">✓</span> 6 cards · 3:4 · <span class="str">1.8s</span> · pixel-exact glyphs</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features">
+        <div class="container">
+            <span class="eyebrow animate-on-scroll" data-en="What Publy does" data-zh="Publy 做什么">What Publy does</span>
+            <h2 class="section-title animate-on-scroll">
+                <span data-en="One pipeline," data-zh="一条管线，">One pipeline,</span>
+                <span class="accent" data-en="three moving parts." data-zh="三个部件。">three moving parts.</span>
+            </h2>
+
+            <div class="bento-grid">
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                    </div>
+                    <h3 data-en="Publish in one command" data-zh="一条命令发布">Publish in one command</h3>
+                    <p data-en="publy publish a.md — Markdown goes in, a typeset WeChat draft comes out. No GUI, no copy-pasting into the official backend."
+                       data-zh="publy publish a.md——Markdown 进，排好版的公众号草稿出。没有 GUI，没有「复制粘贴进公众号后台」。">publy publish a.md — Markdown in, a typeset WeChat draft out. No GUI, no copy-pasting.</p>
+                </div>
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 5-5 5 5"/></svg>
+                    </div>
+                    <h3 data-en="Xiaolvshu as a first-class citizen" data-zh="小绿书是一等公民">Xiaolvshu as a first-class citizen</h3>
+                    <p data-en="publy card post.md deterministically renders themed 3:4 cards — pixel-exact CJK glyphs in seconds, not AI-generated images."
+                       data-zh="publy card post.md 确定性渲染主题化 3:4 卡片——像素级正确的汉字，秒级出图，不靠 AI 生图。">Deterministic themed 3:4 cards — pixel-exact CJK glyphs in seconds, not AI images.</p>
+                </div>
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                    </div>
+                    <h3 data-en="Themes as npm packages" data-zh="主题即 npm 包">Themes as npm packages</h3>
+                    <p data-en="The theme store replaces scattered gists: every theme ships with a rendering preview, and publy theme add installs it after you've seen it."
+                       data-zh="主题商店告别 gist：每个主题都带渲染预览，publy theme add 装前可预览。">Every theme ships with a preview; publy theme add installs after you've seen it.</p>
+                </div>
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="12" cy="15" r="2"/></svg>
+                    </div>
+                    <h3 data-en="A hosted service for reliability" data-zh="托管服务卖可靠性">A hosted service for reliability</h3>
+                    <p data-en="Stable egress on an IP allowlist, hosted AppSecret, token lifecycle, scheduled publishing, multi-account — the boring parts, done once."
+                       data-zh="IP 白名单稳定出口、AppSecret 托管、token 生命周期、定时发布、多账号——麻烦的部分，做一次就好。">IP allowlist egress, hosted AppSecret, token lifecycle, schedules, multi-account.</p>
+                </div>
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+                    </div>
+                    <h3 data-en="Official API only" data-zh="只走官方 API">Official API only</h3>
+                    <p data-en="No account emulation, no browser automation. Publy speaks the WeChat Official Accounts API and nothing else — compliance by construction."
+                       data-zh="不做账号模拟，不做浏览器自动化。Publy 只讲微信公众号官方 API 这一种协议——合规是结构性的。">No account emulation, no browser automation — compliance by construction.</p>
+                </div>
+                <div class="bento-card animate-on-scroll">
+                    <div class="card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
+                    </div>
+                    <h3 data-en="Open core, no lock-in" data-zh="开源核心，不做锁定">Open core, no lock-in</h3>
+                    <p data-en="The CLI and a self-hostable server are AGPL-3.0 — the same code the cloud service runs. Self-host today, upgrade to the hosted service when reliability matters."
+                       data-zh="CLI 与自托管 server 均为 AGPL-3.0——与云服务同一份代码。今天就能自托管，在意可靠性时再升级云服务。">CLI and self-hostable server under AGPL-3.0 — the same code the cloud runs.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Design contract -->
+    <section id="start">
+        <div class="container">
+            <span class="eyebrow animate-on-scroll" data-en="Design contract" data-zh="设计契约">Design contract</span>
+            <h2 class="section-title animate-on-scroll" data-en="Three commands, from draft to published." data-zh="三条命令，从草稿到发表。">Three commands, from draft to published.</h2>
+
+            <div class="hero-visual animate-on-scroll" style="margin-top: 40px;">
+                <div class="code-window">
+                    <div class="window-header">
+                        <div class="window-controls">
+                            <div class="traffic-light close"></div>
+                            <div class="traffic-light minimize"></div>
+                            <div class="traffic-light maximize"></div>
+                        </div>
+                        <div class="window-title">terminal</div>
+                    </div>
+                    <div class="code-body"><span class="comment"># article: typeset and stage a WeChat draft</span>
+<span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
+<span class="ok">✓</span> cover uploaded · <span class="str">draft ready in the official backend</span>
+
+<span class="comment"># xiaolvshu: themed 3:4 cards, deterministically rendered</span>
+<span class="prompt">$</span> <span class="cmd">publy card post.md --theme ink</span>
+<span class="ok">✓</span> 6 cards · <span class="str">1.8s</span> · pixel-exact glyphs
+
+<span class="comment"># themes: install with a preview, not a leap of faith</span>
+<span class="prompt">$</span> <span class="cmd">publy theme add @publy/theme-ink</span>
+<span class="ok">✓</span> installed · <span class="str">preview at localhost:7818</span></div>
+                </div>
+            </div>
+
+            <div class="callout animate-on-scroll">
+                <strong data-en="Status: M0." data-zh="状态：M0。">Status: M0.</strong>
+                <span data-en=" The design is final and implementation is underway — the commands above are the CLI contract from docs/design.md, tracked in the M0 → M3 roadmap."
+                      data-zh=" 设计已定稿，实现启动中——上面的命令是 docs/design.md 里的 CLI 契约，进度见 M0 → M3 路线图。"> The commands above are the CLI contract from docs/design.md, tracked in the M0 → M3 roadmap.</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Design docs -->
+    <section id="docs">
+        <div class="container">
+            <span class="eyebrow animate-on-scroll" data-en="Follow along" data-zh="了解进展">Follow along</span>
+            <h2 class="section-title animate-on-scroll" data-en="The design is public." data-zh="设计全部公开。">The design is public.</h2>
+
+            <div class="bento-grid animate-on-scroll" style="grid-template-columns: repeat(3, 1fr);">
+                <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/design.md" style="text-decoration: none; color: inherit;">
+                    <h3 data-en="Design" data-zh="产品设计">Design</h3>
+                    <p data-en="Positioning, CLI contract, the xiaolvshu pipeline, the theme store, and architecture."
+                       data-zh="定位、CLI 契约、小绿书管线、主题商店与架构。">Positioning, CLI contract, xiaolvshu pipeline, theme store, architecture.</p>
+                </a>
+                <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/business.md" style="text-decoration: none; color: inherit;">
+                    <h3 data-en="Open-source boundary" data-zh="开源边界">Open-source boundary</h3>
+                    <p data-en="What stays open, what the cloud service sells, and how pricing works."
+                       data-zh="什么保持开源，云服务卖什么，定价如何设计。">What stays open, what the cloud sells, and how pricing works.</p>
+                </a>
+                <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/roadmap.md" style="text-decoration: none; color: inherit;">
+                    <h3 data-en="Roadmap M0 → M3" data-zh="路线图 M0 → M3">Roadmap M0 → M3</h3>
+                    <p data-en="From design freeze to the hosted service and the npm theme store."
+                       data-zh="从设计定稿到托管服务与 npm 主题商店。">From design freeze to the hosted service and the theme store.</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-brand">
+                <svg width="22" height="22" viewBox="0 0 512 512" fill="none">
+                    <rect width="512" height="512" rx="115" fill="#07C160"/>
+                    <path d="M256 384 V176" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round"/>
+                    <path d="M162 270 L256 176 L350 270" fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Publy
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com/turinglambdaai/publy">GitHub</a>
+                <a href="https://github.com/turinglambdaai/publy/blob/main/docs/design.md" data-en="Design" data-zh="设计文档">Design</a>
+                <a href="https://github.com/turinglambdaai/publy/blob/main/LICENSE">AGPL-3.0 License</a>
+            </div>
+            <div class="footer-note">© 2026 turinglambdaai</div>
+        </div>
+    </footer>
+
+    <script>
+        // Unified language policy for product sites:
+        // - explicit user choice persists and always wins;
+        // - otherwise follow the browser/system locale on every visit;
+        // - zh* => Simplified Chinese, other known locales => English;
+        // - if no locale is available at all, fall back to Chinese.
+        //
+        // `site-lang` is deliberately treated as legacy because older versions
+        // could not distinguish a user click from an automatically applied value.
+        var LANGUAGE_OVERRIDE_KEY = 'publy-lang-override-v2';
+        var LEGACY_LANGUAGE_KEY = 'site-lang';
+        var pageMetadata = {
+            en: {
+                title: 'Publy — The agent-era publishing pipeline for WeChat',
+                description: 'Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and xiaolvshu card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.'
+            },
+            zh: {
+                title: 'Publy — agent 时代的公众号发布管线',
+                description: '写作留在 Obsidian，发布交给 agent。一个 CLI 负责排版与小绿书渲染，主题即 npm 包，托管服务负责稳定发布。'
+            }
+        };
+
+        function readLanguageOverride() {
+            try {
+                var saved = localStorage.getItem(LANGUAGE_OVERRIDE_KEY);
+                return saved === 'zh' || saved === 'en' ? saved : null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function detectBrowserLanguage() {
+            var locale = (navigator.languages && navigator.languages[0]) || navigator.language || '';
+            if (!locale) return 'zh';
+            return String(locale).toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+        }
+
+        function applyLanguage(lang, persist) {
+            if (persist) {
+                try { localStorage.setItem(LANGUAGE_OVERRIDE_KEY, lang); } catch (e) { /* private mode */ }
+            }
+
+            document.querySelectorAll('[data-en]').forEach(function (el) {
+                var text = el.getAttribute('data-' + lang);
+                if (text !== null) el.textContent = text;
+            });
+            document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+            document.documentElement.setAttribute('data-language', lang);
+
+            var label = document.getElementById('current-lang-label');
+            if (label) label.textContent = lang === 'zh' ? '简体中文' : 'English';
+
+            var metadata = pageMetadata[lang];
+            if (metadata) {
+                document.title = metadata.title;
+                var description = document.querySelector('meta[name="description"]');
+                if (description) description.setAttribute('content', metadata.description);
+            }
+        }
+
+        function setLanguage(lang) {
+            if (lang !== 'zh' && lang !== 'en') return;
+            applyLanguage(lang, true);
+        }
+
+        try { localStorage.removeItem(LEGACY_LANGUAGE_KEY); } catch (e) { /* private mode */ }
+        applyLanguage(readLanguageOverride() || detectBrowserLanguage(), false);
+
+        window.addEventListener('languagechange', function () {
+            if (!readLanguageOverride()) applyLanguage(detectBrowserLanguage(), false);
+        });
+
+        // Scroll-in animation.
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+        document.querySelectorAll('.animate-on-scroll').forEach(function (el) { observer.observe(el); });
+    </script>
+</body>
+
+</html>
