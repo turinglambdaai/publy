@@ -14,7 +14,23 @@ agent 时代的微信公众号发布管线：一个 CLI 负责排版与小绿书
 
 合规：只走微信公众号官方 API，不做账号模拟，不做浏览器自动化。
 
-状态：M0——设计定稿，实现启动中。设计文档：
+状态：管线已实现并自吞狗粮——文章与小绿书每天经它发布。
+
+## 三分钟上手
+
+```bash
+publy config set server http://your-server:8081
+publy config set api_key <key>
+publy account add me --app-id wx... --theme claude
+publy preview article.md     # 先看效果
+publy publish article.md     # 排版稿进公众号草稿箱
+```
+
+小绿书：frontmatter 写 `mode: cards`，正文按 `## cover` / `## point` / `## list` / `## ending` 分节，`publy card post.md --preview` 出拼版预览，`publy publish post.md` 发布。
+
+完整手册：[docs/guide.md](docs/guide.md) · 主题画廊：[jrtx.site/publy-themes](http://jrtx.site/publy-themes/)
+
+设计文档：
 
 - [docs/design.md](docs/design.md) — 产品设计：定位、形态、CLI 契约、小绿书管线、主题商店、架构
 - [docs/business.md](docs/business.md) — 开源边界、定价、GTM

@@ -14,11 +14,21 @@ Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown
 
 Compliance: Publy only uses official WeChat MP APIs. No account simulation, no browser automation.
 
-Status: M0 — design finalized, implementation starting. Read the design:
+Status: pipeline implemented and dogfooding — articles and xiaolvshu cards publish through it daily.
 
-- [docs/design.md](docs/design.md) — product design: positioning, form factor, CLI contract, xiaolvshu pipeline, theme store, architecture
-- [docs/business.md](docs/business.md) — open-core boundary, pricing, GTM
-- [docs/roadmap.md](docs/roadmap.md) — M0 → M3
+## Quick start
+
+```bash
+publy config set server http://your-server:8081
+publy config set api_key <key>
+publy account add me --app-id wx... --theme claude
+publy preview article.md     # see it before you ship it
+publy publish article.md     # typeset draft lands in the WeChat backend
+```
+
+Xiaolvshu: write sections (`## cover` / `## point` / `## list` / `## ending`) with `mode: cards` in frontmatter, run `publy card post.md --preview`, then `publy publish post.md`.
+
+Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [jrtx.site/publy-themes](http://jrtx.site/publy-themes/)
 
 ## License
 
