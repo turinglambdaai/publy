@@ -546,6 +546,26 @@ export function createProgram(): Command {
       }
     });
 
+  program
+    .command("quota")
+    .description("show your plan and this month's usage")
+    .action(async () => {
+      const config = loadConfig();
+      const res = await fetch(new URL("/v1/quota", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
+      const body = (await res.json()) as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean } & { code?: string };
+      if (!res.ok) {
+        console.error(`publy: ${body.code ?? res.status}`);
+        process.exit(5);
+      }
+      if (body.unlimited) {
+        console.log("admin key：无配额限制");
+      } else {
+        const expiry = body.expiresAt ? `，Pro 到期 ${new Date(body.expiresAt).toLocaleDateString()}` : "";
+        console.log(`套餐 ${body.plan}：本月已用 ${body.used} / ${body.limit}${expiry}`);
+        console.log(`购买/升级：${new URL("/", config.server!).toString()}`);
+      }
+    });
+
   const configCmd = program.command("config").description("Manage ~/.publy/config.json");
   configCmd
     .command("set")

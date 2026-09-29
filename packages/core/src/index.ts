@@ -2,6 +2,7 @@ export * from "./frontmatter.js";
 export * from "./obsidian.js";
 export * from "./theme.js";
 export * from "./svg.js";
+export * from "./png.js";
 export * from "./render.js";
 export * from "./fonts.js";
 export * from "./cards.js";

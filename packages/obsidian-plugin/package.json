@@ -9,7 +9,8 @@
   "dependencies": {
     "@publy/core": "workspace:*",
     "@publy/shared": "workspace:*",
-    "@resvg/resvg-js": "^2.6.2"
+    "@resvg/resvg-js": "^2.6.2",
+    "@resvg/resvg-wasm": "^2.6.2"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

@@ -1,0 +1,282 @@
+// Multi-user storage on node:sqlite (stdlib, zero deps).
+// users:    one row per paying/registered customer — apiKey is their credential
+// accounts: wechat accounts customers may publish to (AppSecret stays server-side)
+// orders:   purchase orders (payment provider reference, plan, months)
+
+import { DatabaseSync } from "node:sqlite";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+export type Plan = "free" | "pro";
+
+export interface UserRow {
+  id: string;
+  contact: string;
+  apiKey: string;
+  plan: Plan;
+  /** pro expiry, epoch ms; 0 = n/a */
+  expiresAt: number;
+  /** usage counter + calendar month key (Asia/Shanghai) */
+  publishCount: number;
+  monthKey: string;
+  /** epoch ms when the user was disabled; 0 = active */
+  disabledAt: number;
+  createdAt: number;
+}
+
+export interface AccountRow {
+  name: string;
+  appId: string;
+  appSecret: string;
+  /** user id that owns this account (null = admin/shared) */
+  ownerUserId: string | null;
+}
+
+export interface OrderRow {
+  id: string;
+  contact: string;
+  plan: Plan;
+  months: number;
+  amountFen: number;
+  provider: string;
+  status: "pending" | "paid";
+  userId: string | null;
+  createdAt: number;
+  paidAt: number;
+}
+
+export const PLAN_LIMITS: Record<Plan, { monthlyPublishes: number; accounts: number }> = {
+  free: { monthlyPublishes: 30, accounts: 1 },
+  pro: { monthlyPublishes: 5000, accounts: 3 },
+};
+
+/** current calendar-month key in Asia/Shanghai */
+export function monthKey(now = Date.now()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+  }).format(now); // YYYY-MM
+}
+
+function newId(): string {
+  return crypto.randomUUID();
+}
+
+export function newApiKey(): string {
+  return `publy_${crypto.randomBytes(24).toString("hex")}`;
+}
+
+export class Store {
+  private db: DatabaseSync;
+
+  constructor(dataDir: string) {
+    fs.mkdirSync(dataDir, { recursive: true });
+    this.db = new DatabaseSync(path.join(dataDir, "users.db"));
+    this.db.exec(`
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        contact TEXT NOT NULL UNIQUE,
+        api_key TEXT NOT NULL UNIQUE,
+        plan TEXT NOT NULL DEFAULT 'free',
+        expires_at INTEGER NOT NULL DEFAULT 0,
+        publish_count INTEGER NOT NULL DEFAULT 0,
+        month_key TEXT NOT NULL DEFAULT '',
+        disabled_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS accounts (
+        name TEXT PRIMARY KEY,
+        app_id TEXT NOT NULL,
+        app_secret TEXT NOT NULL,
+        owner_user_id TEXT
+      );
+      CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        contact TEXT NOT NULL,
+        plan TEXT NOT NULL,
+        months INTEGER NOT NULL,
+        amount_fen INTEGER NOT NULL,
+        provider TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        user_id TEXT,
+        created_at INTEGER NOT NULL,
+        paid_at INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+  }
+
+  /** close the sqlite handle (fastify onClose hook) */
+  close(): void {
+    this.db.close();
+  }
+
+  private toUser(r: Record<string, unknown>): UserRow {
+    return {
+      id: r.id as string,
+      contact: r.contact as string,
+      apiKey: r.api_key as string,
+      plan: r.plan as Plan,
+      expiresAt: r.expires_at as number,
+      publishCount: r.publish_count as number,
+      monthKey: r.month_key as string,
+      disabledAt: r.disabled_at as number,
+      createdAt: r.created_at as number,
+    };
+  }
+
+  // --- users ---------------------------------------------------------------
+
+  createUser(contact: string, plan: Plan, months: number): UserRow {
+    const now = Date.now();
+    const expiresAt = plan === "pro" ? now + months * 30 * 24 * 3600 * 1000 : 0;
+    const stmt = this.db.prepare(
+      "INSERT INTO users (id, contact, api_key, plan, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    );
+    const user: UserRow = {
+      id: newId(),
+      contact,
+      apiKey: newApiKey(),
+      plan,
+      expiresAt,
+      publishCount: 0,
+      monthKey: monthKey(now),
+      disabledAt: 0,
+      createdAt: now,
+    };
+    stmt.run(user.id, contact, user.apiKey, plan, expiresAt, now);
+    return user;
+  }
+
+  findUserByContact(contact: string): UserRow | null {
+    const row = this.db.prepare("SELECT * FROM users WHERE contact = ?").get(contact) as Record<string, unknown> | undefined;
+    return row ? this.toUser(row) : null;
+  }
+
+  findUserByKey(apiKey: string): UserRow | null {
+    const row = this.db.prepare("SELECT * FROM users WHERE api_key = ?").get(apiKey) as Record<string, unknown> | undefined;
+    return row ? this.toUser(row) : null;
+  }
+
+  findUserById(id: string): UserRow | null {
+    const row = this.db.prepare("SELECT * FROM users WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row ? this.toUser(row) : null;
+  }
+
+  listUsers(): UserRow[] {
+    return (this.db.prepare("SELECT * FROM users ORDER BY created_at DESC").all() as Record<string, unknown>[]).map((r) => this.toUser(r));
+  }
+
+  /** pro expiry extension: adds months from the later of now / current expiry */
+  extendPro(userId: string, months: number): void {
+    const u = this.findUserById(userId)!;
+    const base = Math.max(u.expiresAt, Date.now());
+    this.db.prepare("UPDATE users SET plan = 'pro', expires_at = ? WHERE id = ?").run(base + months * 30 * 24 * 3600 * 1000, userId);
+  }
+
+  setDisabled(userId: string, disabled: boolean): void {
+    this.db.prepare("UPDATE users SET disabled_at = ? WHERE id = ?").run(disabled ? Date.now() : 0, userId);
+  }
+
+  /** used publishes in the current calendar month (resets on rollover) */
+  getUsage(user: UserRow): number {
+    const fresh = this.findUserById(user.id)!;
+    return fresh.monthKey === monthKey() ? fresh.publishCount : 0;
+  }
+
+  /** consume one publish after success */
+  incrementUsage(userId: string): void {
+    const fresh = this.findUserById(userId)!;
+    const mk = monthKey();
+    const used = fresh.monthKey === mk ? fresh.publishCount : 0;
+    this.db.prepare("UPDATE users SET publish_count = ?, month_key = ? WHERE id = ?").run(used + 1, mk, userId);
+  }
+
+  /** true when plan is pro and not expired */
+  isProActive(user: UserRow): boolean {
+    return user.plan === "pro" && (user.expiresAt === 0 || user.expiresAt > Date.now());
+  }
+
+  // --- accounts ------------------------------------------------------------
+
+  upsertAccount(acc: AccountRow): void {
+    this.db
+      .prepare(
+        "INSERT INTO accounts (name, app_id, app_secret, owner_user_id) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET app_id = excluded.app_id, app_secret = excluded.app_secret, owner_user_id = excluded.owner_user_id",
+      )
+      .run(acc.name, acc.appId, acc.appSecret, acc.ownerUserId);
+  }
+
+  findAccount(name: string): AccountRow | null {
+    const row = this.db.prepare("SELECT * FROM accounts WHERE name = ?").get(name) as Record<string, unknown> | undefined;
+    return row
+      ? { name: row.name as string, appId: row.app_id as string, appSecret: row.app_secret as string, ownerUserId: (row.owner_user_id as string | null) ?? null }
+      : null;
+  }
+
+  listAccounts(): AccountRow[] {
+    return (this.db.prepare("SELECT * FROM accounts").all() as Record<string, unknown>[]).map((r) => ({
+      name: r.name as string,
+      appId: r.app_id as string,
+      appSecret: r.app_secret as string,
+      ownerUserId: (r.owner_user_id as string | null) ?? null,
+    }));
+  }
+
+  countAccountsOwnedBy(userId: string): number {
+    return (this.db.prepare("SELECT COUNT(*) AS n FROM accounts WHERE owner_user_id = ?").get(userId) as { n: number }).n;
+  }
+
+  // --- orders ----------------------------------------------------------------
+
+  createOrder(contact: string, plan: Plan, months: number, amountFen: number, provider: string): OrderRow {
+    const order: OrderRow = {
+      id: newId(),
+      contact,
+      plan,
+      months,
+      amountFen,
+      provider,
+      status: "pending",
+      userId: null,
+      createdAt: Date.now(),
+      paidAt: 0,
+    };
+    this.db
+      .prepare("INSERT INTO orders (id, contact, plan, months, amount_fen, provider, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)")
+      .run(order.id, contact, plan, months, amountFen, provider, order.createdAt);
+    return order;
+  }
+
+  findOrder(id: string): OrderRow | null {
+    const row = this.db.prepare("SELECT * FROM orders WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+    return row
+      ? {
+          id: row.id as string,
+          contact: row.contact as string,
+          plan: row.plan as Plan,
+          months: row.months as number,
+          amountFen: row.amount_fen as number,
+          provider: row.provider as string,
+          status: row.status as OrderRow["status"],
+          userId: (row.user_id as string | null) ?? null,
+          createdAt: row.created_at as number,
+          paidAt: row.paid_at as number,
+        }
+      : null;
+  }
+
+  markOrderPaid(id: string, userId: string): void {
+    this.db.prepare("UPDATE orders SET status = 'paid', user_id = ?, paid_at = ? WHERE id = ?").run(userId, Date.now(), id);
+  }
+}
+
+/** Price table in fen (¥ * 100). Pro is sold per month. */
+export const PRICES: Record<Exclude<Plan, "free">, { months: number; fen: number }[]> = {
+  pro: [
+    { months: 1, fen: 3900 },
+    { months: 12, fen: 39000 },
+  ],
+};

@@ -1,7 +1,11 @@
 // Publy Obsidian plugin — client A: write in Obsidian, publish through a Publy server.
 
+import fs from "node:fs";
 import { Plugin, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
-import { renderMarkdown, renderCards, buildPreviewHtml } from "@publy/core";
+import { renderMarkdown, renderCards, buildPreviewHtml, setPngRenderer } from "@publy/core";
+import { initWasm, Resvg as WasmResvg } from "@resvg/resvg-wasm";
+// inlined by esbuild's binary loader (Uint8Array) — keeps main.js self-contained
+import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
 
 interface PublySettings {
   server: string;
@@ -27,6 +31,22 @@ export default class PublyPlugin extends Plugin {
   settings: PublySettings;
 
   async onload(): Promise<void> {
+    // WASM PNG renderer (community-plugin safe: no native binaries).
+    // Font subsets ship beside main.js; subset-less glyphs fall back to the
+    // downloadable full fonts inside the card engine.
+    await initWasm(resvgWasm);
+    const fontDir = `${this.manifest.dir}/fonts`;
+    const fontFiles = ["NotoSansSC-subset-Regular.otf", "NotoSansSC-subset-Bold.otf"]
+      .map((f) => `${fontDir}/${f}`)
+      .filter((p) => fs.existsSync(p));
+    setPngRenderer((svg, fitWidth) => {
+      const resvg = new WasmResvg(svg, {
+        font: { loadSystemFonts: false, fontFiles },
+        ...(fitWidth ? { fitTo: { mode: "width", value: fitWidth } } : {}),
+      });
+      return Buffer.from(resvg.render().asPng());
+    });
+
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
     this.addRibbonIcon("send", "Publy: publish current note", () => this.publishCurrentNote());
