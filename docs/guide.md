@@ -204,8 +204,10 @@ cd /opt/publy && git pull && pnpm install --frozen-lockfile && pnpm -r build && 
 1. 在 `~/.publy/config.json` 加一次隧道配置：
 
 ```json
-"tunnel": { "ssh_target": "user@your-server", "local_port": 18081, "remote_port": 8081 }
+"tunnel": { "ssh_target": "user@your-server", "local_port": 18081, "remote_port": 8081, "server": "http://127.0.0.1:18081" }
 ```
+
+`server` 是隧道建立后使用的地址（默认 `http://127.0.0.1:<local_port>`）：当主地址（如 HTTPS 域名）被网络偶发拦截时，publish 自动切到隧道地址重试。
 
 2. 之后 `publy tunnel` 一条命令拉起并验证（幂等，已在则跳过）；`publy publish` 遇到连不上服务器时也会**自动拉起隧道重试一次**，无需手工干预。
 
