@@ -14,9 +14,9 @@
 - [x] `publy config set` / `publy account add|list` / `publy theme ls`
 - [x] `@publy/core` 微信客户端：token 缓存（单飞 + 600s buffer）、add_material、draft/add（文章 + newspic 小绿书两种草稿）
 - [x] `publy-server` 协议 v1（/health /verify /v1/publish，base64 附件 + attachment:// 引用替换）——本地冒烟通过（含微信 API 真实调用错误路径）
-- [ ] 部署 server 到用户服务器（稳定 IP，与 wenyan server 并存于不同端口）——**等 SSH**
+- [x] 部署 server 到用户服务器（47.101.152.163:8082，systemd 托管，AppSecret 不出服务器）——✅ 2026-09-29
 
-**验收**：真实公众号全流程发布 1 篇文章（渲染 → 服务器 → 草稿箱）。
+**验收**：✅ 真实公众号全流程发布 1 篇文章（渲染 → 服务器 → 草稿箱，6.5s，幂等命中与审计日志实测通过）。
 
 ## M1b — 小绿书 card 引擎 ✅
 
@@ -27,14 +27,16 @@
 
 **验收**：实测 4 张卡片 2.5s 出图，汉字像素级正确；两主题渲染通过。
 
-## M2 — 稳定性 ✅（除部署）
+## M2 — 稳定性 ✅（除自吞狗粮周期）
 
 - [x] 幂等键（内容寻址，服务端 10 分钟窗口去重）
 - [x] 审计日志（server-data/history.jsonl，逐条发布/去重/失败记录）
 - [x] 封面 2.35:1 中心裁切（server 端 resvg 视口裁切，零图像库依赖）
 - [x] 素材 hash 缓存（同 appId 同字节内容免重传，material-cache.json）
 - [x] `AccountStore` 接口抽象（文件实现，M4 换数据库）
-- [ ] 部署后替换 tlai-wechat-publish 后端，连续 2 周仅经 publy 发布
+- [x] 公司网络大 POST 拦截解法：SSH 隧道（22 端口加密流，启动文件夹开机静默自启）——2026-09-29 实测：直连 8082/8081 大 POST 均被中间设备掐断（几十 KB 阈值），隧道 200KB+ 全通
+- [ ] CLI `publy tunnel` 自动隧道（直连失败自动建）——产品 insight：目标客户大量在企业网络内，这是刚需特性
+- [ ] 替换 tlai-wechat-publish 后端，连续 2 周仅经 publy 发布（自 2026-09-29 起算）
 
 ## M3 — Obsidian 插件（客户端 A）✅ 骨架
 
