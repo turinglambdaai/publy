@@ -31,7 +31,7 @@ export interface CliConfig {
   default_account?: string;
   media_dirs?: string[];
   /** SSH tunnel for networks that break large POSTs */
-  tunnel?: { ssh_target: string; local_port: number; remote_port: number };
+  tunnel?: { ssh_target: string; local_port: number; remote_port: number; /** base url to use when the tunnel is up (default http://127.0.0.1:<local_port>) */ server?: string };
   accounts?: CliAccount[];
 }
 
@@ -391,8 +391,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
 
   type PublishResult = Partial<PublishResponse> & { code?: string; message?: string; deduped?: boolean; jobId?: string; runAt?: string };
-  async function postPublish(): Promise<{ res: Response; body: PublishResult }> {
-    const res = await fetch(new URL("/v1/publish", server).toString(), {
+  async function postPublish(serverUrl: string): Promise<{ res: Response; body: PublishResult }> {
+    const res = await fetch(new URL("/v1/publish", serverUrl).toString(), {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify(payload),
@@ -402,14 +402,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 
   let result: { res: Response; body: PublishResult } | null = null;
   try {
-    result = await postPublish();
+    result = await postPublish(server);
   } catch {
-    /* network error — maybe the tunnel is down */
+    /* network error — maybe the network blocks large POSTs and a tunnel is configured */
   }
   if (!result && config.tunnel) {
     console.error("publy: server unreachable, bringing up the SSH tunnel…");
     if (await ensureTunnel(config)) {
-      result = await postPublish();
+      const tunnelServer = config.tunnel.server ?? `http://127.0.0.1:${config.tunnel.local_port}`;
+      result = await postPublish(tunnelServer);
     }
   }
   if (!result) {
