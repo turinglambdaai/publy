@@ -51,7 +51,7 @@
 ## M4 — 公开商业版（进行中）
 
 - [x] 主题注册表仓库 `publy-themes`（index schema + 内置主题登记 + 提交指南）
-- [x] **主题商店 gallery 上线**（2026-09-29）：jrtx.site/publy-themes/——四主题真实渲染预览（Edge headless 截样例文章 + card 引擎出图），数据内联同步渲染；`publy theme preview <name>` 本地即看；主页已挂入口
+- [x] **主题商店 gallery 上线**（2026-09-29）：themes.publy.jrtx.site/——四主题真实渲染预览（Edge headless 截样例文章 + card 引擎出图），数据内联同步渲染；`publy theme preview <name>` 本地即看；主页已挂入口
 - [ ] 云控制面：多账号、定时任务、webhook、计费（Free / Pro ¥39 / Team ¥129）
 - [ ] 外部主题提交流程开放（npm 包规范 + CI 预览自动生成）
 - [ ] jrtx.site 产品页（已上线 publy.jrtx.site）+ 开源发布文

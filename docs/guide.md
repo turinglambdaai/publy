@@ -169,7 +169,7 @@ publy theme preview claude      # 本地渲染样例文章，浏览器即看
 | medium | 文章 | 近白底、绿色强调、1.85 行高 |
 | naive | 卡片 | 纯白底、黑墨文字 |
 
-在线画廊（真实渲染预览）：[jrtx.site/publy-themes](http://jrtx.site/publy-themes/)。
+在线画廊（真实渲染预览）：[themes.publy.jrtx.site](https://themes.publy.jrtx.site/)。
 
 ## 自托管服务器
 

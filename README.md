@@ -28,7 +28,7 @@ publy publish article.md     # typeset draft lands in the WeChat backend
 
 Xiaolvshu: write sections (`## cover` / `## point` / `## list` / `## ending`) with `mode: cards` in frontmatter, run `publy card post.md --preview`, then `publy publish post.md`.
 
-Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [jrtx.site/publy-themes](http://jrtx.site/publy-themes/)
+Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
 
 ## License
 

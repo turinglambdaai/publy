@@ -28,7 +28,7 @@ publy publish article.md     # 排版稿进公众号草稿箱
 
 小绿书：frontmatter 写 `mode: cards`，正文按 `## cover` / `## point` / `## list` / `## ending` 分节，`publy card post.md --preview` 出拼版预览，`publy publish post.md` 发布。
 
-完整手册：[docs/guide.md](docs/guide.md) · 主题画廊：[jrtx.site/publy-themes](http://jrtx.site/publy-themes/)
+完整手册：[docs/guide.md](docs/guide.md) · 主题画廊：[themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
 
 设计文档：
 
