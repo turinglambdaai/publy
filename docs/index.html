@@ -69,7 +69,7 @@
     <!-- Hero -->
     <section class="hero" id="overview">
         <div class="container">
-            <span class="eyebrow animate-on-scroll" data-en="Open source · AGPL-3.0 · render / publish / xiaolvshu cards — implemented & smoke-tested" data-zh="开源 · AGPL-3.0 · 排版 / 发布 / 小绿书卡片——已实现并通过实测">Open source · AGPL-3.0 · render / publish / xiaolvshu cards — implemented &amp; smoke-tested</span>
+            <span class="eyebrow animate-on-scroll" data-en="Open source · AGPL-3.0 · on npm — @turinglambdaai/publy 1.0" data-zh="开源 · AGPL-3.0 · 已上架 npm——@turinglambdaai/publy 1.0">Open source · AGPL-3.0 · on npm — @turinglambdaai/publy 1.0</span>
             <h1 class="animate-on-scroll">
                 <span data-en="Write in Obsidian." data-zh="写作留在 Obsidian，">Write in Obsidian.</span>
                 <span class="accent" data-en="Publish with your agent." data-zh="发布交给 agent。">Publish with your agent.</span>
@@ -81,8 +81,9 @@
             </p>
 
             <div class="hero-buttons animate-on-scroll">
-                <a href="#start" data-en="See the design contract" data-zh="看设计契约" class="btn btn-primary">See the design contract</a>
-                <a href="https://github.com/turinglambdaai/publy" class="btn btn-secondary" data-en="View on GitHub" data-zh="在 GitHub 查看">View on GitHub</a>
+                <a href="https://www.npmjs.com/package/@turinglambdaai/publy" class="btn btn-primary" data-en="npm i -g @turinglambdaai/publy" data-zh="npm i -g @turinglambdaai/publy">npm i -g @turinglambdaai/publy</a>
+                <a href="https://github.com/turinglambdaai/publy/blob/main/docs/guide.md" class="btn btn-secondary" data-en="User guide" data-zh="使用手册">User guide</a>
+                <a href="https://themes.publy.jrtx.site/" class="btn btn-secondary" data-en="Theme gallery" data-zh="主题画廊">Theme gallery</a>
             </div>
 
             <div class="hero-visual animate-on-scroll">
@@ -95,7 +96,10 @@
                         </div>
                         <div class="window-title">terminal</div>
                     </div>
-                    <div class="code-body"><span class="comment"># the whole publishing flow, from the editor</span>
+                    <div class="code-body"><span class="comment"># install once — fonts, themes and samples bundled</span>
+<span class="prompt">$</span> <span class="cmd">npm i -g @turinglambdaai/publy</span>
+
+<span class="comment"># the whole publishing flow, from the editor</span>
 <span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
 <span class="ok">✓</span> typeset · cover uploaded · <span class="str">draft ready</span>
 
@@ -199,9 +203,9 @@
             </div>
 
             <div class="callout animate-on-scroll">
-                <strong data-en="Status: real." data-zh="状态：真的能跑。">Status: real.</strong>
-                <span data-en=" publy render / preview / card / publish, the self-hostable server (protocol v1, idempotent + audited), both built-in card themes, and the Obsidian plugin are implemented and tested locally. Server deployment and the theme store are next — follow the roadmap."
-                      data-zh="publy render / preview / card / publish、自托管 server（协议 v1，幂等 + 审计）、两个内置卡片主题与 Obsidian 插件均已实现并本地实测。下一步是服务器部署与主题商店——见路线图。"> render / preview / card / publish and the self-hostable server are implemented; deployment and the theme store are next.</span>
+                <strong data-en="Status: shipping." data-zh="状态：已在服役。">Status: shipping.</strong>
+                <span data-en=" Published on npm, dogfooding daily: articles and xiaolvshu decks go out through the pipeline. HTTPS self-hosted server, scheduled publishing, idempotent retries, an audit log, the npm theme gallery, and the Obsidian plugin (v0.1.0) are all live — see the user guide and roadmap."
+                      data-zh="已上架 npm，每天经它发布文章与小绿书。HTTPS 自托管服务器、定时发布、幂等重试、审计日志、npm 主题画廊与 Obsidian 插件（v0.1.0）全部就绪——见使用手册与路线图。"> On npm and dogfooding daily — server, scheduling, audit, theme gallery and the Obsidian plugin are live.</span>
             </div>
         </div>
     </section>
