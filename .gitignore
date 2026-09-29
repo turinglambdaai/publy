@@ -5,3 +5,8 @@ coverage/
 .env
 .env.*
 .DS_Store
+
+# stray build outputs
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.js.map
