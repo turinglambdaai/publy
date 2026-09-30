@@ -74,6 +74,14 @@ export default class PublyPlugin extends Plugin {
       callback: () => this.previewCardDeck(),
     });
 
+    // zero-config path: copy the rendered rich text — paste straight into the
+    // WeChat editor without any AppSecret / server / IP whitelist setup
+    this.addCommand({
+      id: "copy-rendered-html",
+      name: "Copy rendered rich text (paste into WeChat editor)",
+      callback: () => this.copyRenderedHtml(),
+    });
+
     this.addSettingTab(new PublySettingTab(this.app, this));
   }
 
@@ -183,6 +191,40 @@ export default class PublyPlugin extends Plugin {
       if (!result.lint.ok) {
         new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
       }
+    } catch (err) {
+      new Notice(`Publy: ${(err as Error).message}`);
+    }
+  }
+
+  /** zero-config publish path: rich text on the clipboard, pasted into the
+   *  WeChat editor by hand — no server, no AppSecret, no IP whitelist */
+  private async copyRenderedHtml(): Promise<void> {
+    const file = this.currentFile();
+    if (!file) {
+      new Notice("Publy: no active note");
+      return;
+    }
+    const raw = await this.readWithMediaDirs(file);
+    try {
+      const rendered = renderMarkdown(raw, {
+        baseDir: (this.app.vault.adapter as { getBasePath?: () => string }).getBasePath?.() ?? "",
+        mediaDirs: this.mediaDirs(),
+        themeCss: claudeThemeCss,
+        highlightCss: hljsGithubCss,
+      });
+      for (const w of rendered.warnings) console.warn("[publy] " + w);
+      // images stay as local file refs — WeChat's editor uploads pasted images
+      // automatically, but local <img> paths won't resolve in the browser clip;
+      // warn when the note embeds local images so the user knows the limit
+      if (rendered.attachments.length > 0) {
+        new Notice("Publy: 笔记含本地图片，复制路径仅保留文字排版（图片请用发布功能或手动插图）");
+      }
+      const item = new ClipboardItem({
+        "text/html": new Blob([rendered.html], { type: "text/html" }),
+        "text/plain": new Blob([file.basename], { type: "text/plain" }),
+      });
+      await navigator.clipboard.write([item]);
+      new Notice("Publy: 已复制排版 rich text — 到公众号编辑器 Ctrl+V 粘贴");
     } catch (err) {
       new Notice(`Publy: ${(err as Error).message}`);
     }

@@ -49,11 +49,19 @@
 - [ ] HTTPS：Caddy 2.6.2 已装已配（publy-api.jrtx.site → 8081），等 DNS A 记录 + 安全组 443/80 开放
 - [ ] **自吞狗粮进行中**：连续 2 周仅经 publy 发布（自 2026-09-29 起算，wenyan 已不可回退）
 
+## 竞品情报（2026-09-30 调研）
+
+Obsidian 社区已有 **8+ 个同类公众号发布插件**（Markdown Publisher、Dou Publish、WeChat Multi Publisher、WeiXin MP Publisher、md-to-wechat、MarkNice WeChat、DGS、GZH Sync…），但**全部无人问津——最高 9 星**。两个结论：
+
+1. 需求真实（反复有人试水），但"本地插件 + 用户自配 AppSecret/IP 白名单"模式做不大——配置劝退、无服务收入、单机孤岛。**这正是 Publy 托管服务模式的正面验证。**
+2. 可吸收的功能点：**富文本复制路径**（Dou Publish：零配置，复制带样式 HTML 粘贴进公众号编辑器——已吸收进插件）；**KaTeX 数学公式**（多插件主打痛点：公众号不支持原生公式，需渲染为内联 HTML/CSS——juice 内联是我们的强项）；多账号群发、自动图床。
+
 ## M3 — Obsidian 插件（客户端 A）进行中
 
 - [x] 插件骨架：设置页（server/api_key/account/mediaDir）、ribbon 按钮、命令「Publish current note」「Preview rendered HTML」
 - [x] esbuild 构建 + resvg 原生模块随插件分发（dist/ 即装即用）
 - [x] 命令「Preview xiaolvshu card deck」：当前笔记渲染卡片拼版并打开（2026-09-30）
+- [x] 命令「Copy rendered rich text」：**零配置发布路径**（2026-09-30，自竞品 Dou Publish 吸收）——复制带排版 HTML 到剪贴板，粘贴进公众号编辑器，无需 AppSecret/服务器/白名单；含本地图片时的能力边界提示
 - [ ] 编辑器内实时预览（侧边栏常驻拼版）
 - [ ] 发布到 Obsidian 社区目录
 
@@ -69,5 +77,7 @@
 - [ ] jrtx.site 产品页（已上线 publy.jrtx.site）+ 开源发布文
 
 ## Later（不承诺时间表）
+
+KaTeX 数学公式（公众号不支持原生公式 → KaTeX 渲染为内联样式 HTML，juice 内联——多竞品的主打功能，高需求）
 
 MCP 薄封装 / 付费主题市场（70/30）/ Team 审批流 / API 按量计费
