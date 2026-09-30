@@ -62,7 +62,8 @@
 - [x] 主题注册表仓库 `publy-themes`（index schema + 内置主题登记 + 提交指南）
 - [x] **主题商店 gallery 上线并重做**（2026-09-30 v2）：themes.publy.jrtx.site/——文章主题直接内嵌**发布级真实 HTML**（同篇切主题对比 + 手机宽/文档宽切换），卡片主题按真实翻阅方式横向滑动 + 全屏翻页灯箱；废弃截图方案；生成器 scripts/build-gallery.mjs（输出到 publy-themes 仓库 D:Codespubly-themes）
 - [x] **云控制面上线**（2026-09-30）：多用户（node:sqlite 独立 API key）、配额强制（Free 30 次/月 / Pro 5000 次/月，按自然月滚动）、账号归属与计划限制（Free 1 账号 / Pro 3 账号）、购买页 + key 找回 + `publy quota`、admin 控制台（开通/延期/停用/绑定账号/用量）、支付适配器（虎皮椒已实现，凭据待运营者注册填入；当前手工开通模式）
-- [ ] 自动收款开关：运营者注册虎皮椒 → server.json 填 payments 凭据 → 购买页变扫码直付
+- [x] **支付适配器矩阵**（2026-09-30）：支付宝当面付（官方渠道、个人可申请，已实现 precreate 扫码 + 主动查单 + RSA2）/ 虎皮椒备用（PC 扫码仍可用）/ 手工开通兜底；购买页自动适配三种模式
+- [ ] 运营者申请支付宝当面付 → server.json 填 alipay 凭据 → 扫码直付上线
 - [ ] 定价页上主站 + 服务条款/隐私政策
 - [ ] 外部主题提交流程开放（npm 包规范 + CI 预览自动生成）
 - [ ] jrtx.site 产品页（已上线 publy.jrtx.site）+ 开源发布文
