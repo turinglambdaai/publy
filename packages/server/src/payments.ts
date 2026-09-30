@@ -178,23 +178,35 @@ export class XunhuPay implements PaymentProvider {
   }
 }
 
-/** Manual provider: orders stay pending until an admin completes them. */
+/** Manual provider: orders stay pending until an admin completes them.
+ *  With a static personal QR configured (manualQrUrl), the purchase page
+ *  shows the QR + a short order code; the admin matches the payment remark
+ *  in their Alipay/WeChat app and completes with one click. */
 export class ManualProvider implements PaymentProvider {
   name = "manual";
-  async createPayment(): Promise<{ payUrl: string } | null> {
-    return null;
+
+  constructor(private qrUrl?: string) {}
+
+  async createPayment(): Promise<{ qrDataUrl?: string; payUrl?: string } | null> {
+    return this.qrUrl ? { qrDataUrl: this.qrUrl } : null;
   }
+
   verifyNotify(): string | null {
     return null;
   }
 }
 
 export function createProvider(
-  cfg: { provider?: string; xunhupay?: { appId?: string; secret?: string }; alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string } } | undefined,
+  cfg: {
+    provider?: string;
+    xunhupay?: { appId?: string; secret?: string };
+    alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
+    manual?: { qrUrl?: string };
+  } | undefined,
   store: Store,
   onPaid: (order: OrderRow) => void,
 ): { provider: PaymentProvider; completeOrder: (orderId: string) => OrderRow | null } {
-  let provider: PaymentProvider = new ManualProvider();
+  let provider: PaymentProvider = new ManualProvider(cfg?.manual?.qrUrl);
   if (cfg?.provider === "alipay" && AlipayFacade.available(cfg.alipay)) {
     provider = new AlipayFacade(cfg.alipay!.appId!, cfg.alipay!.privateKey!, cfg.alipay?.alipayPublicKey ?? null);
   } else if (cfg?.provider === "xunhupay" && XunhuPay.available(cfg.xunhupay)) {

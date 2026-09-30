@@ -41,6 +41,9 @@ export interface ServerConfig {
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
     xunhupay?: { appId?: string; secret?: string };
+    /** static personal QR (image url or data url) shown on the purchase page;
+     *  orders are completed from the admin console after you confirm payment */
+    manual?: { qrUrl?: string };
   };
 }
 
@@ -263,6 +266,18 @@ export function buildApp(config: ServerConfig) {
 
   // --- public storefront (no auth) -------------------------------------------
 
+  // naive per-IP rate limit for unauthenticated storefront writes
+  const rateMap = new Map<string, number[]>();
+  const RATE_WINDOW_MS = 3600_000;
+  const RATE_MAX = 20;
+  function rateLimited(ip: string): boolean {
+    const now = Date.now();
+    const hits = (rateMap.get(ip) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+    hits.push(now);
+    rateMap.set(ip, hits);
+    return hits.length > RATE_MAX;
+  }
+
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
   app.get("/", async (_req, reply) => reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）")));
   app.get("/admin", async (_req, reply) => reply.type("text/html").send(adminPage()));
@@ -274,6 +289,10 @@ export function buildApp(config: ServerConfig) {
   const pollThrottle = new Map<string, number>();
 
   app.post<{ Body: { contact?: string; plan?: string; months?: number } }>("/purchase", async (req, reply) => {
+    const ip = req.ip ?? "unknown";
+    if (rateLimited(ip)) {
+      return reply.code(429).send({ code: "RATE_LIMITED", message: "too many requests, try later" });
+    }
     const { contact, plan, months } = req.body ?? {};
     if (!contact || !/^\S{1,64}$/.test(contact)) return reply.code(400).send({ code: "BAD_REQUEST", message: "contact required" });
     if (plan !== "pro" || ![1, 12].includes(Number(months))) {
@@ -527,10 +546,17 @@ export function buildApp(config: ServerConfig) {
     return result;
   });
 
+  app.get<{ Querystring: { status?: string } }>("/v1/admin/orders", async (req, reply) => {
+    if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
+    const status = (req.query as { status?: string }).status;
+    return { orders: store.listOrders(status || undefined) };
+  });
+
   app.post<{ Params: { id: string } }>("/v1/admin/orders/:id/complete", async (req, reply) => {
     if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
     const done = payments.completeOrder((req.params as { id: string }).id);
     if (!done) return reply.code(404).send({ code: "NOT_FOUND", message: "no such order" });
+    audit({ event: "admin-order-completed", orderId: done.id, contact: done.contact });
     return { ok: done.status === "paid", order: done };
   });
 

@@ -271,6 +271,24 @@ export class Store {
   markOrderPaid(id: string, userId: string): void {
     this.db.prepare("UPDATE orders SET status = 'paid', user_id = ?, paid_at = ? WHERE id = ?").run(userId, Date.now(), id);
   }
+
+  listOrders(status?: string, limit = 100): OrderRow[] {
+    const rows = status
+      ? (this.db.prepare("SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC LIMIT ?").all(status, limit) as Record<string, unknown>[])
+      : (this.db.prepare("SELECT * FROM orders ORDER BY created_at DESC LIMIT ?").all(limit) as Record<string, unknown>[]);
+    return rows.map((row) => ({
+      id: row.id as string,
+      contact: row.contact as string,
+      plan: row.plan as Plan,
+      months: row.months as number,
+      amountFen: row.amount_fen as number,
+      provider: row.provider as string,
+      status: row.status as OrderRow["status"],
+      userId: (row.user_id as string | null) ?? null,
+      createdAt: row.created_at as number,
+      paidAt: row.paid_at as number,
+    }));
+  }
 }
 
 /** Price table in fen (¥ * 100). Pro is sold per month. */

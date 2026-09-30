@@ -1,4 +1,6 @@
-// Purchase / lookup / admin pages — plain HTML, no framework, zh copy.
+// Storefront (purchase) + admin console pages — plain HTML, zh copy.
+// NOTE: the admin page's inner <script> is hand-concatenated; never embed
+// nested template literals here — they get evaluated at page-render time.
 
 export function purchasePage(publicIp = "你的服务器公网 IP"): string {
   return `<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
@@ -73,6 +75,16 @@ document.querySelectorAll('.plan').forEach(el => el.onclick = () => {
   document.getElementById('buy').textContent = '支付 ¥' + (months === 12 ? '390' : '39');
 });
 const show = (id, html) => { const el = document.getElementById(id); el.style.display = 'block'; el.innerHTML = html; };
+function pollKey(orderId, btn, interval) {
+  const timer = setInterval(async () => {
+    const o = await (await fetch('/order/' + orderId)).json();
+    if (o.status === 'paid') {
+      clearInterval(timer);
+      show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方"找回"）:\\n<div class="key">' + o.apiKey + '</div>\\n接入：\\n<div class="key">publy config set server ' + location.origin + '\\npubly config set api_key ' + o.apiKey + '\\npubly account add 你的账号名 …（见使用手册）</div>');
+      btn.textContent = '已开通';
+    }
+  }, interval);
+}
 document.getElementById('buy').onclick = async () => {
   const contact = document.getElementById('contact').value.trim();
   if (!contact) return show('msg', '请先填写联系方式');
@@ -83,24 +95,11 @@ document.getElementById('buy').onclick = async () => {
     const d = await r.json();
     if (d.payUrl) {
       show('msg', '订单已创建，<a href="' + d.payUrl + '" target="_blank">点击完成支付</a>（或扫码）。支付完成后本页自动显示 key，请勿关闭页面。');
-      const timer = setInterval(async () => {
-        const o = await (await fetch('/order/' + d.orderId)).json();
-        if (o.status === 'paid') {
-          clearInterval(timer);
-          show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方“找回”）:\\n<div class="key">' + o.apiKey + '</div>\\n接入：\\n<div class="key">publy config set server ' + location.origin + '\\npubly config set api_key ' + o.apiKey + '\\npubly account add 你的账号名 …（见使用手册）</div>');
-          b.textContent = '已开通';
-        }
-      }, 2500);
+      pollKey(d.orderId, b, 2500);
     } else if (d.qrDataUrl) {
-      show('msg', '请用 <b>支付宝</b> 扫码支付（金额 ¥' + (months === 12 ? '390' : '39') + '）。支付成功后本页自动开通并显示 key，请勿关闭页面。<br><br><img src="' + d.qrDataUrl + '" style="width:240px;background:#fff;padding:8px;border-radius:8px">');
-      const timer = setInterval(async () => {
-        const o = await (await fetch('/order/' + d.orderId)).json();
-        if (o.status === 'paid') {
-          clearInterval(timer);
-          show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方“找回”）:\\n<div class="key">' + o.apiKey + '</div>\\n接入：\\n<div class="key">publy config set server ' + location.origin + '\\npubly config set api_key ' + o.apiKey + '\\npubly account add 你的账号名 …（见使用手册）</div>');
-          b.textContent = '已开通';
-        }
-      }, 3000);
+      const remark = String(d.orderId).slice(-6).toUpperCase();
+      show('msg', '请用 <b>支付宝</b> 扫码支付（金额 ¥' + (months === 12 ? '390' : '39') + '），<b>支付时在备注里填写编号 <span style="color:#07C160">' + remark + '</span></b>。管理员确认后本页自动开通并显示 key，请勿关闭页面。<br><br><img src="' + d.qrDataUrl + '" style="width:240px;background:#fff;padding:8px;border-radius:8px">');
+      pollKey(d.orderId, b, 3000);
     } else if (d.manual) {
       show('msg', '订单已提交（' + d.orderId + '）。当前支付通道未开启，请联系管理员完成支付后自动开通。');
     } else {
@@ -128,15 +127,14 @@ export function adminPage(): string {
   body { font-family: -apple-system, "Microsoft YaHei", sans-serif; background: #111; color: #eee; padding: 32px 16px; }
   .wrap { max-width: 980px; margin: 0 auto; }
   h1 { font-size: 20px; margin-bottom: 16px; }
+  h2 { font-size: 14px; color: #999; margin: 26px 0 8px; }
   input { padding: 9px 12px; background: #1a1a1a; color: #eee; border: 1px solid #333; border-radius: 8px; font-size: 13px; }
   button { padding: 9px 14px; background: #07C160; color: #fff; border: 0; border-radius: 8px; font-size: 13px; cursor: pointer; }
   button.gray { background: #333; }
-  button.danger { background: #b91c1c; }
   table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
   th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #262626; }
   th { color: #888; font-weight: 500; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-  h2 { font-size: 14px; color: #999; margin: 26px 0 8px; }
   .key { font-family: monospace; font-size: 12px; }
   form { display: none; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 10px; padding: 14px; margin-top: 10px; }
   form label { display: block; color: #999; font-size: 12px; margin: 8px 0 4px; }
@@ -171,10 +169,13 @@ export function adminPage(): string {
       <div id="acc-out" class="key"></div>
     </form>
     <table id="tbl"><thead><tr><th>联系方式</th><th>套餐</th><th>到期</th><th>本月用量</th><th>状态</th><th>API key</th><th></th></tr></thead><tbody></tbody></table>
+
+    <h2 style="font-size:14px;color:#999;margin:26px 0 8px">待确认订单（静态收款码模式）</h2>
+    <table id="ordtbl"><thead><tr><th>编号</th><th>联系方式</th><th>套餐</th><th>金额</th><th>时间</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </div>
 <script>
-const H = () => ({ 'x-api-key': document.getElementById('key').value });
+const H = function () { return { 'x-api-key': document.getElementById('key').value }; };
 function form(id) { const el = document.getElementById('f-' + id); el.style.display = el.style.display === 'block' ? 'none' : 'block'; }
 async function load() {
   const r = await fetch('/v1/admin/users', { headers: H() });
@@ -184,39 +185,56 @@ async function load() {
   const tb = document.querySelector('#tbl tbody'); tb.innerHTML = '';
   for (const u of d.users) {
     const tr = document.createElement('tr');
-    tr.innerHTML = \`<td>\${u.contact}</td><td>\${u.plan}</td><td>\${u.expiresAt ? new Date(u.expiresAt).toLocaleDateString() : '—'}</td>
-      <td>\${u.used} / \${u.limit}</td><td>\${u.disabled ? '已停用' : '正常'}</td>
-      <td class="key">\${u.apiKey.slice(0, 12)}…</td><td>
-      <button class="gray" onclick="toggle('\${u.id}', \${!u.disabled})">\${u.disabled ? '启用' : '停用'}</button></td>\`;
+    tr.innerHTML = '<td>' + u.contact + '</td><td>' + u.plan + '</td><td>' + (u.expiresAt ? new Date(u.expiresAt).toLocaleDateString() : '—') + '</td>'
+      + '<td>' + u.used + ' / ' + u.limit + '</td><td>' + (u.disabled ? '已停用' : '正常') + '</td>'
+      + '<td class="key">' + u.apiKey.slice(0, 12) + '…</td><td>'
+      + '<button class="gray" data-id="' + u.id + '" data-dis="' + (!u.disabled) + '">' + (u.disabled ? '启用' : '停用') + '</button></td>';
     tb.appendChild(tr);
   }
+  tb.querySelectorAll('button').forEach(function (b) {
+    b.onclick = function () { toggle(b.dataset.id, b.dataset.dis === 'true'); };
+  });
+  const or = await fetch('/v1/admin/orders?status=pending', { headers: H() });
+  const od = await or.json();
+  const otb = document.querySelector('#ordtbl tbody'); otb.innerHTML = '';
+  for (const o of od.orders ?? []) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="key">' + o.id.slice(0, 8) + '</td><td>' + o.contact + '</td><td>' + o.plan + '×' + o.months + '月</td>'
+      + '<td>¥' + (o.amountFen / 100).toFixed(0) + '</td><td>' + new Date(o.createdAt).toLocaleString() + '</td><td>'
+      + '<button data-id="' + o.id + '">确认收款</button></td>';
+    otb.appendChild(tr);
+  }
+  otb.querySelectorAll('button').forEach(function (b) {
+    b.onclick = function () { completeOrder(b.dataset.id); };
+  });
+  if (!(od.orders ?? []).length) otb.innerHTML = '<tr><td colspan="6" style="color:#666">（无待确认订单）</td></tr>';
 }
 async function toggle(id, disabled) {
-  await fetch('/v1/admin/users/' + id + '/disable', { method: 'POST', headers: { ...H(), 'content-type': 'application/json' }, body: JSON.stringify({ disabled }) });
+  await fetch('/v1/admin/users/' + id + '/disable', { method: 'POST', headers: Object.assign(H(), { 'content-type': 'application/json' }), body: JSON.stringify({ disabled: disabled }) });
   load();
 }
 async function submitMk() {
-  const r = await fetch('/v1/admin/users', { method: 'POST', headers: { ...H(), 'content-type': 'application/json' },
-    body: JSON.stringify({ contact: v('mk-contact'), plan: v('mk-plan'), months: +v('mk-months') }) });
+  const r = await fetch('/v1/admin/users', { method: 'POST', headers: Object.assign(H(), { 'content-type': 'application/json' }),
+    body: JSON.stringify({ contact: val('mk-contact'), plan: val('mk-plan'), months: +val('mk-months') }) });
   const d = await r.json();
   document.getElementById('mk-out').textContent = d.apiKey ? 'key: ' + d.apiKey : JSON.stringify(d);
   load();
 }
 async function submitAcc() {
-  const r = await fetch('/v1/admin/accounts', { method: 'POST', headers: { ...H(), 'content-type': 'application/json' },
-    body: JSON.stringify({ name: v('acc-name'), appId: v('acc-appid'), appSecret: v('acc-secret'), ownerContact: v('acc-owner') }) });
+  const r = await fetch('/v1/admin/accounts', { method: 'POST', headers: Object.assign(H(), { 'content-type': 'application/json' }),
+    body: JSON.stringify({ name: val('acc-name'), appId: val('acc-appid'), appSecret: val('acc-secret'), ownerContact: val('acc-owner') }) });
   const d = await r.json();
   document.getElementById('acc-out').textContent = d.ok ? '已保存' : JSON.stringify(d);
 }
 async function verifyAcc() {
   const out = document.getElementById('acc-out');
   out.textContent = '验证中…（本服务器会真实调用一次微信 API）';
-  const r = await fetch('/v1/admin/verify-wechat', { method: 'POST', headers: { ...H(), 'content-type': 'application/json' },
-    body: JSON.stringify({ appId: v('acc-appid'), appSecret: v('acc-secret') }) });
+  const r = await fetch('/v1/admin/verify-wechat', { method: 'POST', headers: Object.assign(H(), { 'content-type': 'application/json' }),
+    body: JSON.stringify({ appId: val('acc-appid'), appSecret: val('acc-secret') }) });
   const d = await r.json();
   out.textContent = (d.ok ? '✅ ' : '❌ ') + d.message + (d.ip ? '（已为你标出该加的 IP）' : '');
   out.style.color = d.ok ? '#4ade8c' : '#f87171';
 }
-const v = (id) => document.getElementById(id).value;
+function val(id) { return document.getElementById(id).value; }
 </script></body></html>`;
 }
