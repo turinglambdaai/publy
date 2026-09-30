@@ -1,14 +1,15 @@
 // Theme loading. Built-in themes ship as CSS files scoped under #publy.
 // CSS variables are resolved to literal values because the WeChat editor
 // strips <style> blocks and does not support var().
+//
+// Embedding note: CSS may also be provided directly as text (themeCss option
+// / resolveVars export) — required for CJS-embedded environments (the Obsidian
+// plugin) where import.meta-based self-path resolution is unavailable.
 
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-
-const require = createRequire(import.meta.url);
-const pkgDir = path.dirname(fileURLToPath(import.meta.url));
 
 export interface Theme {
   id: string;
@@ -28,7 +29,23 @@ export const BUILTIN_THEMES = [
   "news",
 ] as const;
 
-function resolveVars(css: string): string {
+/** require relative to this module — works in real ESM (import.meta) and in
+ *  esbuild-cjs bundles (__dirname); returns null when neither is available
+ *  (e.g. sandboxed plugin bundles that must not touch disk anyway). */
+function requireHere(): NodeRequire | null {
+  try {
+    return createRequire(fileURLToPath(import.meta.url));
+  } catch {
+    try {
+      if (typeof __dirname !== "undefined") return createRequire(__dirname);
+    } catch {
+      /* fall through */
+    }
+    return null;
+  }
+}
+
+export function resolveVars(css: string): string {
   // strip comments first: a trailing comment line would otherwise swallow the
   // first variable that follows it (bit both claude and medium backgrounds)
   const vars = new Map<string, string>();
@@ -50,10 +67,20 @@ function resolveVars(css: string): string {
   return out;
 }
 
+function builtinThemesDir(): string | null {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const dir = path.resolve(here, "../themes");
+    return fs.existsSync(path.join(dir, "claude.css")) ? dir : null;
+  } catch {
+    return null;
+  }
+}
+
 export function loadTheme(id: string): Theme {
-  const themesDir = path.resolve(pkgDir, "../themes");
-  const file = path.join(themesDir, `${id}.css`);
-  if (!fs.existsSync(file)) {
+  const dir = builtinThemesDir();
+  const file = dir ? path.join(dir, `${id}.css`) : null;
+  if (!file || !fs.existsSync(file)) {
     throw new Error(`Unknown theme "${id}". Built-in themes: ${BUILTIN_THEMES.join(", ")}`);
   }
   return { id, css: resolveVars(fs.readFileSync(file, "utf-8")) };
@@ -65,9 +92,15 @@ export function loadThemeFromCss(cssFile: string): Theme {
 }
 
 /** highlight.js theme css, with the base .hljs block background removed so the
- *  article theme's code block styling stays authoritative. */
+ *  article theme's code block styling stays authoritative.
+ *  Throws a friendly error where the styles directory cannot be located
+ *  (e.g. CJS-embedded plugin) — callers should pass highlightCss instead. */
 export function loadHighlightCss(id: string): string {
-  const hljsRoot = path.dirname(require.resolve("highlight.js/package.json"));
+  const req = requireHere();
+  if (!req) {
+    throw new Error(`Cannot locate highlight.js styles in this environment — pass highlightCss as text instead (theme: ${id})`);
+  }
+  const hljsRoot = path.dirname(req.resolve("highlight.js/package.json"));
   const cssPath = path.join(hljsRoot, "styles", `${id}.css`);
   if (!fs.existsSync(cssPath)) {
     const available = fs

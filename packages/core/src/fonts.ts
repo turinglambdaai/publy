@@ -7,7 +7,27 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const pkgDir = path.dirname(fileURLToPath(import.meta.url));
+let fontDirOverride: string | null = null;
+
+/** Sandbox environments (Obsidian plugin) inject their bundled font dir here. */
+export function setFontDir(dir: string): void {
+  fontDirOverride = dir;
+}
+
+/** repo-adjacent fonts dir; guarded because import.meta is empty in
+ *  esbuild-cjs bundles (Obsidian plugin) and must not crash module init */
+function bundledFontDir(): string | null {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["../fonts", "../../fonts"]) {
+      const dir = path.resolve(here, rel);
+      if (fs.existsSync(path.join(dir, "NotoSansSC-subset-Regular.otf"))) return dir;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export interface FontSpec {
   family: string;
@@ -77,12 +97,17 @@ export async function loadSatoriFonts(
  * npm package (fonts/ beside dist).
  */
 export function bundledSubsetDir(): string | null {
-  const candidates = [
-    path.resolve(pkgDir, "../fonts"),
-    path.resolve(pkgDir, "../../fonts"),
-  ];
-  for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, "NotoSansSC-subset-Regular.otf"))) return dir;
+  if (fontDirOverride) {
+    if (fs.existsSync(path.join(fontDirOverride, "NotoSansSC-subset-Regular.otf"))) return fontDirOverride;
+  }
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    for (const rel of ["../fonts", "../../fonts"]) {
+      const dir = path.resolve(here, rel);
+      if (fs.existsSync(path.join(dir, "NotoSansSC-subset-Regular.otf"))) return dir;
+    }
+  } catch {
+    /* import.meta unavailable in cjs bundles */
   }
   return null;
 }

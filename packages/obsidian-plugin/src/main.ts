@@ -2,10 +2,11 @@
 
 import fs from "node:fs";
 import { Plugin, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
-import { renderMarkdown, renderCards, buildPreviewHtml, setPngRenderer } from "@publy/core";
+import { renderMarkdown, renderCards, buildPreviewHtml, setPngRenderer, setFontDir } from "@publy/core";
+import path from "node:path";
 import { initWasm, Resvg as WasmResvg } from "@resvg/resvg-wasm";
-// inlined by esbuild's binary loader (Uint8Array) — keeps main.js self-contained
-import resvgWasm from "@resvg/resvg-wasm/index_bg.wasm";
+import claudeThemeCss from "../../core/themes/claude.css";
+import hljsGithubCss from "highlight.js/styles/github.css";
 
 interface PublySettings {
   server: string;
@@ -32,13 +33,17 @@ export default class PublyPlugin extends Plugin {
 
   async onload(): Promise<void> {
     // WASM PNG renderer (community-plugin safe: no native binaries).
-    // Font subsets ship beside main.js; subset-less glyphs fall back to the
-    // downloadable full fonts inside the card engine.
-    await initWasm(resvgWasm);
-    const fontDir = `${this.manifest.dir}/fonts`;
+    // The resvg-wasm package ships in node_modules/ beside main.js; its CJS
+    // glue resolves index_bg.wasm from there via initWasm().
+    const pluginDir = this.manifest.dir;
+    const wasmFile = path.join(pluginDir, "node_modules", "@resvg", "resvg-wasm", "index_bg.wasm");
+    // BufferSource path — Node fetch() cannot read file:// URLs
+    await initWasm(fs.readFileSync(wasmFile));
+    const fontDir = path.join(pluginDir, "fonts");
     const fontFiles = ["NotoSansSC-subset-Regular.otf", "NotoSansSC-subset-Bold.otf"]
-      .map((f) => `${fontDir}/${f}`)
+      .map((f) => path.join(fontDir, f))
       .filter((p) => fs.existsSync(p));
+    setFontDir(fontDir);
     setPngRenderer((svg, fitWidth) => {
       const resvg = new WasmResvg(svg, {
         font: { loadSystemFonts: false, fontFiles },
@@ -111,6 +116,8 @@ export default class PublyPlugin extends Plugin {
     new Notice("Publy: rendering…");
     try {
       const rendered = renderMarkdown(raw, {
+        themeCss: claudeThemeCss,
+        highlightCss: hljsGithubCss,
         baseDir: (this.app.vault.adapter as { getBasePath?: () => string }).getBasePath?.() ?? "",
         mediaDirs: this.mediaDirs(),
       });
@@ -171,7 +178,7 @@ export default class PublyPlugin extends Plugin {
       const result = await renderCards(raw, { outDir });
       const previewFile = path.join(outDir, "preview.html");
       fs.writeFileSync(previewFile, buildPreviewHtml(result));
-      const { shell } = await import("electron");
+      const { shell } = require("electron") as typeof import("electron").shell;
       shell.openPath(previewFile);
       if (!result.lint.ok) {
         new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
@@ -190,10 +197,12 @@ export default class PublyPlugin extends Plugin {
     const raw = await this.readWithMediaDirs(file);
     try {
       const rendered = renderMarkdown(raw, {
+        themeCss: claudeThemeCss,
+        highlightCss: hljsGithubCss,
         baseDir: (this.app.vault.adapter as { getBasePath?: () => string }).getBasePath?.() ?? "",
         mediaDirs: this.mediaDirs(),
       });
-      const { shell } = await import("electron");
+      const { shell } = require("electron") as typeof import("electron").shell;
       const os = await import("node:os");
       const fs = await import("node:fs");
       const out = os.tmpdir() + `/publy-preview-${Date.now()}.html`;

@@ -9,14 +9,18 @@ import juice from "juice";
 import { ATTACHMENT_SCHEME } from "@publy/shared";
 import { parseSource, publishType, type SourceMeta } from "./frontmatter.js";
 import { preprocessObsidian, resolveAsset } from "./obsidian.js";
-import { loadTheme, loadThemeFromCss, loadHighlightCss } from "./theme.js";
+import { loadTheme, loadThemeFromCss, loadHighlightCss, resolveVars } from "./theme.js";
 import { svgToPng } from "./svg.js";
 
 export interface RenderOptions {
   theme?: string;
   /** path to a user-supplied CSS file; wins over `theme` */
   customThemePath?: string;
+  /** raw theme css text (embedded environments pass this instead of theme) */
+  themeCss?: string;
   highlight?: string;
+  /** raw highlight.js css text (embedded environments) */
+  highlightCss?: string;
   /** dirs searched for Obsidian-style asset references */
   mediaDirs?: string[];
   /** dir of the source file; assets resolve relative to it first */
@@ -100,8 +104,12 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 2. markdown → html fragment
   const md = new MarkdownIt({ html: true, breaks: false, highlight });
   const bodyHtml = md.render(pre.body);
-  const theme = opts.customThemePath ? loadThemeFromCss(opts.customThemePath) : loadTheme(themeId);
-  const hljsCss = loadHighlightCss(opts.highlight ?? "github");
+  const theme = opts.customThemePath
+    ? loadThemeFromCss(opts.customThemePath)
+    : opts.themeCss
+      ? { id: themeId, css: resolveVars(opts.themeCss) }
+      : loadTheme(themeId);
+  const hljsCss = opts.highlightCss ?? loadHighlightCss(opts.highlight ?? "github");
 
   // 3. DOM post-processing
   const $ = cheerio.load(bodyHtml, null, false);
