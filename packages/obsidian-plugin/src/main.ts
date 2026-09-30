@@ -1,6 +1,7 @@
 // Publy Obsidian plugin — client A: write in Obsidian, publish through a Publy server.
 
 import fs from "node:fs";
+import os from "node:os";
 import { Plugin, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
 import { renderMarkdown, setPngRenderer, setFontDir } from "@publy/core/article";
 import path from "node:path";
@@ -49,7 +50,7 @@ export default class PublyPlugin extends Plugin {
 
     this.addCommand({
       id: "preview-card-deck",
-      name: "Preview xiaolvshu card deck (use the publy CLI)",
+      name: "Image-post cards: preview via publy CLI",
       callback: () => new Notice('Publy: 卡片预览请用 CLI —— 终端运行 publy card <笔记> --preview（插件内预览将在后续版本回归）'),
     });
 
@@ -111,7 +112,6 @@ export default class PublyPlugin extends Plugin {
       for (const w of rendered.warnings) console.warn("[publy] " + w);
 
       // desktop-only: attachments resolve to absolute paths on disk
-      const fs = await import("node:fs");
       const payloadAttachments = rendered.attachments.map((a) => ({
         name: a.name,
         data: fs.readFileSync(a.path).toString("base64"),
@@ -199,8 +199,6 @@ export default class PublyPlugin extends Plugin {
         mediaDirs: this.mediaDirs(),
       });
       const { shell } = require("electron") as typeof import("electron").shell;
-      const os = await import("node:os");
-      const fs = await import("node:fs");
       const out = os.tmpdir() + `/publy-preview-${Date.now()}.html`;
       fs.writeFileSync(out, rendered.html);
       shell.openPath(out);

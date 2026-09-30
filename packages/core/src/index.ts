@@ -7,5 +7,6 @@ export * from "./render.js";
 export * from "./fonts.js";
 export * from "./cards.js";
 export * from "./crop.js";
+export * from "./cover-art.js";
 export * from "./wechat.js";
 export * from "./publish.js";

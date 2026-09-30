@@ -16,7 +16,7 @@ export function setFontDir(dir: string): void {
 
 /** repo-adjacent fonts dir; guarded because import.meta is empty in
  *  esbuild-cjs bundles (Obsidian plugin) and must not crash module init */
-function bundledFontDir(): string | null {
+export function bundledFontDir(): string | null {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url));
     for (const rel of ["../fonts", "../../fonts"]) {

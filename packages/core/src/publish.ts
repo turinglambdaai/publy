@@ -8,6 +8,7 @@ import type { Attachment, PublishRequest } from "@publy/shared";
 import { ATTACHMENT_SCHEME, PublishResponse } from "@publy/shared";
 import { TokenManager, uploadImageMaterial, draftAdd, WechatError } from "./wechat.js";
 import { cropCoverTo235 } from "./crop.js";
+import { generateTitleCover } from "./cover-art.js";
 
 export interface AccountCredential {
   name: string;
@@ -152,6 +153,15 @@ async function publishArticle(
     const first = unique[0];
     if (first) {
       const { mediaId } = await upload(token, byName.get(first)!, "cover.jpg", cred.appId, cache);
+      thumbMediaId = mediaId;
+    }
+  }
+  if (!thumbMediaId) {
+    // auto title cover: every publishable note deserves a cover
+    const coverPng = generateTitleCover(req.title);
+    if (coverPng) {
+      const att: Attachment = { name: "auto-cover.png", data: coverPng.toString("base64"), contentType: "image/png" };
+      const { mediaId } = await upload(token, att, "cover.jpg", cred.appId, cache);
       thumbMediaId = mediaId;
     }
   }
