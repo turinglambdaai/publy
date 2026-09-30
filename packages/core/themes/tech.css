@@ -1,0 +1,195 @@
+/* Publy "tech" — 科技蓝：掘金/技术社区系，蓝色强调、左侧竖条标题、浅蓝代码底。 */
+
+:root {
+    --tech-bg: #ffffff;
+    --tech-text: #252933;
+    --tech-accent: #1e80ff;
+    --tech-heading: #1c2433;
+    --tech-code-bg: #f2f7ff;
+    --tech-border: #e1e8f0;
+    --tech-hr: #eaeef3;
+    --tech-muted: #6b7787;
+    --tech-em: #515767;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--tech-text);
+    background-color: var(--tech-bg);
+    padding: 20px 10px 44px 10px;
+    line-height: 1.75;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.35em;
+    font-weight: 700;
+    color: var(--tech-heading);
+    line-height: 1.35;
+    margin: 28px 0 14px;
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--tech-heading);
+    line-height: 1.4;
+    margin: 26px 0 12px;
+    padding-left: 12px;
+    border-left: 4px solid var(--tech-accent);
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--tech-accent);
+    margin: 20px 0 10px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--tech-heading);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 16px 0;
+    line-height: 1.75;
+    color: var(--tech-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--tech-heading);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--tech-em);
+}
+
+#publy a {
+    color: var(--tech-accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--tech-accent);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 28px;
+}
+
+#publy li {
+    margin: 8px 0;
+    line-height: 1.75;
+}
+
+#publy li::marker {
+    color: var(--tech-accent);
+}
+
+#publy blockquote {
+    margin: 20px 0;
+    padding: 12px 16px;
+    background-color: var(--tech-code-bg);
+    border-left: 3px solid var(--tech-accent);
+    color: var(--tech-muted);
+    border-radius: 0 6px 6px 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--tech-code-bg);
+    color: var(--tech-accent);
+    border-radius: 4px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 22px 0;
+    padding: 16px;
+    background-color: #f8fafc;
+    border: 1px solid var(--tech-border);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--tech-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 30px auto;
+    border: none;
+    height: 1px;
+    background-color: var(--tech-hr);
+    width: 100%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+    border-radius: 6px;
+    border: 1px solid var(--tech-border);
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    background-color: var(--tech-code-bg);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--tech-heading);
+    border: 1px solid var(--tech-border);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--tech-border);
+    color: var(--tech-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 28px;
+    padding-top: 14px;
+    border-top: 1px solid var(--tech-hr);
+    font-size: 0.85em;
+    color: var(--tech-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--tech-accent);
+    font-weight: 600;
+}

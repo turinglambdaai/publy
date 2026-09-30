@@ -1,0 +1,200 @@
+/* Publy "terminal" — 极客终端：深色卡片正文、终端绿强调。
+   建议搭配 --highlight github-dark（深色代码高亮）。 */
+
+:root {
+    --term-bg: #0d1117;
+    --term-text: #c9d1d9;
+    --term-accent: #7ee787;
+    --term-heading: #e6edf3;
+    --term-code-bg: #161b22;
+    --term-border: #30363d;
+    --term-hr: #21262d;
+    --term-muted: #8b949e;
+    --term-em: #a5b1bd;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--term-text);
+    background-color: var(--term-bg);
+    padding: 28px 18px 52px 18px;
+    line-height: 1.75;
+    font-family: "SF Mono", "Cascadia Code", Consolas, "PingFang SC", "Microsoft YaHei", monospace, sans-serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: var(--term-heading);
+    line-height: 1.4;
+    margin: 28px 0 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--term-border);
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--term-accent);
+    line-height: 1.4;
+    margin: 26px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--term-border);
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--term-heading);
+    margin: 20px 0 8px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--term-muted);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 16px 0;
+    line-height: 1.75;
+    color: var(--term-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--term-accent);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--term-em);
+}
+
+#publy a {
+    color: var(--term-accent);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--term-accent);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 26px;
+}
+
+#publy li {
+    margin: 7px 0;
+    line-height: 1.75;
+}
+
+#publy li::marker {
+    color: var(--term-accent);
+}
+
+#publy blockquote {
+    margin: 20px 0;
+    padding: 12px 16px;
+    background-color: var(--term-code-bg);
+    border-left: 3px solid var(--term-accent);
+    color: var(--term-muted);
+    border-radius: 0 6px 6px 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--term-code-bg);
+    color: var(--term-accent);
+    border: 1px solid var(--term-border);
+    border-radius: 4px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 22px 0;
+    padding: 16px;
+    background-color: #010409;
+    border: 1px solid var(--term-border);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--term-text);
+    border: none;
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 30px auto;
+    border: none;
+    height: 1px;
+    background-color: var(--term-hr);
+    width: 100%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 22px auto;
+    border-radius: 8px;
+    border: 1px solid var(--term-border);
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.88em;
+}
+
+#publy th {
+    background-color: var(--term-code-bg);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--term-heading);
+    border: 1px solid var(--term-border);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--term-border);
+    color: var(--term-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 1px solid var(--term-hr);
+    font-size: 0.85em;
+    color: var(--term-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--term-accent);
+    font-weight: 600;
+}

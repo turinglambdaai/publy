@@ -1,0 +1,197 @@
+/* Publy "fortune" — 财经金棕：深蓝标题 + 金棕强调，商业/财经/投研号经典配色。 */
+
+:root {
+    --fortune-bg: #fdfcf9;
+    --fortune-text: #2c3a47;
+    --fortune-accent: #b8860b;
+    --fortune-heading: #1f3a5f;
+    --fortune-code-bg: #f4f0e6;
+    --fortune-border: #e3dcc9;
+    --fortune-hr: #eae5d8;
+    --fortune-muted: #7a756a;
+    --fortune-em: #5f6b77;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--fortune-text);
+    background-color: var(--fortune-bg);
+    padding: 24px 12px 48px 12px;
+    line-height: 1.8;
+    font-family: Georgia, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.35em;
+    font-weight: 700;
+    color: var(--fortune-heading);
+    line-height: 1.4;
+    margin: 28px 0 14px;
+    padding-bottom: 10px;
+    border-bottom: 3px double var(--fortune-accent);
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--fortune-heading);
+    line-height: 1.4;
+    margin: 26px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--fortune-accent);
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--fortune-accent);
+    margin: 20px 0 8px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--fortune-heading);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 16px 0;
+    line-height: 1.8;
+    color: var(--fortune-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--fortune-heading);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--fortune-em);
+}
+
+#publy a {
+    color: var(--fortune-heading);
+    text-decoration: none;
+    border-bottom: 1px solid var(--fortune-accent);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 28px;
+}
+
+#publy li {
+    margin: 8px 0;
+    line-height: 1.8;
+}
+
+#publy li::marker {
+    color: var(--fortune-accent);
+}
+
+#publy blockquote {
+    margin: 20px 0;
+    padding: 14px 18px;
+    background-color: var(--fortune-code-bg);
+    border-left: 3px solid var(--fortune-accent);
+    color: var(--fortune-muted);
+    border-radius: 0 6px 6px 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--fortune-code-bg);
+    color: var(--fortune-heading);
+    border-radius: 4px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 20px 0;
+    padding: 16px;
+    background-color: #f8f6f0;
+    border: 1px solid var(--fortune-border);
+    border-radius: 8px;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--fortune-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 32px auto;
+    border: none;
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--fortune-accent), transparent);
+    width: 80%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 22px auto;
+    border-radius: 6px;
+    border: 1px solid var(--fortune-border);
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    background-color: var(--fortune-heading);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #f4f0e6;
+    border: 1px solid var(--fortune-heading);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--fortune-border);
+    color: var(--fortune-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 1px solid var(--fortune-hr);
+    font-size: 0.85em;
+    color: var(--fortune-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--fortune-accent);
+    font-weight: 600;
+}

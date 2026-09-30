@@ -15,7 +15,18 @@ export interface Theme {
   css: string;
 }
 
-export const BUILTIN_THEMES = ["claude", "medium"] as const;
+export const BUILTIN_THEMES = [
+  "claude",
+  "medium",
+  "wechat",
+  "ink",
+  "tech",
+  "rose",
+  "official",
+  "fortune",
+  "terminal",
+  "news",
+] as const;
 
 function resolveVars(css: string): string {
   // strip comments first: a trailing comment line would otherwise swallow the

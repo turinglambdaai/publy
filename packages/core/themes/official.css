@@ -1,0 +1,192 @@
+/* Publy "official" — 正式红：机构/企业公告系，居中大标题、红色强调、庄重排版。 */
+
+:root {
+    --official-bg: #ffffff;
+    --official-text: #333333;
+    --official-accent: #c0392b;
+    --official-heading: #222222;
+    --official-code-bg: #faf1f0;
+    --official-border: #e5d5d3;
+    --official-hr: #e8e8e8;
+    --official-muted: #777777;
+    --official-em: #666666;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--official-text);
+    background-color: var(--official-bg);
+    padding: 26px 12px 48px 12px;
+    line-height: 1.85;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "SimSun", serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.35em;
+    font-weight: 700;
+    color: var(--official-heading);
+    line-height: 1.4;
+    margin: 30px 0 16px;
+    text-align: center;
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--official-accent);
+    line-height: 1.4;
+    margin: 28px 0 12px;
+    padding-left: 10px;
+    border-left: 4px solid var(--official-accent);
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--official-heading);
+    margin: 20px 0 10px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--official-heading);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 16px 0;
+    line-height: 1.85;
+    color: var(--official-text);
+    text-align: justify;
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--official-accent);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--official-em);
+}
+
+#publy a {
+    color: var(--official-accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--official-accent);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 28px;
+}
+
+#publy li {
+    margin: 8px 0;
+    line-height: 1.85;
+}
+
+#publy blockquote {
+    margin: 20px 0;
+    padding: 12px 16px;
+    background-color: var(--official-code-bg);
+    border: 1px solid var(--official-border);
+    color: var(--official-muted);
+    border-radius: 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--official-code-bg);
+    color: var(--official-accent);
+    border-radius: 3px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 20px 0;
+    padding: 16px;
+    background-color: var(--official-code-bg);
+    border: 1px solid var(--official-border);
+    border-radius: 0;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--official-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 32px auto;
+    border: none;
+    height: 2px;
+    background-color: var(--official-accent);
+    width: 60px;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 22px auto;
+    border-radius: 0;
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    background-color: var(--official-accent);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: #ffffff;
+    border: 1px solid var(--official-accent);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--official-border);
+    color: var(--official-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 1px solid var(--official-hr);
+    font-size: 0.85em;
+    color: var(--official-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--official-accent);
+    font-weight: 600;
+}

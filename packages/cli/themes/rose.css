@@ -1,0 +1,197 @@
+/* Publy "rose" — 柔粉生活系：粉白底、圆角、玫粉强调。适合生活方式/美妆/情感号。 */
+
+:root {
+    --rose-bg: #fff8fa;
+    --rose-text: #4a4145;
+    --rose-accent: #e879a0;
+    --rose-heading: #3d3338;
+    --rose-code-bg: #fdf0f4;
+    --rose-border: #f2dbe3;
+    --rose-hr: #f5e4ea;
+    --rose-muted: #a08a92;
+    --rose-em: #8a757c;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--rose-text);
+    background-color: var(--rose-bg);
+    padding: 24px 14px 48px 14px;
+    line-height: 1.85;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: var(--rose-heading);
+    line-height: 1.4;
+    margin: 28px 0 14px;
+    text-align: center;
+}
+
+#publy h2 {
+    font-size: 1.12em;
+    font-weight: 700;
+    color: var(--rose-accent);
+    line-height: 1.4;
+    margin: 26px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed var(--rose-border);
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--rose-heading);
+    margin: 20px 0 8px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--rose-heading);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 17px 0;
+    line-height: 1.85;
+    color: var(--rose-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--rose-accent);
+    background-color: var(--rose-code-bg);
+    padding: 0 3px;
+    border-radius: 4px;
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--rose-em);
+}
+
+#publy a {
+    color: var(--rose-accent);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rose-accent);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 26px;
+}
+
+#publy li {
+    margin: 8px 0;
+    line-height: 1.85;
+}
+
+#publy li::marker {
+    color: var(--rose-accent);
+}
+
+#publy blockquote {
+    margin: 20px 0;
+    padding: 14px 18px;
+    background-color: var(--rose-code-bg);
+    border-left: 3px solid var(--rose-accent);
+    color: var(--rose-em);
+    border-radius: 8px;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--rose-code-bg);
+    color: var(--rose-accent);
+    border-radius: 4px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 20px 0;
+    padding: 16px;
+    background-color: var(--rose-code-bg);
+    border-radius: 10px;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--rose-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 30px auto;
+    border: none;
+    height: 1px;
+    background: repeating-linear-gradient(to right, var(--rose-border) 0 8px, transparent 8px 16px);
+    width: 100%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 22px auto;
+    border-radius: 10px;
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    background-color: var(--rose-code-bg);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--rose-heading);
+    border: 1px solid var(--rose-border);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--rose-border);
+    color: var(--rose-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 30px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rose-border);
+    font-size: 0.85em;
+    color: var(--rose-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--rose-accent);
+    font-weight: 600;
+}

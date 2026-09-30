@@ -1,0 +1,189 @@
+/* Publy "ink" — 极简黑白：大量留白、无装饰、细线分隔。
+   少数派/知乎系知识型作者的经典取向。 */
+
+:root {
+    --ink-bg: #ffffff;
+    --ink-text: #1a1a1a;
+    --ink-muted: #666666;
+    --ink-code-bg: #f5f5f5;
+    --ink-border: #e5e5e5;
+    --ink-hr: #eeeeee;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--ink-text);
+    background-color: var(--ink-bg);
+    padding: 32px 12px 64px 12px;
+    line-height: 1.9;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: var(--ink-text);
+    line-height: 1.4;
+    margin: 48px 0 20px;
+    letter-spacing: 0.02em;
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--ink-text);
+    margin: 40px 0 16px;
+    letter-spacing: 0.02em;
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--ink-muted);
+    margin: 28px 0 12px;
+    letter-spacing: 0.05em;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--ink-muted);
+    margin: 20px 0 10px;
+}
+
+#publy p {
+    margin: 22px 0;
+    line-height: 1.9;
+    color: var(--ink-text);
+    text-align: justify;
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--ink-text);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--ink-muted);
+}
+
+#publy a {
+    color: var(--ink-text);
+    text-decoration: none;
+    border-bottom: 1px solid var(--ink-text);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 20px 0;
+    padding-left: 26px;
+}
+
+#publy li {
+    margin: 10px 0;
+    line-height: 1.9;
+    color: var(--ink-text);
+}
+
+#publy blockquote {
+    margin: 28px 0;
+    padding: 4px 20px;
+    background-color: transparent;
+    border-left: 2px solid var(--ink-text);
+    color: var(--ink-muted);
+    border-radius: 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 6px;
+    background-color: var(--ink-code-bg);
+    color: var(--ink-text);
+    border-radius: 0;
+    font-size: 0.85em;
+    line-height: 1.6;
+}
+
+#publy pre {
+    margin: 26px 0;
+    padding: 18px;
+    background-color: var(--ink-code-bg);
+    border-radius: 0;
+    overflow-x: auto;
+    font-size: 0.82em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--ink-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 44px auto;
+    border: none;
+    height: 1px;
+    background-color: var(--ink-hr);
+    width: 40%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 28px auto;
+    border-radius: 0;
+}
+
+#publy table {
+    width: 100%;
+    margin: 26px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 700;
+    color: var(--ink-text);
+    border-top: 2px solid var(--ink-text);
+    border-bottom: 1px solid var(--ink-border);
+    background-color: transparent;
+}
+
+#publy td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--ink-border);
+    color: var(--ink-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--ink-hr);
+    font-size: 0.85em;
+    color: var(--ink-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    font-weight: 700;
+}

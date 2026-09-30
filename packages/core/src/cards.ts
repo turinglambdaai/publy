@@ -61,6 +61,16 @@ export const BUILTIN_CARD_THEMES: Record<string, CardTheme> = {
     fonts: NOTO_SANS_SC,
     colors: { bg: "#f8f6f0", text: "#2b2b2b", muted: "#6b6b6b", accent: "#b75c3d", accentSoft: "rgba(183, 92, 61, 0.08)", rule: "#e0ddd6" },
   },
+  wechat: {
+    id: "wechat",
+    fonts: NOTO_SANS_SC,
+    colors: { bg: "#ffffff", text: "#1a1a1a", muted: "#888888", accent: "#07C160", accentSoft: "rgba(7, 193, 96, 0.10)", rule: "#07C160" },
+  },
+  midnight: {
+    id: "midnight",
+    fonts: NOTO_SANS_SC,
+    colors: { bg: "#0d1117", text: "#e6edf3", muted: "#8b949e", accent: "#7ee787", accentSoft: "rgba(126, 231, 135, 0.12)", rule: "#30363d" },
+  },
 };
 
 export function loadCardTheme(id: string): CardTheme {

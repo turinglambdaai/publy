@@ -1,0 +1,189 @@
+/* Publy "wechat" — 微信官方默认风：白底、正文灰黑、微信链接蓝。
+   公众号最经典的"原生感"，几乎不装饰。 */
+
+:root {
+    --wechat-bg: #ffffff;
+    --wechat-text: #3e3e3e;
+    --wechat-heading: #1a1a1a;
+    --wechat-link: #576b95;
+    --wechat-code-bg: #f6f6f6;
+    --wechat-border: #dcdcdc;
+    --wechat-hr: #e8e8e8;
+    --wechat-muted: #888888;
+    --wechat-em: #7f7f7f;
+}
+
+#publy {
+    font-size: 16px;
+    color: var(--wechat-text);
+    background-color: var(--wechat-bg);
+    padding: 20px 8px 40px 8px;
+    line-height: 1.8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    word-wrap: break-word;
+}
+
+#publy * {
+    box-sizing: border-box;
+}
+
+#publy h1 {
+    font-size: 1.35em;
+    font-weight: 700;
+    color: var(--wechat-heading);
+    line-height: 1.35;
+    margin: 30px 0 14px;
+}
+
+#publy h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+    color: var(--wechat-heading);
+    line-height: 1.4;
+    margin: 26px 0 12px;
+}
+
+#publy h3 {
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--wechat-heading);
+    margin: 20px 0 8px;
+}
+
+#publy h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--wechat-heading);
+    margin: 16px 0 8px;
+}
+
+#publy p {
+    margin: 16px 0;
+    line-height: 1.8;
+    color: var(--wechat-text);
+}
+
+#publy p strong {
+    font-weight: 700;
+    color: var(--wechat-heading);
+}
+
+#publy em {
+    font-style: italic;
+    color: var(--wechat-em);
+}
+
+#publy a {
+    color: var(--wechat-link);
+    text-decoration: none;
+    border-bottom: 1px solid var(--wechat-link);
+    padding-bottom: 1px;
+}
+
+#publy ul,
+#publy ol {
+    margin: 14px 0;
+    padding-left: 30px;
+}
+
+#publy li {
+    margin: 7px 0;
+    line-height: 1.8;
+    color: var(--wechat-text);
+}
+
+#publy blockquote {
+    margin: 18px 0;
+    padding: 10px 16px;
+    background-color: transparent;
+    border-left: 3px solid var(--wechat-border);
+    color: var(--wechat-muted);
+    border-radius: 0;
+}
+
+#publy code {
+    font-family: "SF Mono", Consolas, monospace;
+    padding: 2px 5px;
+    background-color: var(--wechat-code-bg);
+    color: var(--wechat-link);
+    border-radius: 3px;
+    font-size: 0.85em;
+    line-height: 1.5;
+}
+
+#publy pre {
+    margin: 20px 0;
+    padding: 16px;
+    background-color: var(--wechat-code-bg);
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.8em;
+    line-height: 1.6;
+}
+
+#publy pre code {
+    padding: 0;
+    background-color: transparent;
+    color: var(--wechat-text);
+    border-radius: 0;
+    font-size: 1em;
+}
+
+#publy hr {
+    margin: 32px auto;
+    border: none;
+    height: 1px;
+    background-color: var(--wechat-hr);
+    width: 100%;
+}
+
+#publy img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 20px auto;
+    border-radius: 4px;
+}
+
+#publy table {
+    width: 100%;
+    margin: 20px 0;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+#publy th {
+    background-color: var(--wechat-code-bg);
+    padding: 10px 14px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--wechat-heading);
+    border: 1px solid var(--wechat-border);
+}
+
+#publy td {
+    padding: 10px 14px;
+    border: 1px solid var(--wechat-border);
+    color: var(--wechat-text);
+}
+
+#publy tr {
+    border: none;
+}
+
+#publy .publy-footnotes {
+    margin-top: 28px;
+    padding-top: 14px;
+    border-top: 1px solid var(--wechat-hr);
+    font-size: 0.85em;
+    color: var(--wechat-muted);
+}
+
+#publy .publy-footnotes p {
+    margin: 6px 0;
+}
+
+#publy .publy-footnotes sup {
+    color: var(--wechat-link);
+    font-weight: 600;
+}

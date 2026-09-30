@@ -19,8 +19,8 @@ const repoRoot = path.resolve(here, "..");
 const cli = path.join(repoRoot, "packages", "cli", "dist", "index.js");
 const themesRepo = path.resolve(process.argv[2] ?? path.join(repoRoot, "..", "publy-themes"));
 
-const ART_THEMES = ["claude", "medium"];
-const CARD_THEMES = ["naive", "claude"];
+const ART_THEMES = ["claude", "medium", "wechat", "ink", "tech", "rose", "official", "fortune", "terminal", "news"];
+const CARD_THEMES = ["naive", "claude", "wechat", "midnight"];
 
 const articleSample = path.join(repoRoot, "packages", "cli", "samples", "article-sample.md");
 const cardSample = path.join(repoRoot, "packages", "cli", "samples", "card-sample.md");
@@ -38,7 +38,9 @@ fs.mkdirSync(previewsDir, { recursive: true });
 const articles = {}; // theme -> html string
 for (const theme of ART_THEMES) {
   const out = path.join(tmp, `${theme}.html`);
-  run("node", [cli, "render", articleSample, "--theme", theme, "-o", out]);
+  // the dark terminal theme pairs with a dark code highlight
+  const highlight = theme === "terminal" ? "github-dark" : "github";
+  run("node", [cli, "render", articleSample, "--theme", theme, "--highlight", highlight, "-o", out]);
   articles[theme] = fs.readFileSync(out, "utf-8");
 }
 
@@ -110,7 +112,7 @@ const page = `<!DOCTYPE html>
   .lead code { color: var(--accent); }
   section { margin-bottom: 64px; }
   h2 { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .tab { padding: 8px 22px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: 14px; }
   .tab.sel { border-color: var(--accent); color: var(--accent); background: rgba(7,193,96,.08); }
   .width-toggle { margin-left: auto; display: flex; gap: 6px; }
