@@ -34,7 +34,11 @@ export interface ServerConfig {
   dataDir?: string;
   /** public base url used for payment callbacks, e.g. https://publy-api.jrtx.site */
   publicUrl?: string;
-  payments?: { provider?: string; xunhupay?: { appId?: string; secret?: string } };
+  payments?: {
+    provider?: "alipay" | "xunhupay" | "manual";
+    alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
+    xunhupay?: { appId?: string; secret?: string };
+  };
 }
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".publy", "server.json");
@@ -244,6 +248,8 @@ export function buildApp(config: ServerConfig) {
   const payments = createProvider(config.payments, store, (order) => {
     audit({ event: "purchase-paid", contact: order.contact, plan: order.plan, months: order.months, orderId: order.id });
   });
+  console.log(`[payments] provider: ${payments.provider.name}`);
+  const pollThrottle = new Map<string, number>();
 
   app.post<{ Body: { contact?: string; plan?: string; months?: number } }>("/purchase", async (req, reply) => {
     const { contact, plan, months } = req.body ?? {};
@@ -269,9 +275,24 @@ export function buildApp(config: ServerConfig) {
   app.get<{ Params: { id: string } }>("/order/:id", async (req, reply) => {
     const order = store.findOrder((req.params as { id: string }).id);
     if (!order) return reply.code(404).send({ code: "NOT_FOUND", message: "no such order" });
-    if (order.status !== "paid") return { orderId: order.id, status: order.status };
-    const user = store.findUserByContact(order.contact);
-    return { orderId: order.id, status: "paid", apiKey: user?.apiKey, plan: user?.plan, expiresAt: user?.expiresAt };
+    if (order.status !== "paid") {
+      // lazy active query: providers with polling (alipay) settle orders here,
+      // throttled so page polling doesn't hammer the gateway
+      if (payments.provider.pollOrder && !pollThrottle.has(order.id)) {
+        pollThrottle.set(order.id, Date.now());
+        try {
+          if ((await payments.provider.pollOrder(order)) === "paid") payments.completeOrder(order.id);
+        } catch {
+          /* gateway hiccup — stay pending, next poll retries */
+        } finally {
+          setTimeout(() => pollThrottle.delete(order.id), 4000);
+        }
+      }
+    }
+    const fresh = store.findOrder(order.id)!;
+    if (fresh.status !== "paid") return { orderId: fresh.id, status: fresh.status };
+    const user = store.findUserByContact(fresh.contact);
+    return { orderId: fresh.id, status: "paid", apiKey: user?.apiKey, plan: user?.plan, expiresAt: user?.expiresAt };
   });
 
   app.get<{ Querystring: { contact?: string } }>("/lookup", async (req) => {

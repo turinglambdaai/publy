@@ -81,6 +81,16 @@ document.getElementById('buy').onclick = async () => {
           b.textContent = '已开通';
         }
       }, 2500);
+    } else if (d.qrDataUrl) {
+      show('msg', '请用 <b>支付宝</b> 扫码支付（金额 ¥' + (months === 12 ? '390' : '39') + '）。支付成功后本页自动开通并显示 key，请勿关闭页面。<br><br><img src="' + d.qrDataUrl + '" style="width:240px;background:#fff;padding:8px;border-radius:8px">');
+      const timer = setInterval(async () => {
+        const o = await (await fetch('/order/' + d.orderId)).json();
+        if (o.status === 'paid') {
+          clearInterval(timer);
+          show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方“找回”）:\\n<div class="key">' + o.apiKey + '</div>\\n接入：\\n<div class="key">publy config set server ' + location.origin + '\\npubly config set api_key ' + o.apiKey + '\\npubly account add 你的账号名 …（见使用手册）</div>');
+          b.textContent = '已开通';
+        }
+      }, 3000);
     } else if (d.manual) {
       show('msg', '订单已提交（' + d.orderId + '）。当前支付通道未开启，请联系管理员完成支付后自动开通。');
     } else {
