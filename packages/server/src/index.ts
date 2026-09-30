@@ -14,7 +14,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import type { JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
-import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, type AccountCredential } from "@publy/core";
+import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
 import { Store, PLAN_LIMITS, type AccountRow, type Plan, type UserRow } from "./store.js";
 import { createProvider } from "./payments.js";
 import { purchasePage, adminPage } from "./pages.js";
@@ -34,6 +34,9 @@ export interface ServerConfig {
   dataDir?: string;
   /** public base url used for payment callbacks, e.g. https://publy-api.jrtx.site */
   publicUrl?: string;
+  /** this server's egress IP — shown to customers for the WeChat IP whitelist.
+   *  When absent it is auto-detected at boot (myip.ipip.net → api.ipify.org). */
+  publicIp?: string;
   payments?: {
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
@@ -61,8 +64,27 @@ export function loadServerConfig(configPath?: string): ServerConfig {
     accounts: raw.accounts,
     dataDir: raw.dataDir ?? path.join(path.dirname(file), "server-data"),
     publicUrl: raw.publicUrl,
+    publicIp: raw.publicIp,
     payments: raw.payments,
   };
+}
+
+/** best-effort egress IP detection for the onboarding guide (domestic first) */
+export async function detectEgressIp(): Promise<string | null> {
+  try {
+    const t = await (await fetch("https://myip.ipip.net", { signal: AbortSignal.timeout(4000) })).text();
+    const m = t.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+    if (m) return m[1];
+  } catch {
+    /* fall through */
+  }
+  try {
+    const t = (await (await fetch("https://api.ipify.org", { signal: AbortSignal.timeout(4000) })).text()).trim();
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(t)) return t;
+  } catch {
+    /* fall through */
+  }
+  return null;
 }
 
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
@@ -242,7 +264,7 @@ export function buildApp(config: ServerConfig) {
   // --- public storefront (no auth) -------------------------------------------
 
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
-  app.get("/", async (_req, reply) => reply.type("text/html").send(purchasePage()));
+  app.get("/", async (_req, reply) => reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）")));
   app.get("/admin", async (_req, reply) => reply.type("text/html").send(adminPage()));
 
   const payments = createProvider(config.payments, store, (order) => {
@@ -494,6 +516,17 @@ export function buildApp(config: ServerConfig) {
     return { ok: true };
   });
 
+  // novice onboarding: verify an AppID/AppSecret pair from THIS server so the
+  // user learns immediately whether the IP whitelist / secret is right
+  app.post<{ Body: { appId?: string; appSecret?: string } }>("/v1/admin/verify-wechat", async (req, reply) => {
+    if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
+    const { appId, appSecret } = req.body ?? {};
+    if (!appId || !appSecret) return reply.code(400).send({ code: "BAD_REQUEST", message: "appId / appSecret required" });
+    const result = await checkWechatCredential(appId, appSecret);
+    audit({ event: "verify-wechat", appId, ok: result.ok, errcode: result.errcode });
+    return result;
+  });
+
   app.post<{ Params: { id: string } }>("/v1/admin/orders/:id/complete", async (req, reply) => {
     if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
     const done = payments.completeOrder((req.params as { id: string }).id);
@@ -519,6 +552,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const configIdx = argv.indexOf("--config");
   const configPath = configIdx >= 0 ? argv[configIdx + 1] : undefined;
   const config = loadServerConfig(configPath);
+  if (!config.publicIp) {
+    config.publicIp = (await detectEgressIp()) ?? undefined;
+    if (config.publicIp) console.log(`[boot] detected egress IP: ${config.publicIp} (set "publicIp" in server.json to pin it)`);
+  }
   const app = buildApp(config);
   await app.listen({ port: config.port, host: "0.0.0.0" });
   console.log(`publy-server listening on :${config.port} (purchase page: ${config.publicUrl ?? "http://localhost:" + config.port}/ )`);

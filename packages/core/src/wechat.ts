@@ -101,3 +101,44 @@ export async function draftAdd(accessToken: string, article: Record<string, unkn
   if (!data.media_id) throw new Error(`draft/add returned no media_id: ${JSON.stringify(data)}`);
   return data.media_id as string;
 }
+
+/** Connectivity check for novice onboarding: does this AppID/AppSecret work
+ *  FROM THIS MACHINE? The token endpoint is the IP-whitelist-enforced one, and
+ *  WeChat's 40164 error literally names the IP to add — surface it. */
+export async function checkWechatCredential(appId: string, appSecret: string): Promise<{
+  ok: boolean;
+  errcode?: number;
+  ip?: string;
+  message: string;
+}> {
+  const url = `${TOKEN_URL}?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}`;
+  let data: any;
+  try {
+    const res = await fetch(url);
+    data = await res.json();
+  } catch (err) {
+    return { ok: false, message: `网络错误：${(err as Error).message}` };
+  }
+  if (data.access_token) return { ok: true, message: "验证通过：该服务器已能正常调用此公众号的 API" };
+
+  const errcode = Number(data.errcode ?? 0);
+  const errmsg = String(data.errmsg ?? "");
+  if (errcode === 40164) {
+    const ip = errmsg.match(/invalid ip ([0-9.]+)/)?.[1];
+    return {
+      ok: false,
+      errcode,
+      ip,
+      message: ip
+        ? `IP 未加白名单：请在公众号后台「设置与开发 → 基本配置 → IP白名单」中添加 ${ip}，保存后重试`
+        : `IP 未加白名单：${errmsg}`,
+    };
+  }
+  if (errcode === 40125 || errcode === 40001) {
+    return { ok: false, errcode, message: "AppSecret 无效：请确认已复制最新重置后的 secret（注意前后无空格）" };
+  }
+  if (errcode === 40013) {
+    return { ok: false, errcode, message: "AppID 无效：请核对公众号后台「设置与开发 → 基本配置」中的 AppID" };
+  }
+  return { ok: false, errcode, message: `微信返回 ${errcode}: ${errmsg}` };
+}

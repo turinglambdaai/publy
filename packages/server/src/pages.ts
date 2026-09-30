@@ -1,6 +1,6 @@
 // Purchase / lookup / admin pages — plain HTML, no framework, zh copy.
 
-export function purchasePage(): string {
+export function purchasePage(publicIp = "你的服务器公网 IP"): string {
   return `<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Publy · 购买</title>
@@ -46,6 +46,16 @@ export function purchasePage(): string {
     <div style="display:flex;gap:8px"><input id="lk-contact" placeholder="联系方式"><button id="lookup" style="width:auto;margin:0;padding:10px 16px">查询</button></div>
     <div class="msg" id="lk-msg"></div>
   </div>
+
+  <details class="card">
+    <summary style="cursor:pointer;font-weight:600">📘 开通成功后：绑定公众号（3 步，约 5 分钟，一次性）</summary>
+    <ol style="margin:14px 0 4px 18px;line-height:2">
+      <li>登录 <a href="https://mp.weixin.qq.com" target="_blank" style="color:#07C160">mp.weixin.qq.com</a> → 左下「设置与开发」→「基本配置」→ 找到 <b>IP 白名单</b> → 修改 → 添加本服务的公网 IP：<div class="key" style="cursor:pointer;margin-top:6px" onclick="navigator.clipboard.writeText('${publicIp}');this.style.outline='2px solid #07C160'" title="点击复制">${publicIp}（点击复制）</div></li>
+      <li>同页面 <b>开发者密码(AppSecret)</b> → 启用/重置 → 管理员微信扫码确认 → <b>复制 secret（只显示这一次，务必存好）</b></li>
+      <li>把 <b>AppID + AppSecret</b> 通过微信发给运营者 → 绑定完成后你就可以 <b>publy publish</b> 一条命令发布</li>
+    </ol>
+    <p style="font-size:12px;color:#888;margin-top:10px;line-height:1.7">提示：以后若发布报错 40164，说明微信服务器 IP 有变——错误信息里会直接给出需要新加的 IP，加进白名单即可。AppSecret 我们只用于你授权的发布操作，加密存储、永不下发。</p>
+  </details>
 
   <div class="foot">
     免费档：每用户 1 个公众号账号、30 次发布/月，联系管理员开通。<br>
@@ -154,7 +164,10 @@ export function adminPage(): string {
       <label>AppID</label><input id="acc-appid">
       <label>AppSecret</label><input id="acc-secret">
       <label>所属用户（联系方式）</label><input id="acc-owner">
-      <div class="row"><button onclick="submitAcc()">保存</button></div>
+      <div class="row">
+        <button onclick="verifyAcc()">① 验证连通性</button>
+        <button onclick="submitAcc()">② 保存</button>
+      </div>
       <div id="acc-out" class="key"></div>
     </form>
     <table id="tbl"><thead><tr><th>联系方式</th><th>套餐</th><th>到期</th><th>本月用量</th><th>状态</th><th>API key</th><th></th></tr></thead><tbody></tbody></table>
@@ -194,6 +207,15 @@ async function submitAcc() {
     body: JSON.stringify({ name: v('acc-name'), appId: v('acc-appid'), appSecret: v('acc-secret'), ownerContact: v('acc-owner') }) });
   const d = await r.json();
   document.getElementById('acc-out').textContent = d.ok ? '已保存' : JSON.stringify(d);
+}
+async function verifyAcc() {
+  const out = document.getElementById('acc-out');
+  out.textContent = '验证中…（本服务器会真实调用一次微信 API）';
+  const r = await fetch('/v1/admin/verify-wechat', { method: 'POST', headers: { ...H(), 'content-type': 'application/json' },
+    body: JSON.stringify({ appId: v('acc-appid'), appSecret: v('acc-secret') }) });
+  const d = await r.json();
+  out.textContent = (d.ok ? '✅ ' : '❌ ') + d.message + (d.ip ? '（已为你标出该加的 IP）' : '');
+  out.style.color = d.ok ? '#4ade8c' : '#f87171';
 }
 const v = (id) => document.getElementById(id).value;
 </script></body></html>`;
