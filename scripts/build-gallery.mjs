@@ -1,9 +1,10 @@
 // Build the Publy theme gallery (themes.publy.jrtx.site).
 //
-// Article themes are presented as LIVE rendered HTML (the actual WeChat-bound
-// markup, inline-styled by juice) — zoomable, selectable, switchable per theme
-// on the same sample article. Card themes are presented as real rendered PNG
-// decks in a swipeable strip plus a full-screen paged lightbox.
+// Article themes are presented as LIVE rendered HTML in a fit-to-screen stage:
+// the whole article is scaled to fit one viewport (page-thumbnail style, like
+// Typora's theme gallery / mdnice print preview); clicking opens a native-size
+// scrollable detail view. Card themes are real rendered PNG decks in a
+// swipeable strip plus a full-screen paged lightbox.
 //
 // Usage: node scripts/build-gallery.mjs <publy-themes-repo-dir>
 // The themes repo is written in place (previews/ + index.html); review and push.
@@ -44,7 +45,7 @@ for (const theme of ART_THEMES) {
   articles[theme] = fs.readFileSync(out, "utf-8");
 }
 
-const decks = {}; // theme -> [{name, file(published relative), local(abs)}]
+const decks = {}; // theme -> [{file, label}]
 for (const theme of CARD_THEMES) {
   const deckDir = path.join(tmp, `cards-${theme}`);
   fs.rmSync(deckDir, { recursive: true, force: true });
@@ -57,7 +58,6 @@ for (const theme of CARD_THEMES) {
     .filter((f) => f.endsWith(".png"))
     .sort()
     .map((f) => ({ file: `previews/cards-${theme}/${f}`, label: f.replace(/\.png$/, "") }));
-  // cover copy for the registry README / external embeds
   fs.copyFileSync(path.join(deckDir, decks[theme][0].file.split("/").pop()), path.join(previewsDir, `card-${theme}.png`));
 }
 
@@ -68,12 +68,13 @@ for (const theme of ART_THEMES) {
 
 // --- gallery page -------------------------------------------------------------
 
-const esc = (s) => s.replace(/</g, "&lt;").replace(/&/g, "&amp;");
-
 function articleTemplates() {
-  return ART_THEMES.map(
-    (t) => `<template id="art-${t}">${articles[t]}</template>`,
-  ).join("\n");
+  return ART_THEMES.map((t) => `<template id="art-${t}">${articles[t]}</template>`).join("\n");
+}
+
+function articleDarkDivs() {
+  // hidden native-size copies for the 100% detail modal
+  return ART_THEMES.map((t) => `<div id="full-${t}" style="display:none">${articles[t]}</div>`).join("\n");
 }
 
 function deckMarkup() {
@@ -92,7 +93,7 @@ function deckMarkup() {
 }
 
 const articleTabs = ART_THEMES.map(
-  (t, i) => `<button class="tab${i === 0 ? " sel" : ""}" onclick="showArticle('${t}', this)">${t}</button>`,
+  (t, i) => `<button class="tab${i === 0 ? " sel" : ""}" onclick="pickTheme('${t}', this)">${t}</button>`,
 ).join("\n      ");
 
 const page = `<!DOCTYPE html>
@@ -101,40 +102,52 @@ const page = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Publy Theme Gallery</title>
-<meta name="description" content="Publy 主题画廊：文章主题以真实渲染 HTML 呈现（同篇对比、可缩放），小绿书卡片以真实发布图滑动预览。">
+<meta name="description" content="Publy 主题画廊：整页缩略预览 + 100% 详览，文章主题真实 HTML 同篇对比；小绿书卡片真实出图滑动翻阅。">
 <style>
   :root { --bg:#111; --card:#1c1c1c; --text:#eee; --muted:#999; --accent:#07C160; --border:#2a2a2a; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 48px 24px 80px; }
-  .container { max-width: 900px; margin: 0 auto; }
+  .container { max-width: 1080px; margin: 0 auto; }
   h1 { font-size: 26px; margin-bottom: 8px; }
-  .lead { color: var(--muted); margin-bottom: 40px; line-height: 1.7; font-size: 14px; }
+  .lead { color: var(--muted); margin-bottom: 36px; line-height: 1.7; font-size: 14px; }
   .lead code { color: var(--accent); }
   section { margin-bottom: 64px; }
-  h2 { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; }
-  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-  .tab { padding: 8px 22px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: 14px; }
+  h2 { font-size: 14px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .tab { padding: 8px 20px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: 14px; }
   .tab.sel { border-color: var(--accent); color: var(--accent); background: rgba(7,193,96,.08); }
-  .width-toggle { margin-left: auto; display: flex; gap: 6px; }
-  .width-toggle button { padding: 8px 14px; font-size: 12px; }
-  .width-toggle .sel { border-color: var(--accent); color: var(--accent); }
-  .frame-wrap { background: #060606; border: 1px solid var(--border); border-radius: 16px; padding: 18px; display: flex; justify-content: center; overflow: hidden; }
-  #article-frame { width: 100%; max-width: 700px; transition: max-width .25s; border-radius: 6px; overflow: hidden; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
-  #article-frame.mobile { max-width: 414px; }
-  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.8; }
-  .theme-block { margin-bottom: 40px; }
+  .wt { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .wt span { font-size: 12px; color: var(--muted); }
+  .wt button { padding: 8px 14px; font-size: 12px; }
+  .wt .sel { border-color: var(--accent); color: var(--accent); }
+  .stage { height: 78vh; background: #060606; border: 1px solid var(--border); border-radius: 16px; display: flex; justify-content: center; align-items: flex-start; overflow: hidden; padding: 14px; cursor: zoom-in; position: relative; }
+  .stage:hover::after { content: "点击进入 100% 详览"; position: absolute; right: 14px; bottom: 10px; font-size: 12px; color: var(--accent); background: rgba(0,0,0,.65); padding: 4px 10px; border-radius: 999px; }
+  .sizer { position: relative; }
+  .page { transform-origin: top left; position: absolute; top: 0; left: 0; box-shadow: 0 10px 40px rgba(0,0,0,.55); border-radius: 6px; overflow: hidden; }
+  .toolbar { display: flex; gap: 14px; align-items: center; margin-top: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .toolbar .mini { padding: 6px 14px; font-size: 12px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
+  .toolbar .mini:hover { border-color: var(--accent); color: var(--accent); }
+  .theme-block { margin-bottom: 44px; }
   .theme-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
   .theme-head h3 { font-size: 16px; }
   .mini { padding: 6px 14px; font-size: 12px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; cursor: pointer; }
   .mini:hover { border-color: var(--accent); color: var(--accent); }
   .deck { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 2px 14px; }
   .deck img { height: 430px; border-radius: 14px; scroll-snap-align: start; cursor: zoom-in; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
-  .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 50; align-items: center; justify-content: center; }
-  .lightbox.open { display: flex; }
+  .lightbox, .zoom { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.92); z-index: 50; }
+  .lightbox.open, .zoom.open { display: flex; }
+  .lightbox { align-items: center; justify-content: center; }
   .lightbox img { max-height: 92vh; max-width: 88vw; border-radius: 10px; }
   .lb-btn { position: fixed; top: 50%; transform: translateY(-50%); font-size: 42px; color: #fff; background: none; border: 0; cursor: pointer; padding: 20px; user-select: none; }
   .lb-prev { left: 12px; } .lb-next { right: 12px; }
-  .lb-close { position: fixed; top: 18px; right: 24px; font-size: 30px; color: #fff; background: none; border: 0; cursor: pointer; }
+  .lb-close, .zoom-close { position: fixed; top: 18px; right: 24px; font-size: 28px; color: #fff; background: rgba(0,0,0,.4); border: 1px solid #444; border-radius: 999px; width: 44px; height: 44px; cursor: pointer; z-index: 61; }
+  .zoom { flex-direction: column; }
+  .zoom-bar { display: flex; gap: 10px; align-items: center; padding: 10px 18px; background: #161616; font-size: 13px; color: var(--muted); }
+  .zoom-bar button { padding: 6px 14px; font-size: 12px; background: #222; color: #ddd; border: 1px solid #3a3a3a; border-radius: 999px; cursor: pointer; }
+  .zoom-bar button.sel { border-color: var(--accent); color: var(--accent); }
+  .zoom-body { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 22px; }
+  .zoom-page { width: 700px; box-shadow: 0 10px 40px rgba(0,0,0,.6); border-radius: 6px; overflow: hidden; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.8; }
   footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 13px; }
   footer a { color: var(--accent); text-decoration: none; }
 </style>
@@ -142,19 +155,27 @@ const page = `<!DOCTYPE html>
 <body>
 <div class="container">
   <h1>Publy Theme Gallery</h1>
-  <p class="lead">文章主题的预览就是<strong>最终发布的真实 HTML</strong>——同一篇样例文章，切主题即时对比，滚轮缩放、文字可选中。小绿书卡片是确定性引擎的真实出图，按真实翻阅方式滑动。本地试用：<code>publy theme preview &lt;name&gt;</code></p>
+  <p class="lead">文章主题以<strong>整页缩略图</strong>呈现——一篇的全貌一屏看尽，点击进入 100% 原大详览；同篇切主题即时对比。小绿书卡片是确定性引擎的真实出图，按真实翻阅方式滑动。本地试用：<code>publy theme preview &lt;name&gt;</code></p>
 
   <section>
     <h2>Article themes · 公众号文章排版</h2>
-    <div class="tabs">
+    <div class="bar">
       ${articleTabs}
-      <span class="width-toggle">
-        <button class="tab" onclick="setWidth(700, this)">文档宽</button>
-        <button class="tab" onclick="setWidth(414, this)">手机宽</button>
+      <span class="wt">
+        <span>设计宽</span>
+        <button class="tab sel" onclick="setWidth(700, this)">700</button>
+        <button class="tab" onclick="setWidth(414, this)">414（手机）</button>
       </span>
     </div>
-    <div class="frame-wrap"><div id="article-frame">${articles[ART_THEMES[0]]}</div></div>
-    <p class="hint">以上不是截图——是直接内嵌的发布级 HTML。发布到公众号的正文即此markup（内联样式，微信编辑器直接吃）。</p>
+    <div class="stage" id="stage" onclick="openZoom()" title="点击进入 100% 详览">
+      <div class="sizer" id="sizer">
+        <div class="page" id="page"><div id="page-inner">${articles[ART_THEMES[0]]}</div></div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="mini" onclick="openZoom()">100% 原大详览</button>
+      <span>整页缩略图：自动缩放至一屏看全 · 阅读体验以 100% 详览为准（缩略图字号缩小属正常）</span>
+    </div>
   </section>
 
   <section>
@@ -171,6 +192,7 @@ const page = `<!DOCTYPE html>
 </div>
 
 ${articleTemplates()}
+${articleDarkDivs()}
 
 <div class="lightbox" id="lb" onclick="if(event.target===this)closeLb()">
   <button class="lb-close" onclick="closeLb()">✕</button>
@@ -179,43 +201,100 @@ ${articleTemplates()}
   <button class="lb-btn lb-next" onclick="step(1)">›</button>
 </div>
 
+<div class="zoom" id="zm">
+  <button class="zoom-close" onclick="closeZoom()">✕</button>
+  <div class="zoom-bar">
+    <strong id="zm-theme" style="color:#eee">claude</strong>
+    <span>·</span><span>100% 原大</span>
+    <span style="margin-left:14px">设计宽</span>
+    <button class="sel" onclick="zmWidth(700, this)">700</button>
+    <button onclick="zmWidth(414, this)">414（手机）</button>
+    <span style="margin-left:auto"></span>
+    <button onclick="closeZoom()">关闭</button>
+  </div>
+  <div class="zoom-body"><div class="zoom-page" id="zm-page"></div></div>
+</div>
+
 <script>
-  function showArticle(theme, btn) {
-    document.querySelectorAll('.tabs .tab').forEach(b => b.classList.remove('sel'));
+  let curTheme = ${JSON.stringify(ART_THEMES[0])};
+  let designW = 700;
+  const $ = (id) => document.getElementById(id);
+
+  function injectArticle(containerId, theme) {
+    const el = $(containerId);
+    el.innerHTML = '';
+    const src = $('full-' + theme);
+    el.appendChild(src.firstElementChild.cloneNode(true));
+  }
+
+  function pickTheme(theme, btn) {
+    curTheme = theme;
+    document.querySelectorAll('.bar .tab').forEach(b => { if (!b.parentElement.classList.contains('wt')) b.classList.remove('sel'); });
     if (btn) btn.classList.add('sel');
-    const tpl = document.getElementById('art-' + theme);
-    const frame = document.getElementById('article-frame');
-    frame.innerHTML = '';
-    frame.appendChild(tpl.content.cloneNode(true));
+    injectArticle('page-inner', theme);
+    fit();
+    $('zm-theme').textContent = theme;
+    zmFill(theme);
   }
+
   function setWidth(w, btn) {
-    const f = document.getElementById('article-frame');
-    f.classList.toggle('mobile', w === 414);
-    f.style.maxWidth = w + 'px';
-    btn.parentElement.querySelectorAll('.tab').forEach(b => b.classList.remove('sel'));
-    btn.classList.add('sel');
+    designW = w;
+    document.querySelectorAll('.wt .tab').forEach(b => b.classList.remove('sel'));
+    if (btn) btn.classList.add('sel');
+    fit();
+    zmWidth(w, document.querySelectorAll('.zoom-bar button')[document.querySelectorAll('.zoom-bar button').length - 2]);
   }
+
+  function fit() {
+    const stage = $('stage'), sizer = $('sizer'), page = $('page');
+    page.style.transform = 'none';
+    page.style.width = designW + 'px';
+    const h = page.scrollHeight;
+    const availH = stage.clientHeight - 28;
+    const availW = stage.clientWidth - 28;
+    const s = Math.min(1, availH / h, availW / designW);
+    page.style.transform = 'scale(' + s + ')';
+    sizer.style.width = (designW * s) + 'px';
+    sizer.style.height = (h * s) + 'px';
+  }
+
+  // --- 100% zoom modal ---
+  let zmW = 700;
+  function zmFill(theme) { injectArticle('zm-page', theme); $('zm-page').style.width = zmW + 'px'; }
+  function openZoom() {
+    zmFill(curTheme);
+    $('zm-theme').textContent = curTheme;
+    $('zm').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeZoom() { $('zm').classList.remove('open'); document.body.style.overflow = ''; }
+  function zmWidth(w, btn) {
+    zmW = w;
+    $('zm-page').style.width = w + 'px';
+    const btns = document.querySelectorAll('.zoom-bar button');
+    btns.forEach(b => b.classList.remove('sel'));
+    if (btn) btn.classList.add('sel');
+  }
+
+  // --- card lightbox ---
   let lbDeck = null, lbIdx = 0;
-  function openLightbox(deck, idx) { lbDeck = deck; lbIdx = idx; renderLb(); document.getElementById('lb').classList.add('open'); }
-  function renderLb() {
-    const list = decks[lbDeck];
-    document.getElementById('lb-img').src = list[lbIdx].file;
-  }
-  function step(d) {
-    const list = decks[lbDeck];
-    lbIdx = (lbIdx + d + list.length) % list.length;
-    renderLb();
-  }
-  function closeLb() { document.getElementById('lb').classList.remove('open'); }
+  function openLightbox(deck, idx) { lbDeck = deck; lbIdx = idx; renderLb(); $('lb').classList.add('open'); }
+  function renderLb() { $('lb-img').src = decks[lbDeck][lbIdx].file; }
+  function step(d) { const list = decks[lbDeck]; lbIdx = (lbIdx + d + list.length) % list.length; renderLb(); }
+  function closeLb() { $('lb').classList.remove('open'); }
+
   document.addEventListener('keydown', e => {
-    const open = document.getElementById('lb').classList.contains('open');
-    if (!open) return;
-    if (e.key === 'Escape') closeLb();
-    if (e.key === 'ArrowLeft') step(-1);
-    if (e.key === 'ArrowRight') step(1);
+    if (e.key === 'Escape') { closeLb(); closeZoom(); }
+    if ($('lb').classList.contains('open')) {
+      if (e.key === 'ArrowLeft') step(-1);
+      if (e.key === 'ArrowRight') step(1);
+    }
   });
   document.querySelectorAll('.deck img').forEach(img => img.onclick = () => openLightbox(img.dataset.deck, +img.dataset.idx));
+  window.addEventListener('resize', fit);
+  window.addEventListener('load', () => setTimeout(fit, 200));
   const decks = ${JSON.stringify(decks)};
+  fit();
 </script>
 </body>
 </html>`;
