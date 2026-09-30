@@ -2,9 +2,8 @@
 
 import fs from "node:fs";
 import { Plugin, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
-import { renderMarkdown, renderCards, buildPreviewHtml, setPngRenderer, setFontDir } from "@publy/core";
+import { renderMarkdown, setPngRenderer, setFontDir } from "@publy/core/article";
 import path from "node:path";
-import { initWasm, Resvg as WasmResvg } from "@resvg/resvg-wasm";
 import claudeThemeCss from "../../core/themes/claude.css";
 import hljsGithubCss from "highlight.js/styles/github.css";
 
@@ -32,26 +31,6 @@ export default class PublyPlugin extends Plugin {
   settings: PublySettings;
 
   async onload(): Promise<void> {
-    // WASM PNG renderer (community-plugin safe: no native binaries).
-    // The resvg-wasm package ships in node_modules/ beside main.js; its CJS
-    // glue resolves index_bg.wasm from there via initWasm().
-    const pluginDir = this.manifest.dir;
-    const wasmFile = path.join(pluginDir, "node_modules", "@resvg", "resvg-wasm", "index_bg.wasm");
-    // BufferSource path — Node fetch() cannot read file:// URLs
-    await initWasm(fs.readFileSync(wasmFile));
-    const fontDir = path.join(pluginDir, "fonts");
-    const fontFiles = ["NotoSansSC-subset-Regular.otf", "NotoSansSC-subset-Bold.otf"]
-      .map((f) => path.join(fontDir, f))
-      .filter((p) => fs.existsSync(p));
-    setFontDir(fontDir);
-    setPngRenderer((svg, fitWidth) => {
-      const resvg = new WasmResvg(svg, {
-        font: { loadSystemFonts: false, fontFiles },
-        ...(fitWidth ? { fitTo: { mode: "width", value: fitWidth } } : {}),
-      });
-      return Buffer.from(resvg.render().asPng());
-    });
-
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
     this.addRibbonIcon("send", "Publy: publish current note", () => this.publishCurrentNote());
@@ -70,8 +49,8 @@ export default class PublyPlugin extends Plugin {
 
     this.addCommand({
       id: "preview-card-deck",
-      name: "Preview xiaolvshu card deck (mode: cards notes)",
-      callback: () => this.previewCardDeck(),
+      name: "Preview xiaolvshu card deck (use the publy CLI)",
+      callback: () => new Notice('Publy: 卡片预览请用 CLI —— 终端运行 publy card <笔记> --preview（插件内预览将在后续版本回归）'),
     });
 
     // zero-config path: copy the rendered rich text — paste straight into the
@@ -170,31 +149,6 @@ export default class PublyPlugin extends Plugin {
     }
   }
 
-  private async previewCardDeck(): Promise<void> {
-    const file = this.currentFile();
-    if (!file) {
-      new Notice("Publy: no active note");
-      return;
-    }
-    const raw = await this.readWithMediaDirs(file);
-    new Notice("Publy: rendering cards…");
-    try {
-      const os = await import("node:os");
-      const fs = await import("node:fs");
-      const path = await import("node:path");
-      const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-cards-"));
-      const result = await renderCards(raw, { outDir });
-      const previewFile = path.join(outDir, "preview.html");
-      fs.writeFileSync(previewFile, buildPreviewHtml(result));
-      const { shell } = require("electron") as typeof import("electron").shell;
-      shell.openPath(previewFile);
-      if (!result.lint.ok) {
-        new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
-      }
-    } catch (err) {
-      new Notice(`Publy: ${(err as Error).message}`);
-    }
-  }
 
   /** zero-config publish path: rich text on the clipboard, pasted into the
    *  WeChat editor by hand — no server, no AppSecret, no IP whitelist */
