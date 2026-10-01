@@ -375,6 +375,50 @@ export function buildApp(config: ServerConfig) {
     return { plan: caller.user.plan, used: store.getUsage(caller.user), limit, expiresAt: caller.user.expiresAt || undefined };
   });
 
+  // self-serve account binding: the customer validates their own AppID +
+  // AppSecret from THIS server (which also surfaces the IP-whitelist step)
+  // and binds the account to their user — no operator in the loop.
+  const bindAttempts = new Map<string, number[]>();
+  app.post<{ Body: { appId?: string; appSecret?: string; accountName?: string } }>("/v1/bind", async (req, reply) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    if (caller.admin) return reply.code(400).send({ code: "BAD_REQUEST", message: "use /v1/admin/accounts for admin-owned accounts" });
+    const user = caller.user;
+    if (user.disabledAt) return reply.code(403).send({ code: "USER_DISABLED", message: "account disabled" });
+
+    const { appId, appSecret, accountName } = req.body ?? {};
+    if (!appId || !appSecret) return reply.code(400).send({ code: "BAD_REQUEST", message: "appId / appSecret required" });
+    // brute-force guard on bind attempts (per user)
+    const now = Date.now();
+    const attempts = (bindAttempts.get(user.id) ?? []).filter((t) => now - t < 3600_000);
+    if (attempts.length >= 10) {
+      return reply.code(429).send({ code: "RATE_LIMITED", message: "too many bind attempts, try later" });
+    }
+    attempts.push(now);
+    bindAttempts.set(user.id, attempts);
+
+    // plan account limit
+    const limit = PLAN_LIMITS[store.isProActive(user) ? "pro" : "free"].accounts;
+    if (store.countAccountsOwnedBy(user.id) >= limit) {
+      return reply.code(400).send({ code: "ACCOUNT_LIMIT", message: `plan limit is ${limit} account(s) — upgrade to bind more` });
+    }
+
+    // live validation from this server (surfaces the IP-whitelist step)
+    const check = await checkWechatCredential(appId, appSecret);
+    audit({ event: "bind-attempt", contact: user.contact, appId, ok: check.ok, errcode: check.errcode, ip: check.ip });
+    if (!check.ok) {
+      return reply.code(400).send({
+        code: check.errcode === 40164 ? "NEEDS_WHITELIST" : "WECHAT_CHECK_FAILED",
+        message: check.message,
+        ip: check.ip,
+      });
+    }
+
+    const name = (accountName ?? appId).trim().slice(0, 40) || appId;
+    store.upsertAccount({ name, appId, appSecret, ownerUserId: user.id });
+    audit({ event: "bound", contact: user.contact, appId, accountName: name });
+    return { ok: true, accountName: name };
+  });
+
   app.post<{ Body: PublishRequest }>("/v1/publish", async (req, reply) => {
     const caller = (req as unknown as { caller: Caller }).caller;
     const body = req.body;

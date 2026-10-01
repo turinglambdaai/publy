@@ -49,14 +49,26 @@ export function purchasePage(publicIp = "你的服务器公网 IP"): string {
     <div class="msg" id="lk-msg"></div>
   </div>
 
+  <div class="card" id="bind-card" style="display:none">
+    <label style="font-weight:600;color:#eee">② 绑定公众号（自助，无需联系任何人）</label>
+    <label>AppID（公众号后台「设置与开发 → 基本配置」）</label>
+    <input id="bind-appid" placeholder="wx 开头的 AppID">
+    <label>AppSecret（开发者密码，重置后复制）</label>
+    <input id="bind-secret" placeholder="重置后生成的 secret">
+    <label>账号名（CLI 里的 account 名，默认用 AppID）</label>
+    <input id="bind-name" placeholder="如 my-gzh">
+    <button id="bind-btn" style="margin-top:14px">验证并绑定</button>
+    <div class="msg" id="bind-msg"></div>
+  </div>
+
   <details class="card">
-    <summary style="cursor:pointer;font-weight:600">📘 开通成功后：绑定公众号（3 步，约 5 分钟，一次性）</summary>
+    <summary style="cursor:pointer;font-weight:600">📘 绑定前准备：IP 白名单（3 步，约 5 分钟，一次性）</summary>
     <ol style="margin:14px 0 4px 18px;line-height:2">
       <li>登录 <a href="https://mp.weixin.qq.com" target="_blank" style="color:#07C160">mp.weixin.qq.com</a> → 左下「设置与开发」→「基本配置」→ 找到 <b>IP 白名单</b> → 修改 → 添加本服务的公网 IP：<div class="key" style="cursor:pointer;margin-top:6px" onclick="navigator.clipboard.writeText('${publicIp}');this.style.outline='2px solid #07C160'" title="点击复制">${publicIp}（点击复制）</div></li>
       <li>同页面 <b>开发者密码(AppSecret)</b> → 启用/重置 → 管理员微信扫码确认 → <b>复制 secret（只显示这一次，务必存好）</b></li>
-      <li>把 <b>AppID + AppSecret</b> 通过微信发给运营者 → 绑定完成后你就可以 <b>publy publish</b> 一条命令发布</li>
+      <li>回到上方「绑定公众号」填入并点验证 — 若提示 IP 未加白名单，错误里会直接给出 IP，加入后重试即可</li>
     </ol>
-    <p style="font-size:12px;color:#888;margin-top:10px;line-height:1.7">提示：以后若发布报错 40164，说明微信服务器 IP 有变——错误信息里会直接给出需要新加的 IP，加进白名单即可。AppSecret 我们只用于你授权的发布操作，加密存储、永不下发。</p>
+    <p style="font-size:12px;color:#888;margin-top:10px;line-height:1.7">提示：以后若发布报错 40164，说明微信服务器 IP 有变——错误信息里会直接给出需要新加的 IP，加进白名单即可。AppSecret 我们只用于你授权的发布操作，AES-256-GCM 加密存储、永不下发。</p>
   </details>
 
   <div class="foot">
@@ -80,10 +92,35 @@ function pollKey(orderId, btn, interval) {
     const o = await (await fetch('/order/' + orderId)).json();
     if (o.status === 'paid') {
       clearInterval(timer);
-      show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方"找回"）:\\n<div class="key">' + o.apiKey + '</div>\\n接入：\\n<div class="key">publy config set server ' + location.origin + '\\npubly config set api_key ' + o.apiKey + '\\npubly account add 你的账号名 …（见使用手册）</div>');
+      show('msg', '✅ 开通成功！你的 API key（已同时保存，可随时用下方"找回"）:\n<div class="key">' + o.apiKey + '</div>\n接入:\n<div class="key">publy config set server ' + location.origin + '\npubly config set api_key ' + o.apiKey + '</div>');
+      window.__userKey = o.apiKey;
+      const bc = document.getElementById('bind-card');
+      if (bc) bc.style.display = 'block';
       btn.textContent = '已开通';
     }
   }, interval);
+}
+async function bindAccount() {
+  const key = window.__userKey;
+  if (!key) return show('bind-msg', '请先完成购买');
+  const g = function (id) { return document.getElementById(id); };
+  const appId = g('bind-appid').value, secret = g('bind-secret').value, name = g('bind-name').value;
+  if (!appId || !secret) return show('bind-msg', '请填写 AppID 和 AppSecret');
+  const out = document.getElementById('bind-msg');
+  out.style.display = 'block';
+  out.textContent = '验证中…（服务器会真实调用一次微信 API）';
+  try {
+    const r = await fetch('/v1/bind', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key },
+      body: JSON.stringify({ appId: appId, appSecret: secret, accountName: name }) });
+    const d = await r.json();
+    if (d.ok) {
+      out.innerHTML = '<span style="color:#4ade8c">✅ 绑定成功！账号名: ' + d.accountName + '</span>\n现在可以用 publy publish 发布了';
+    } else if (d.code === 'NEEDS_WHITELIST') {
+      out.innerHTML = '<span style="color:#f87171">❌ IP 未加白名单：请在公众号后台添加 <b>' + (d.ip || '错误信息中的 IP') + '</b> 后重试</span>';
+    } else {
+      out.textContent = '❌ ' + (d.message || d.code || r.status);
+    }
+  } catch (e) { out.textContent = '网络错误: ' + e.message; }
 }
 document.getElementById('buy').onclick = async () => {
   const contact = document.getElementById('contact').value.trim();
