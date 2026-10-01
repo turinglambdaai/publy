@@ -255,7 +255,9 @@ export function buildApp(config: ServerConfig) {
   }
 
   app.addHook("onRequest", async (req, reply) => {
-    if (req.url === "/health" || req.url === "/" || req.url.startsWith("/purchase") || req.url.startsWith("/order/") || req.url.startsWith("/lookup") || req.url.startsWith("/pay/")) return;
+    // the /admin page SHELL is public (it's just html); its data endpoints
+    // (/v1/admin/*) still require the admin key
+    if (req.url === "/health" || req.url === "/" || req.url === "/admin" || req.url.startsWith("/purchase") || req.url.startsWith("/order/") || req.url.startsWith("/lookup") || req.url.startsWith("/pay/")) return;
     const caller = auth(req.headers["x-api-key"] as string | undefined);
     if (!caller) {
       await reply.code(401).send({ code: "UNAUTHORIZED", message: "Invalid API key" });
