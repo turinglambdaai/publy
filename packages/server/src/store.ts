@@ -70,6 +70,7 @@ export function newApiKey(): string {
 
 export class Store {
   private db: DatabaseSync;
+  private secretKey: string | null = null;
 
   constructor(dataDir: string) {
     fs.mkdirSync(dataDir, { recursive: true });
@@ -200,19 +201,55 @@ export class Store {
   }
 
   // --- accounts ------------------------------------------------------------
+  // AppSecret is encrypted at rest (AES-256-GCM, key = secretKey from
+  // server.json). Rows written before the master key existed are stored as
+  // plaintext and transparently encrypted on the next write.
+
+  private encryptSecret(plain: string): string {
+    if (!this.secretKey) return plain;
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv("aes-256-gcm", Buffer.from(this.secretKey, "hex"), iv);
+    const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return "enc1:" + iv.toString("hex") + ":" + tag.toString("hex") + ":" + ct.toString("hex");
+  }
+
+  private decryptSecret(stored: string): string {
+    if (!stored.startsWith("enc1:")) return stored; // legacy plaintext
+    const [, ivHex, tagHex, ctHex] = stored.split(":");
+    if (!this.secretKey) return "";
+    const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(this.secretKey, "hex"), Buffer.from(ivHex, "hex"));
+    decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+    return Buffer.concat([decipher.update(Buffer.from(ctHex, "hex")), decipher.final()]).toString("utf8");
+  }
+
+  setSecretKey(keyHex: string): void {
+    this.secretKey = keyHex;
+  }
+
+  /** one-time migration: encrypt any legacy plaintext secrets */
+  migrateSecrets(): void {
+    if (!this.secretKey) return;
+    const rows = this.db.prepare("SELECT name, app_secret FROM accounts").all() as Record<string, unknown>[];
+    for (const row of rows) {
+      const stored = String(row.app_secret);
+      if (stored.startsWith("enc1:")) continue;
+      this.db.prepare("UPDATE accounts SET app_secret = ? WHERE name = ?").run(this.encryptSecret(stored), String(row.name));
+    }
+  }
 
   upsertAccount(acc: AccountRow): void {
     this.db
       .prepare(
         "INSERT INTO accounts (name, app_id, app_secret, owner_user_id) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET app_id = excluded.app_id, app_secret = excluded.app_secret, owner_user_id = excluded.owner_user_id",
       )
-      .run(acc.name, acc.appId, acc.appSecret, acc.ownerUserId);
+      .run(acc.name, acc.appId, this.encryptSecret(acc.appSecret), acc.ownerUserId);
   }
 
   findAccount(name: string): AccountRow | null {
     const row = this.db.prepare("SELECT * FROM accounts WHERE name = ?").get(name) as Record<string, unknown> | undefined;
     return row
-      ? { name: row.name as string, appId: row.app_id as string, appSecret: row.app_secret as string, ownerUserId: (row.owner_user_id as string | null) ?? null }
+      ? { name: row.name as string, appId: row.app_id as string, appSecret: this.decryptSecret(row.app_secret as string), ownerUserId: (row.owner_user_id as string | null) ?? null }
       : null;
   }
 
@@ -220,7 +257,7 @@ export class Store {
     return (this.db.prepare("SELECT * FROM accounts").all() as Record<string, unknown>[]).map((r) => ({
       name: r.name as string,
       appId: r.app_id as string,
-      appSecret: r.app_secret as string,
+      appSecret: this.decryptSecret(r.app_secret as string),
       ownerUserId: (r.owner_user_id as string | null) ?? null,
     }));
   }

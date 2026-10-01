@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+
 import Fastify from "fastify";
 import type { JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
 import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
@@ -37,6 +38,8 @@ export interface ServerConfig {
   /** this server's egress IP — shown to customers for the WeChat IP whitelist.
    *  When absent it is auto-detected at boot (myip.ipip.net → api.ipify.org). */
   publicIp?: string;
+  /** master key (hex) for AppSecret encryption at rest; auto-generated on first boot */
+  secretKey?: string;
   payments?: {
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
@@ -68,6 +71,7 @@ export function loadServerConfig(configPath?: string): ServerConfig {
     dataDir: raw.dataDir ?? path.join(path.dirname(file), "server-data"),
     publicUrl: raw.publicUrl,
     publicIp: raw.publicIp,
+    secretKey: raw.secretKey,
     payments: raw.payments,
   };
 }
@@ -130,6 +134,7 @@ export function buildApp(config: ServerConfig) {
   fs.mkdirSync(dataDir, { recursive: true });
 
   const store = new Store(dataDir);
+  if (config.secretKey) { store.setSecretKey(config.secretKey); store.migrateSecrets(); }
   app.addHook("onClose", async () => store.close());
   const tokens = new TokenManager(dataDir);
   const materials = new MaterialCache(dataDir);
@@ -583,6 +588,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   if (!config.publicIp) {
     config.publicIp = (await detectEgressIp()) ?? undefined;
     if (config.publicIp) console.log(`[boot] detected egress IP: ${config.publicIp} (set "publicIp" in server.json to pin it)`);
+  }
+  if (!config.secretKey) {
+    config.secretKey = crypto.randomBytes(32).toString('hex');
+    const cfgFile = configPath ?? process.env.PUBLY_SERVER_CONFIG ?? path.join(os.homedir(), '.publy', 'server.json');
+    try {
+      const raw = JSON.parse(fs.readFileSync(cfgFile, 'utf-8'));
+      raw.secretKey = config.secretKey;
+      fs.writeFileSync(cfgFile, JSON.stringify(raw, null, 2), { mode: 0o600 });
+      console.log('[boot] generated secretKey for AppSecret encryption');
+    } catch { console.error('[boot] could not persist secretKey — secrets stay encrypted only after manual key setup'); }
   }
   const app = buildApp(config);
   await app.listen({ port: config.port, host: "0.0.0.0" });
