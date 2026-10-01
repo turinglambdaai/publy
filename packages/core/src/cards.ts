@@ -1,4 +1,4 @@
-// Xiaolvshu (image-post) card engine: markdown sections → themed 3:4 PNGs
+// Image-post (image-post) card engine: markdown sections → themed 3:4 PNGs
 // rendered deterministically with satori + resvg. Pixel-exact CJK glyphs,
 // seconds per deck, no AI image generation.
 

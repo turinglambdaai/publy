@@ -458,7 +458,7 @@ export function createProgram(): Command {
 
   const cardCmd = program
     .command("card")
-    .description("Render xiaolvshu card deck (3:4 PNGs) from a sectioned markdown file")
+    .description("Render image-post card deck (3:4 PNGs) from a sectioned markdown file")
     .argument("<file>")
     .option("-o, --out <dir>", "output directory (default: <file dir>/cards)")
     .option("--preview", "open a contact-sheet preview in the browser")

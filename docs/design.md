@@ -4,7 +4,7 @@
 
 ## 0. 一句话
 
-**Publy 是面向 agent 时代的微信公众号发布管线：一个 CLI 负责排版与小绿书渲染，一个托管服务负责稳定的微信发布，一个主题商店负责排版资产分发。**
+**Publy 是面向 agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个托管服务负责稳定的微信发布，一个主题商店负责排版资产分发。**
 
 写作留在 Obsidian / 任意 Markdown 编辑器，其余一切（排版、卡片渲染、上传、群发、定时、多账号）收进一条 `publy` 命令。
 
@@ -37,22 +37,22 @@ Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务�
 
 这些对个人是负担，对服务是产品。GUI 工具收钱靠去广告和主题数量；Publy 收钱靠**发布可靠性**——这是硬成本，用户愿意为省掉的运维付费（mdnice/壹伴已验证过这个人群的付费意愿）。
 
-### 1.4 小绿书是空白区
+### 1.4 图片消息是空白区
 
-所有排版工具都在做「文章」，没有工具认真做「小绿书」：
+所有排版工具都在做「文章」，没有工具认真做「图片消息」：
 
-- 现有小绿书工作流（tlai-wechat-card）靠 AI 生图烘焙文字：慢、贵、汉字经常出错
+- 现有图片消息工作流（tlai-wechat-card）靠 AI 生图烘焙文字：慢、贵、汉字经常出错
 - 确定性渲染（HTML/CSS 模板 → PNG）可以做到：像素级正确的汉字、主题化、秒级、零边际成本
 
-小绿书是 Publy 的差异化楔子：先建立「最好用的小绿书管线」心智，再带动文章发布服务。
+图片消息是 Publy 的差异化楔子：先建立「最好用的图片消息管线」心智，再带动文章发布服务。
 
 ## 2. 产品形态：一个引擎，两个客户端，一个服务，一个商店
 
 | 工件 | 形态 | 开源性 | 角色 |
 |---|---|---|---|
-| **@publy/core** | npm 包（渲染引擎 + 卡片引擎） | 开源（AGPL） | 产品本体：排版、小绿书渲染、校验、微信客户端 |
+| **@publy/core** | npm 包（渲染引擎 + 卡片引擎） | 开源（AGPL） | 产品本体：排版、图片消息渲染、校验、微信客户端 |
 | **publy CLI** | npm 包，`npx publy` | 开源（AGPL） | 客户端 B：agent 的操作面，非 Obsidian 用户的入口 |
-| **Obsidian 插件** | Obsidian 社区插件 | 开源 | 客户端 A：写作现场——小绿书实时预览、文章预览、一键直推服务器 |
+| **Obsidian 插件** | Obsidian 社区插件 | 开源 | 客户端 A：写作现场——图片消息实时预览、文章预览、一键直推服务器 |
 | **Publy Cloud / 自托管 server** | REST 服务（协议 v1） | server 开源 / cloud 闭源 | 发布可靠性：IP 白名单、密钥托管、定时、多账号；**收费物** |
 | **主题商店** | npm 包 + 注册表索引 | 主题与索引均开源 | 文章主题与卡片主题的分发、预览、提交 |
 
@@ -61,7 +61,7 @@ Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务�
 **渲染可见性设计**（写作的人必须看得到最终形态）：
 
 - 文章：`publy render -o out.html` 产出自包含 HTML（内联样式与微信一致），浏览器打开即所见即所得；`publy preview` = render + 自动打开
-- 小绿书：card 引擎的原生输出就是 PNG 卡片——渲染形态即文件本身；`publy card --preview` 额外产出拼版大图（9 张 + caption 模拟排版）
+- 图片消息：card 引擎的原生输出就是 PNG 卡片——渲染形态即文件本身；`publy card --preview` 额外产出拼版大图（9 张 + caption 模拟排版）
 - Obsidian 插件：编辑器侧边实时预览文章渲染效果与卡片拼版，写作现场直接看，这是完整答案
 
 ### 2.1 明确不做（范围纪律）
@@ -80,10 +80,10 @@ Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务�
 ```bash
 publy render a.md --theme claude -o out.html   # Markdown → 公众号 HTML（免费路径，可贴入后台）
 publy preview a.md --theme claude              # 本地预览（HTML + 截图，供 agent 自检）
-publy card post.md --theme naive -o cards/     # 小绿书：Markdown → N 张卡片 PNG + caption
+publy card post.md --theme naive -o cards/     # 图片消息：Markdown → N 张卡片 PNG + caption
 publy card post.md --lint                      # 校验：caption ≤1000 字、图片 3–9 张、比例 3:4
 publy publish a.md                             # 发布文章（经云端或自托管服务）
-publy publish post.md                          # 发布小绿书（图片消息）
+publy publish post.md                          # 发布图片消息（图片消息）
 publy publish a.md --at "2026-10-01 09:00"     # 定时（服务端 job）
 publy theme add @scope/theme-x | theme ls | theme preview <name>
 publy account add --app-id wx... --secret-env WX_SECRET   # 密钥走环境变量引用，不明文落盘
@@ -104,11 +104,11 @@ publy quota                                    # 群发配额余量
 - `--footer` 文末引流文案注入
 - 封面比例 2.35:1 裁切
 - 账号 ↔ 主题绑定（`accounts[]` 配置，`--account` 选择）
-- 小绿书预检清单（错别字/风格一致性提醒）保留为 `preview` 流程的人工/agent 环节
+- 图片消息预检清单（错别字/风格一致性提醒）保留为 `preview` 流程的人工/agent 环节
 
-## 4. 小绿书管线（楔子功能）
+## 4. 图片消息管线（楔子功能）
 
-### 4.1 创作格式：一个 Markdown 文件即一篇小绿书
+### 4.1 创作格式：一个 Markdown 文件即一篇图片消息
 
 ```markdown
 ---

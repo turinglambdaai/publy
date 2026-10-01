@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Publy — The agent-era publishing pipeline for WeChat</title>
-    <meta name="description" content="Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and xiaolvshu card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.">
+    <meta name="description" content="Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -75,8 +75,8 @@
                 <span class="accent" data-en="Publish with your agent." data-zh="发布交给 agent。">Publish with your agent.</span>
             </h1>
             <p class="lead animate-on-scroll"
-                data-en="Publy is the agent-era publishing pipeline for WeChat Official Accounts: a CLI for Markdown typesetting and xiaolvshu card rendering, a hosted service for stable publishing, and a theme store for distribution — no GUI, no copy-pasting into the WeChat backend."
-                data-zh="Publy 是 agent 时代的微信公众号发布管线：一个 CLI 负责排版与小绿书渲染，一个托管服务负责稳定发布，一个主题商店负责排版资产分发——没有 GUI，没有「复制粘贴进公众号后台」。">
+                data-en="Publy is the agent-era publishing pipeline for WeChat Official Accounts: a CLI for Markdown typesetting and image-post card rendering, a hosted service for stable publishing, and a theme store for distribution — no GUI, no copy-pasting into the WeChat backend."
+                data-zh="Publy 是 agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个托管服务负责稳定发布，一个主题商店负责排版资产分发——没有 GUI，没有「复制粘贴进公众号后台」。">
                 Publy is the agent-era publishing pipeline for WeChat Official Accounts: a CLI for typesetting and card rendering, a hosted service for stable publishing, and a theme store.
             </p>
 
@@ -136,7 +136,7 @@
                     <div class="card-icon">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l4-4 4 4 5-5 5 5"/></svg>
                     </div>
-                    <h3 data-en="Xiaolvshu as a first-class citizen" data-zh="小绿书是一等公民">Xiaolvshu as a first-class citizen</h3>
+                    <h3 data-en="Image posts as a first-class citizen" data-zh="图片消息是一等公民">Image posts as a first-class citizen</h3>
                     <p data-en="publy card post.md deterministically renders themed 3:4 cards — pixel-exact CJK glyphs in seconds, not AI-generated images."
                        data-zh="publy card post.md 确定性渲染主题化 3:4 卡片——像素级正确的汉字，秒级出图，不靠 AI 生图。">Deterministic themed 3:4 cards — pixel-exact CJK glyphs in seconds, not AI images.</p>
                 </div>
@@ -196,7 +196,7 @@
 <span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
 <span class="ok">✓</span> cover uploaded · <span class="str">draft ready in the official backend</span>
 
-<span class="comment"># xiaolvshu: themed 3:4 cards, deterministically rendered</span>
+<span class="comment"># image-post: themed 3:4 cards, deterministically rendered</span>
 <span class="prompt">$</span> <span class="cmd">publy card post.md --theme naive</span>
 <span class="ok">✓</span> 6 cards · <span class="str">1.8s</span> · pixel-exact glyphs
 
@@ -208,8 +208,8 @@
 
             <div class="callout animate-on-scroll">
                 <strong data-en="Status: shipping." data-zh="状态：已在服役。">Status: shipping.</strong>
-                <span data-en=" Published on npm, dogfooding daily: articles and xiaolvshu decks go out through the pipeline. HTTPS self-hosted server, scheduled publishing, idempotent retries, an audit log, the npm theme gallery, and the Obsidian plugin (v0.1.0) are all live — see the user guide and roadmap."
-                      data-zh="已上架 npm，每天经它发布文章与小绿书。HTTPS 自托管服务器、定时发布、幂等重试、审计日志、npm 主题画廊与 Obsidian 插件（v0.1.0）全部就绪——见使用手册与路线图。"> On npm and dogfooding daily — server, scheduling, audit, theme gallery and the Obsidian plugin are live.</span>
+                <span data-en=" Published on npm, dogfooding daily: articles and image-post decks go out through the pipeline. HTTPS self-hosted server, scheduled publishing, idempotent retries, an audit log, the npm theme gallery, and the Obsidian plugin (v0.1.0) are all live — see the user guide and roadmap."
+                      data-zh="已上架 npm，每天经它发布文章与图片消息。HTTPS 自托管服务器、定时发布、幂等重试、审计日志、npm 主题画廊与 Obsidian 插件（v0.1.0）全部就绪——见使用手册与路线图。"> On npm and dogfooding daily — server, scheduling, audit, theme gallery and the Obsidian plugin are live.</span>
             </div>
         </div>
     </section>
@@ -223,8 +223,8 @@
             <div class="bento-grid animate-on-scroll" style="grid-template-columns: repeat(3, 1fr);">
                 <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/design.md" style="text-decoration: none; color: inherit;">
                     <h3 data-en="Design" data-zh="产品设计">Design</h3>
-                    <p data-en="Positioning, CLI contract, the xiaolvshu pipeline, the theme store, and architecture."
-                       data-zh="定位、CLI 契约、小绿书管线、主题商店与架构。">Positioning, CLI contract, xiaolvshu pipeline, theme store, architecture.</p>
+                    <p data-en="Positioning, CLI contract, the image-post pipeline, the theme store, and architecture."
+                       data-zh="定位、CLI 契约、图片消息管线、主题商店与架构。">Positioning, CLI contract, image-post pipeline, theme store, architecture.</p>
                 </a>
                 <a class="bento-card" href="https://github.com/turinglambdaai/publy/blob/main/docs/business.md" style="text-decoration: none; color: inherit;">
                     <h3 data-en="Open-source boundary" data-zh="开源边界">Open-source boundary</h3>
@@ -275,11 +275,11 @@
         var pageMetadata = {
             en: {
                 title: 'Publy — The agent-era publishing pipeline for WeChat',
-                description: 'Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and xiaolvshu card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.'
+                description: 'Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, themes as npm packages, and a hosted service for reliable WeChat publishing.'
             },
             zh: {
                 title: 'Publy — agent 时代的公众号发布管线',
-                description: '写作留在 Obsidian，发布交给 agent。一个 CLI 负责排版与小绿书渲染，主题即 npm 包，托管服务负责稳定发布。'
+                description: '写作留在 Obsidian，发布交给 agent。一个 CLI 负责排版与图片消息渲染，主题即 npm 包，托管服务负责稳定发布。'
             }
         };
 

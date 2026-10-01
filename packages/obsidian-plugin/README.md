@@ -6,7 +6,7 @@ Client A of the [Publy](https://github.com/turinglambdaai/publy) publishing pipe
 
 - **Publish current note** — Markdown in, a typeset draft in the WeChat backend out (official API only, no account simulation)
 - **Preview rendered HTML** — the theme-rendered article, opened in the browser; what you see is what ships
-- **Preview xiaolvshu card deck** — sectioned notes () render into themed 3:4 card PNGs deterministically (bundled font subsets, works offline)
+- **Preview image-post card deck** — sectioned notes () render into themed 3:4 card PNGs deterministically (bundled font subsets, works offline)
 
 ## Setup
 

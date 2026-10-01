@@ -12,14 +12,14 @@
 - [x] claude / medium 主题移植（用户 wenyan 自定义主题，CSS 变量编译为字面量）
 - [x] `publy render` / `publy preview`（浏览器打开）/ `publy publish`（--json、退出码）
 - [x] `publy config set` / `publy account add|list` / `publy theme ls`
-- [x] `@publy/core` 微信客户端：token 缓存（单飞 + 600s buffer）、add_material、draft/add（文章 + newspic 小绿书两种草稿）
+- [x] `@publy/core` 微信客户端：token 缓存（单飞 + 600s buffer）、add_material、draft/add（文章 + newspic 图片消息两种草稿）
 - [x] `publy-server` 协议 v1（/health /verify /v1/publish，base64 附件 + attachment:// 引用替换）——本地冒烟通过（含微信 API 真实调用错误路径）
 - [x] 部署 server 到用户服务器（47.101.152.163，systemd 托管，AppSecret 不出服务器）——✅ 2026-09-29；同日 wenyan 卸载，server 迁至 **8081**（外网可直连；公司网络内走 SSH 隧道 18081）
 - [x] cards 模式发布实测：`mode: cards` 自动推断 image_post（tlai-wechat-card 产出无需 type 字段）——4 卡 newspic 草稿全链路通过
 
-**验收**：✅ 真实公众号全流程发布 1 篇文章（渲染 → 服务器 → 草稿箱，6.5s，幂等命中与审计日志实测通过）+ 1 篇 cards 小绿书。
+**验收**：✅ 真实公众号全流程发布 1 篇文章（渲染 → 服务器 → 草稿箱，6.5s，幂等命中与审计日志实测通过）+ 1 篇 cards 图片消息。
 
-## M1b — 小绿书 card 引擎 ✅
+## M1b — 图片消息 card 引擎 ✅
 
 - [x] satori + resvg 卡片渲染：markdown 分节（cover/point/list/ending 四版式原型）→ 3:4 PNG（1080×1440）
 - [x] `publy card` + `--preview` 拼版预览页 + lint（caption ≤1000 字、3–9 张、cover/ending 必备）
@@ -43,7 +43,7 @@
 - [x] **webhook**（2026-09-30）：server.json 账号级 webhook URL，publish/failed 事件推送
 - [x] **测试与 CI**（2026-09-30）：33 个单测（core 26 含真实渲染、server 7 含 fastify inject 协议测试），GitHub Actions ubuntu+windows 矩阵
 - [x] **npm 包就绪**（2026-09-30）：esbuild 捆绑 workspace 依赖，单包自包含（子集字体/主题/样例随包零网络），publy@1.0.0 pack 验证 6MB；待 npm 账号发布
-- [x] **小绿书 text 模式 caption 走 markdown 渲染** + digest 自动生成（首段前 120 字）
+- [x] **图片消息 text 模式 caption 走 markdown 渲染** + digest 自动生成（首段前 120 字）
 - [x] **字体子集化**（2026-09-30）：pyftsubset GB2312+ASCII 共 7549 字符 → 3.4MB/字重（原 32MB），随包分发零网络，越界字符自动回退全量字体
 - [x] `--custom-theme <path>`：任意 CSS 文件即主题（变量自动解析）
 - [ ] HTTPS：Caddy 2.6.2 已装已配（publy-api.jrtx.site → 8081），等 DNS A 记录 + 安全组 443/80 开放
@@ -60,7 +60,7 @@ Obsidian 社区已有 **8+ 个同类公众号发布插件**（Markdown Publisher
 
 - [x] 插件骨架：设置页（server/api_key/account/mediaDir）、ribbon 按钮、命令「Publish current note」「Preview rendered HTML」
 - [x] esbuild 构建 + resvg 原生模块随插件分发（dist/ 即装即用）
-- [x] 命令「Preview xiaolvshu card deck」：当前笔记渲染卡片拼版并打开（2026-09-30）
+- [x] 命令「Preview image-post card deck」：当前笔记渲染卡片拼版并打开（2026-09-30）
 - [x] 命令「Copy rendered rich text」：**零配置发布路径**（2026-09-30，自竞品 Dou Publish 吸收）——复制带排版 HTML 到剪贴板，粘贴进公众号编辑器，无需 AppSecret/服务器/白名单；含本地图片时的能力边界提示
 - [ ] 编辑器内实时预览（侧边栏常驻拼版）
 - [ ] 发布到 Obsidian 社区目录

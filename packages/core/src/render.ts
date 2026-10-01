@@ -207,7 +207,7 @@ function escapeText(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** Render a xiaolvshu caption (plain markdown paragraph text) to HTML. */
+/** Render a image-post caption (plain markdown paragraph text) to HTML. */
 export function captionToHtml(text: string): string {
   const md = new MarkdownIt({ html: false, breaks: true, linkify: false });
   return md.render(text.trim());

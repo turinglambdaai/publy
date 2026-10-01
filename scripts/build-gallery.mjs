@@ -102,7 +102,7 @@ const page = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Publy Theme Gallery</title>
-<meta name="description" content="Publy 主题画廊：整页缩略预览 + 100% 详览，文章主题真实 HTML 同篇对比；小绿书卡片真实出图滑动翻阅。">
+<meta name="description" content="Publy 主题画廊：整页缩略预览 + 100% 详览，文章主题真实 HTML 同篇对比；图片消息卡片真实出图滑动翻阅。">
 <style>
   :root { --bg:#111; --card:#1c1c1c; --text:#eee; --muted:#999; --accent:#07C160; --border:#2a2a2a; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -155,7 +155,7 @@ const page = `<!DOCTYPE html>
 <body>
 <div class="container">
   <h1>Publy Theme Gallery</h1>
-  <p class="lead">文章主题以<strong>整页缩略图</strong>呈现——一篇的全貌一屏看尽，点击进入 100% 原大详览；同篇切主题即时对比。小绿书卡片是确定性引擎的真实出图，按真实翻阅方式滑动。本地试用：<code>publy theme preview &lt;name&gt;</code></p>
+  <p class="lead">文章主题以<strong>整页缩略图</strong>呈现——一篇的全貌一屏看尽，点击进入 100% 原大详览；同篇切主题即时对比。图片消息卡片是确定性引擎的真实出图，按真实翻阅方式滑动。本地试用：<code>publy theme preview &lt;name&gt;</code></p>
 
   <section>
     <h2>Article themes · 公众号文章排版</h2>
@@ -179,7 +179,7 @@ const page = `<!DOCTYPE html>
   </section>
 
   <section>
-    <h2>Card themes · 小绿书卡片</h2>
+    <h2>Card themes · 图片消息卡片</h2>
     ${deckMarkup()}
     <p class="hint">滑动查看整组卡片；点任意卡片全屏翻阅。发布时卡片组按此顺序上传，首图为封面。</p>
   </section>

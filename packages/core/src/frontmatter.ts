@@ -10,11 +10,11 @@ export interface SourceMeta {
   theme?: string;
   author?: string;
   digest?: string;
-  /** xiaolvshu caption (image posts) */
+  /** image-post caption (image posts) */
   caption?: string;
-  /** xiaolvshu hashtags, rendered as #tag in the caption */
+  /** image-post hashtags, rendered as #tag in the caption */
   tags?: string[];
-  /** xiaolvshu card mode: "cards" implies an image post */
+  /** image-post card mode: "cards" implies an image post */
   mode?: string;
 }
 

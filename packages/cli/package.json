@@ -1,7 +1,7 @@
 {
   "name": "@turinglambdaai/publy",
   "version": "1.0.0",
-  "description": "Agent-era publishing pipeline for WeChat Official Accounts: Markdown typesetting, xiaolvshu card rendering, reliable publishing",
+  "description": "Agent-era publishing pipeline for WeChat Official Accounts: Markdown typesetting, image-post card rendering, reliable publishing",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -20,7 +20,7 @@
   "keywords": [
     "wechat",
     "official-account",
-    "xiaolvshu",
+    "image-post",
     "markdown",
     "publishing",
     "cli"

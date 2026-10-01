@@ -13,7 +13,7 @@ markdown 文件 → publy CLI → publy-server（你的服务器）→ 微信官
 排版在本地完成（主题渲染），服务器只负责可靠地把内容送进微信。支持两类内容：
 
 - **文章**：标准图文消息，主题化排版
-- **小绿书**：图片消息，图文分离（text）或卡片渲染（cards）两种模式
+- **图片消息**：图片消息，图文分离（text）或卡片渲染（cards）两种模式
 
 ## 准备工作
 
@@ -93,7 +93,7 @@ publy publish article.md
 | `theme` | 排版主题 | 账号配置的 theme |
 | `author` | 作者署名 | 账号配置的 author |
 | `digest` | 摘要 | 空 |
-| `type: image` | 小绿书（见下节） | 文章 |
+| `type: image` | 图片消息（见下节） | 文章 |
 
 命令行可覆盖：`--title`、`--cover`、`--account`、`--theme`、`--custom-theme <css路径>`（任意 CSS 即主题）、`--footer "文末文案"`、`--no-footnote`、`--at "2026-10-01 09:00"`（定时发布）。摘要（digest）不填时自动取正文首段前 120 字。
 
@@ -108,7 +108,7 @@ publy preview article.md     # 浏览器打开渲染结果，所见即发布
 publy render article.md -o out.html   # 只要 HTML
 ```
 
-### 发布小绿书
+### 发布图片消息
 
 **text 模式（图文分离）**——图片即帖子图片，剩余文字即配文：
 
@@ -244,9 +244,9 @@ publy jobs cancel <id>   # 取消未执行的定时任务
 |------|-----------|
 | 退出码 2 | 文件或封面路径不存在 |
 | 退出码 3 | 渲染失败，看输出的 warn（多半是图片找不到：检查 media_dirs） |
-| 退出码 4 | 小绿书 lint 未过：按提示补 cover/ending 节、压 caption |
+| 退出码 4 | 图片消息 lint 未过：按提示补 cover/ending 节、压 caption |
 | 退出码 5 + `WECHAT_40001` | AppSecret 不对或被重置，改服务器端 server.json |
-| 退出码 5 + `WECHAT_45166` | 小绿书内容超微信长度限制，精简 |
+| 退出码 5 + `WECHAT_45166` | 图片消息内容超微信长度限制，精简 |
 | 连接拒绝 | 配了隧道就 `publy tunnel`；没配则 `systemctl status publy-server` 或查端口放行 |
 | health 通但 publish 超时 | 企业网络拦大 POST：配 tunnel，publish 会自动走隧道 |
 | 卡片出现乱码方块 | 生僻字/emoji 超出内置 GB2312 子集：`--font-file` 指定全量字体（首次自动下载） |
