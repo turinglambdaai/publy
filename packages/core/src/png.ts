@@ -4,15 +4,31 @@
 // it). Sandboxed environments inject a WASM renderer via setPngRenderer.
 
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import type { ResvgRenderOptions } from "@resvg/resvg-js";
 
 export type PngRenderer = (svg: string, fitWidth?: number) => Buffer;
 
 let renderer: PngRenderer | null = null;
 
+/** require relative to this module — works in real ESM (import.meta) and in
+ *  esbuild-cjs bundles (__dirname); returns null when neither is available. */
+function nodeRequire(): NodeRequire | null {
+  try {
+    return createRequire(fileURLToPath(import.meta.url));
+  } catch {
+    try {
+      if (typeof __dirname !== "undefined") return createRequire(__dirname);
+    } catch {
+      /* fall through */
+    }
+    return null;
+  }
+}
+
 function nativeRenderer(): PngRenderer {
-  // lazy require: keeps the native binding out of sandboxed bundles
-  const req = createRequire(import.meta.url);
+  const req = nodeRequire();
+  if (!req) throw new Error("native @resvg/resvg-js unavailable in this environment");
   const { Resvg } = req("@resvg/resvg-js") as typeof import("@resvg/resvg-js");
   return (svg: string, fitWidth?: number) => {
     const opts: Record<string, unknown> = { font: { loadSystemFonts: true } };

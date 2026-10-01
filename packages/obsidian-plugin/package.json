@@ -10,7 +10,8 @@
     "@publy/core": "workspace:*",
     "@publy/shared": "workspace:*",
     "@resvg/resvg-js": "^2.6.2",
-    "@resvg/resvg-wasm": "^2.6.2"
+    "@resvg/resvg-wasm": "^2.6.2",
+    "satori": "0.33.5"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

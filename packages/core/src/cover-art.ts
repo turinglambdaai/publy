@@ -1,10 +1,14 @@
 // Auto-generated title cover: when a note has no cover and no images, the
 // server renders a clean title card (2.35:1) from the note title using the
 // bundled GB2312 subset fonts — so every publishable note has a cover.
+//
+// Server-side only: uses the native resvg binding lazily (the plugin bundle
+// never calls this, so the native require never executes there).
 
 import fs from "node:fs";
 import path from "node:path";
-import { Resvg } from "@resvg/resvg-js";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { bundledFontDir } from "./fonts.js";
 
 const W = 1175;
@@ -12,6 +16,23 @@ const H = 500;
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function resvgCtor(): (new (svg: string, opts?: Record<string, unknown>) => { render(): { asPng(): Buffer } }) | null {
+  try {
+    const req = createRequire(fileURLToPath(import.meta.url));
+    return req("@resvg/resvg-js").Resvg;
+  } catch {
+    try {
+      if (typeof __dirname !== "undefined") {
+        const req = createRequire(__dirname);
+        return req("@resvg/resvg-js").Resvg;
+      }
+    } catch {
+      /* fall through */
+    }
+    return null;
+  }
 }
 
 function subsetFontFiles(): string[] | null {
@@ -23,8 +44,9 @@ function subsetFontFiles(): string[] | null {
 
 /** Deterministic title card. Returns null when CJK fonts are unavailable. */
 export function generateTitleCover(title: string, accent = "#b75c3d", bg = "#f8f6f0"): Buffer | null {
+  const Resvg = resvgCtor();
   const fontFiles = subsetFontFiles();
-  if (!fontFiles) return null;
+  if (!Resvg || !fontFiles) return null;
 
   // wrap into lines of <= 12 chars, at most 3 lines (28 chars usable)
   const clean = title.replace(/\s+/g, " ").trim().slice(0, 28);
