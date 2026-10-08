@@ -148,13 +148,19 @@ class PublyPreviewView extends ItemView {
       b.textContent = label;
       b.style.cssText = "font-size:13px;cursor:pointer";
       b.addEventListener("click", fn);
+      return b;
     };
     btn("↻ 刷新", () => void this.refresh?.());
     btn("复制 rich text", () => void this.plugin.copyRenderedHtml());
-    btn("发布 → 公众号草稿箱", () => void this.plugin.publishCurrentNote());
+    const publish = btn("发布 → 公众号草稿箱", () => void this.plugin.publishCurrentNote());
+    // the family's WeChat-green primary CTA (same accent as the purchase page)
+    publish.style.cssText =
+      "font-size:13px;cursor:pointer;background:#07C160;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-weight:500";
+    publish.addEventListener("mouseenter", () => (publish.style.background = "#06ad56"));
+    publish.addEventListener("mouseleave", () => (publish.style.background = "#07C160"));
   }
 
-  setHtml(html: string): void {
+  setHtml(html: string, meta?: { title?: string; author?: string; account?: string }): void {
     this.contentEl.empty();
     this.toolbar();
     // themed canvas + elevated white paper (WeChat renders on white regardless
@@ -164,8 +170,38 @@ class PublyPreviewView extends ItemView {
       "background:var(--background-secondary);padding:28px 18px 48px;min-height:calc(100vh - 140px);box-sizing:border-box";
     const page = canvas.createEl("div");
     page.style.cssText =
-      "max-width:700px;margin:0 auto;background:#fff;border-radius:10px;padding:40px 48px;min-height:70vh;box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.1),0 12px 36px rgba(0,0,0,.12)";
-    page.innerHTML = html;
+      "max-width:700px;margin:0 auto;background:#fff;border-radius:10px;padding:36px 44px 44px;min-height:70vh;box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.1),0 12px 36px rgba(0,0,0,.12)";
+    // WeChat-article header: title, then account/author meta, hairline, body —
+    // system font stack shared with the product's web pages
+    page.style.fontFamily = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
+    if (meta?.title || meta?.account) {
+      const title = page.createEl("h1");
+      title.style.cssText = "margin:0 0 14px;font-size:21px;font-weight:600;line-height:1.4;color:#1a1a1a;letter-spacing:.01em";
+      title.setText(meta.title || "(无标题)");
+      const metaRow = page.createEl("div");
+      metaRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:4px";
+      if (meta.account) {
+        const avatar = metaRow.createEl("span");
+        avatar.textContent = meta.account.slice(0, 1).toUpperCase();
+        avatar.style.cssText =
+          "width:20px;height:20px;border-radius:50%;background:rgba(183,92,61,.12);color:#b75c3d;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none";
+        const name = metaRow.createEl("span");
+        name.textContent = meta.account;
+        name.style.cssText = "font-size:13px;color:#576b95";
+      }
+      if (meta.author) {
+        const a = metaRow.createEl("span");
+        a.textContent = meta.author;
+        a.style.cssText = "font-size:13px;color:#999";
+      }
+      const pill = metaRow.createEl("span");
+      pill.textContent = "草稿预览";
+      pill.style.cssText = "margin-left:auto;font-size:11px;color:#b0b0b0;background:#f6f6f6;border-radius:999px;padding:2px 9px";
+      const hr = page.createEl("div");
+      hr.style.cssText = "height:1px;background:#f0f0f0;margin:14px 0 20px";
+    }
+    const body = page.createEl("div");
+    body.innerHTML = html;
   }
   setCards(cards: { base64: string }[], caption: string): void {
     this.contentEl.empty();
@@ -674,10 +710,15 @@ export default class PublyPlugin extends Plugin {
       return;
     }
     try {
-      const html = await this.renderCurrent(f);
+      const rendered = renderMarkdown(raw, this.renderOptions());
+      for (const w of rendered.warnings) console.warn("[publy] " + w);
       const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCurrentNote(f);
-      view.setHtml(html);
+      view.setHtml(rendered.html, {
+        title: rendered.title || f.basename,
+        author: rendered.meta.author,
+        account: this.settings.account || undefined,
+      });
     } catch (err) {
       new Notice(`Publy: ${(err as Error).message}`);
     }
