@@ -496,22 +496,48 @@ export function buildApp(config: ServerConfig) {
     }
   });
 
-  app.get<{ Querystring: { limit?: string } }>("/v1/history", async (req) => {
-    const limit = Math.min(Math.max(parseInt((req.query as { limit?: string }).limit ?? "50", 10) || 50, 1), 500);
-    return { history: readHistory(limit) };
+  // accounts visible to the caller: names only — secrets and appIds never
+  // leave the server (used by clients for account pickers)
+  app.get("/v1/accounts", async (req) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    const accounts = caller.admin ? store.listAccounts() : store.listAccounts().filter((a) => a.ownerUserId === caller.user.id);
+    return { accounts: accounts.map((a) => ({ name: a.name })) };
   });
 
-  app.get("/v1/jobs", async () => ({ jobs: Object.values(jobs).sort((a, b) => a.runAt - b.runAt).map(jobInfo) }));
+  // tenant isolation: a user key sees only publish-relevant events for its
+  // own accounts; the admin key sees the full audit trail
+  app.get<{ Querystring: { limit?: string } }>("/v1/history", async (req) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    const limit = Math.min(Math.max(parseInt((req.query as { limit?: string }).limit ?? "50", 10) || 50, 1), 500);
+    let history = readHistory(limit * 4);
+    if (!caller.admin) {
+      const owned = new Set(store.listAccounts().filter((a) => a.ownerUserId === caller.user.id).map((a) => a.name));
+      const visible = new Set(["published", "failed", "scheduled", "cancelled", "deduped"]);
+      history = history.filter((e) => visible.has(e.event) && owned.has(e.account));
+    }
+    return { history: history.slice(-limit) };
+  });
+
+  app.get("/v1/jobs", async (req) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    let list = Object.values(jobs).sort((a, b) => a.runAt - b.runAt);
+    if (!caller.admin) list = list.filter((j) => j.userId === caller.user.id);
+    return { jobs: list.map(jobInfo) };
+  });
 
   app.get<{ Params: { id: string } }>("/v1/jobs/:id", async (req, reply) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
     const job = jobs[(req.params as { id: string }).id];
     if (!job) return reply.code(404).send({ code: "NOT_FOUND", message: "no such job" });
+    if (!caller.admin && job.userId !== caller.user.id) return reply.code(403).send({ code: "NOT_OWNED", message: "job belongs to another user" });
     return jobInfo(job);
   });
 
   app.delete<{ Params: { id: string } }>("/v1/jobs/:id", async (req, reply) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
     const job = jobs[(req.params as { id: string }).id];
     if (!job) return reply.code(404).send({ code: "NOT_FOUND", message: "no such job" });
+    if (!caller.admin && job.userId !== caller.user.id) return reply.code(403).send({ code: "NOT_OWNED", message: "job belongs to another user" });
     if (job.status !== "pending") {
       return reply.code(400).send({ code: "NOT_CANCELLABLE", message: `job is ${job.status}` });
     }
