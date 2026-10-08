@@ -163,10 +163,10 @@ await inst.openHistory();
 if (!calls.some((c) => c.startsWith("view.renderHistory("))) fail("history did not render — calls: " + calls.join(" | "));
 
 // publish path: stub server 200s → success toast with title + duration
-app.workspace.activeFile = { path: "samples/article-sample.md", stat: { mtime: Date.now() } };
+app.workspace.activeFile = { path: "samples/article-sample.md", basename: "article-sample", stat: { mtime: Date.now() } };
 await inst.publishCurrentNote();
-if (!calls.some((c) => c.includes("已进公众号草稿箱"))) fail("publish success toast missing — calls: " + calls.join(" | "));
-const dupes = calls.filter((c) => c.includes("已进公众号草稿箱")).length;
+if (!calls.some((c) => c.includes("WeChat drafts"))) fail("publish success toast missing — calls: " + calls.join(" | "));
+const dupes = calls.filter((c) => c.includes("WeChat drafts")).length;
 if (dupes !== 1) fail("unexpected publish toast count: " + dupes);
 
 console.log("PASS — onload, article preview, card deck preview, history, publish");
