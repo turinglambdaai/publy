@@ -64,6 +64,8 @@ class Plugin {
   addCommand(cmd) { calls.push("command:" + cmd.id); this.app.commands.commands[cmd.id] = { callback: cmd.callback }; }
   addSettingTab() { calls.push("settingsTab"); }
   registerView() {}
+  registerEvent() {}
+  addStatusBarItem() { calls.push("statusbar"); return { setText: (t) => calls.push("status:" + t) }; }
 }
 class Notice {
   constructor(msg) { calls.push("notice:" + String(msg).slice(0, 140)); }
@@ -81,6 +83,7 @@ class App {
       getActiveFile: () => this.workspace.activeFile,
       setActiveFile: (f) => { this.workspace.activeFile = f; },
       getLeavesOfType: () => [],
+      on: () => {},
       getRightLeaf: () => this.leaf,
       revealLeaf: () => {},
       cachedRead: async (file) => this.vaultContentByPath[file.path] ?? "",
@@ -96,6 +99,7 @@ class Setting {
   setDesc() { return this; }
   addText() { return this; }
   addDropdown() { return this; }
+  addButton() { return this; }
 }
 class TFile { path = ""; }
 const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl: async () => ({ json: {}, status: 200 }) };
@@ -132,12 +136,12 @@ if (!calls.some((c) => c.startsWith("command:"))) fail("commands not registered"
 
 // article render into the in-app preview view
 app.workspace.activeFile = { path: "samples/article-sample.md" };
-await inst.previewArticleInApp();
+await inst.previewCurrentNote(); // smart dispatch -> article
 if (!calls.some((c) => c.startsWith("view.setHtml("))) fail("article preview did not render — calls: " + calls.join(" | "));
 
 // card deck render into the in-app preview view (wasm + satori + harfbuzzjs)
 app.workspace.activeFile = { path: "samples/card-sample.md" };
-await inst.previewCardDeck();
+await inst.previewCurrentNote(); // smart dispatch -> card deck
 if (!calls.some((c) => c.startsWith("view.setCards("))) fail("card preview did not render — calls: " + calls.join(" | "));
 
 console.log("PASS — onload, article preview, card deck preview");

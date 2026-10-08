@@ -36,6 +36,19 @@ const THEME_CSS: Record<string, string> = {
   news: newsThemeCss,
 };
 
+const THEME_LABELS: Record<string, string> = {
+  claude: "Claude 暖橙",
+  medium: "Medium 简白",
+  wechat: "微信编辑器",
+  ink: "水墨",
+  tech: "科技",
+  rose: "玫瑰",
+  official: "公众号官方",
+  fortune: "财经报刊",
+  terminal: "终端（深色代码）",
+  news: "新闻早报",
+};
+
 const VIEW_TYPE_PUBLY_PREVIEW = "publy-preview";
 
 // Obsidian evaluates plugin bundles with a synthetic module context
@@ -83,37 +96,54 @@ interface PublishResponse {
   message?: string;
 }
 
-/** In-app preview leaf: article HTML or image-post card strip. */
+/** In-app preview leaf: article HTML or image-post card strip, with a small
+ *  action toolbar (refresh / copy / publish) so the preview is a cockpit,
+ *  not a dead end. */
 class PublyPreviewView extends ItemView {
-  constructor(leaf: WorkspaceLeaf) {
+  plugin: PublyPlugin;
+  /** re-renders the current preview; set on every render by the plugin */
+  refresh: (() => Promise<void>) | null = null;
+
+  constructor(leaf: WorkspaceLeaf, plugin: PublyPlugin) {
     super(leaf);
+    this.plugin = plugin;
   }
   getViewType(): string { return VIEW_TYPE_PUBLY_PREVIEW; }
   getDisplayText(): string { return "Publy 预览"; }
   getIcon(): string { return "send"; }
   async onOpen(): Promise<void> { /* content set by setHtml */ }
   async onClose(): Promise<void> { /* nothing */ }
+
+  private toolbar(): void {
+    const bar = this.contentEl.createEl("div");
+    bar.style.cssText = "display:flex;gap:8px;align-items:center;padding:10px 18px 0";
+    const btn = (label: string, fn: () => void) => {
+      const b = bar.createEl("button");
+      b.textContent = label;
+      b.style.cssText = "font-size:13px;cursor:pointer";
+      b.addEventListener("click", fn);
+    };
+    btn("↻ 刷新", () => void this.refresh?.());
+    btn("复制 rich text", () => void this.plugin.copyRenderedHtml());
+    btn("发布 → 公众号草稿箱", () => void this.plugin.publishCurrentNote());
+  }
+
   setHtml(html: string): void {
     this.contentEl.empty();
+    this.toolbar();
     const wrap = this.contentEl.createEl("div");
-    wrap.style.background = "#ddd";
-    wrap.style.padding = "18px";
+    wrap.style.cssText = "background:#ddd;padding:18px";
     const page = wrap.createEl("div");
-    page.style.maxWidth = "700px";
-    page.style.margin = "0 auto";
-    page.style.background = "#fff";
-    page.style.minHeight = "60vh";
+    page.style.cssText = "max-width:700px;margin:0 auto;background:#fff;min-height:60vh";
     page.innerHTML = html;
   }
   setCards(cards: { base64: string }[], caption: string): void {
     this.contentEl.empty();
+    this.toolbar();
     const wrap = this.contentEl.createEl("div");
-    wrap.style.padding = "18px";
+    wrap.style.cssText = "padding:18px";
     const strip = wrap.createEl("div");
-    strip.style.display = "flex";
-    strip.style.gap = "12px";
-    strip.style.overflowX = "auto";
-    strip.style.paddingBottom = "10px";
+    strip.style.cssText = "display:flex;gap:12px;overflow-x:auto;padding-bottom:10px";
     for (const c of cards) {
       const img = strip.createEl("img");
       img.src = "data:image/png;base64," + c.base64;
@@ -122,10 +152,7 @@ class PublyPreviewView extends ItemView {
       img.style.boxShadow = "0 6px 24px rgba(0,0,0,.35)";
     }
     const cap = wrap.createEl("div");
-    cap.style.marginTop = "14px";
-    cap.style.fontSize = "14px";
-    cap.style.lineHeight = "1.7";
-    cap.style.whiteSpace = "pre-wrap";
+    cap.style.cssText = "margin-top:14px;font-size:14px;line-height:1.7;white-space:pre-wrap";
     cap.textContent = caption;
   }
 }
@@ -133,6 +160,7 @@ class PublyPreviewView extends ItemView {
 export default class PublyPlugin extends Plugin {
   settings: PublySettings;
   wasmOk = false;
+  statusBarItem: HTMLElement | null = null;
 
   async onload(): Promise<void> {
     // WASM PNG renderer (community-plugin safe: no native binaries).
@@ -142,8 +170,14 @@ export default class PublyPlugin extends Plugin {
       const pluginDir = absolutePluginDir(this);
       resvgModule = loadPluginModule<ResvgModule>(pluginDir, path.join("node_modules", "@resvg", "resvg-wasm", "index.js"));
       const wasmFile = path.join(pluginDir, "node_modules", "@resvg", "resvg-wasm", "index_bg.wasm");
-      // BufferSource path — Node fetch() cannot read file:// URLs
-      await resvgModule.initWasm(fs.readFileSync(wasmFile));
+      // BufferSource path — Node fetch() cannot read file:// URLs.
+      // Already-initialized is success: resvg's module state survives plugin
+      // disable/enable (require cache), so a second onload must not fail.
+      try {
+        await resvgModule.initWasm(fs.readFileSync(wasmFile));
+      } catch (err) {
+        if (!/already initialized/i.test(String((err as Error)?.message ?? err))) throw err;
+      }
       // satori imports harfbuzzjs at bundle-eval time; the esbuild shim defers
       // it behind a promise bridge, armed here with the real plugin dir.
       const gp = globalThis as { __publyHarfbuzzBridge?: (p: Promise<unknown>) => void };
@@ -173,9 +207,26 @@ export default class PublyPlugin extends Plugin {
 
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
-    this.registerView(VIEW_TYPE_PUBLY_PREVIEW, (leaf: WorkspaceLeaf) => new PublyPreviewView(leaf));
+    this.registerView(VIEW_TYPE_PUBLY_PREVIEW, (leaf: WorkspaceLeaf) => new PublyPreviewView(leaf, this));
+    this.statusBarItem = this.addStatusBarItem();
 
-    this.addRibbonIcon("send", "Publy: publish current note", () => this.publishCurrentNote());
+    // right-click any note → publish / preview / copy for THAT note
+    this.registerEvent(
+      this.app.workspace.on("file-menu", (menu, file) => {
+        if (!(file instanceof TFile) || file.extension !== "md") return;
+        menu.addItem((item) => {
+          item.setTitle("Publy: 发布到公众号草稿箱").setIcon("send").onClick(() => void this.publishCurrentNote(file));
+        });
+        menu.addItem((item) => {
+          item.setTitle("Publy: 预览排版").setIcon("eye").onClick(() => void this.previewCurrentNote(file));
+        });
+        menu.addItem((item) => {
+          item.setTitle("Publy: 复制 rich text").setIcon("copy").onClick(() => void this.copyRenderedHtml(file));
+        });
+      }),
+    );
+
+    this.addRibbonIcon("send", "Publy: 发布当前笔记", () => this.publishCurrentNote());
 
     this.addCommand({
       id: "publish-current-note",
@@ -185,20 +236,14 @@ export default class PublyPlugin extends Plugin {
 
     this.addCommand({
       id: "preview-current-note",
-      name: "Preview rendered article (in-app)",
-      callback: () => this.previewArticleInApp(),
+      name: "Preview (auto: article or image-post cards)",
+      callback: () => this.previewCurrentNote(),
     });
 
     this.addCommand({
       id: "preview-current-note-browser",
       name: "Preview rendered HTML in browser",
       callback: () => this.previewInBrowser(() => this.renderCurrent()),
-    });
-
-    this.addCommand({
-      id: "preview-card-deck",
-      name: "Image-post cards: preview in app (mode: cards notes)",
-      callback: () => this.previewCardDeck(),
     });
 
     this.addCommand({
@@ -229,8 +274,47 @@ export default class PublyPlugin extends Plugin {
   private mediaDirs(): string[] {
     const dirs: string[] = [];
     if (this.settings.mediaDir) dirs.push(this.settings.mediaDir);
+    dirs.push(this.autoMediaDir());
     dirs.push(this.basePath());
-    return dirs.filter(Boolean);
+    return [...new Set(dirs.filter(Boolean))];
+  }
+
+  /** resolve the vault's own attachment setting, so local images resolve with
+   *  zero configuration */
+  private autoMediaDir(): string {
+    try {
+      const cfg = (this.app.vault as unknown as { getConfig?: (k: string) => string }).getConfig?.("attachmentFolderPath");
+      if (!cfg || cfg === "/" || cfg === ".") return this.basePath();
+      return path.isAbsolute(cfg) ? cfg : path.join(this.basePath(), cfg);
+    } catch {
+      return this.basePath();
+    }
+  }
+
+  /** frontmatter peek: explicit `type` wins, `mode: cards` fills the gap —
+   *  same precedence as core's publishType() */
+  private detectIsCards(raw: string): boolean {
+    const m = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!m) return false;
+    const fm = m[1];
+    const t = fm.match(/^type:\s*(\S+)/m)?.[1];
+    if (t) return t === "image" || t === "image_post";
+    return (fm.match(/^mode:\s*(\S+)/m)?.[1] ?? "").toLowerCase() === "cards";
+  }
+
+  /** publish needs server + key; everything else (preview/copy) is local-only.
+   *  When unconfigured, open the settings tab right at the guide. */
+  private ensureConfigured(): boolean {
+    if (this.settings.server && this.settings.apiKey) return true;
+    new Notice("Publy: 还差一步——在设置里填 Server 地址和 API key（可用「测试连接」验证）");
+    const setting = (this.app as unknown as { setting?: { open: () => void; openTabById: (id: string) => void } }).setting;
+    setting?.open();
+    setting?.openTabById("publy");
+    return false;
+  }
+
+  private status(text: string): void {
+    this.statusBarItem?.setText(text);
   }
 
   private renderOptions() {
@@ -243,10 +327,10 @@ export default class PublyPlugin extends Plugin {
     };
   }
 
-  private async renderCurrent(): Promise<string> {
-    const file = this.currentFile();
-    if (!file) throw new Error("no active note");
-    const raw = await this.app.vault.cachedRead(file);
+  private async renderCurrent(file?: TFile): Promise<string> {
+    const f = file ?? this.currentFile();
+    if (!f) throw new Error("没有活动笔记");
+    const raw = await this.app.vault.cachedRead(f);
     const rendered = renderMarkdown(raw, this.renderOptions());
     for (const w of rendered.warnings) console.warn("[publy] " + w);
     return rendered.html;
@@ -263,32 +347,40 @@ export default class PublyPlugin extends Plugin {
     return leaf.view as PublyPreviewView;
   }
 
-  private async previewArticleInApp(): Promise<void> {
-    const file = this.currentFile();
-    if (!file) {
-      new Notice("Publy: no active note");
+  /** one preview command: picks article or image-post cards from frontmatter.
+   *  public: the preview-view toolbar and the theme dropdown call back into it. */
+  async previewCurrentNote(file?: TFile): Promise<void> {
+    const f = file ?? this.currentFile();
+    if (!f) {
+      new Notice("Publy: 没有活动笔记");
+      return;
+    }
+    const raw = await this.app.vault.cachedRead(f);
+    if (this.detectIsCards(raw)) {
+      await this.previewCardDeck(f, raw);
       return;
     }
     try {
-      const html = await this.renderCurrent();
+      const html = await this.renderCurrent(f);
       const view = await this.activatePreviewView();
+      view.refresh = () => this.previewCurrentNote(f);
       view.setHtml(html);
     } catch (err) {
       new Notice(`Publy: ${(err as Error).message}`);
     }
   }
 
-  private async previewCardDeck(): Promise<void> {
+  private async previewCardDeck(file?: TFile, rawArg?: string): Promise<void> {
     if (!this.wasmOk) {
       new Notice("Publy: 卡片渲染器不可用（wasm 初始化失败）——文章发布不受影响");
       return;
     }
-    const file = this.currentFile();
-    if (!file) {
-      new Notice("Publy: no active note");
+    const f = file ?? this.currentFile();
+    if (!f) {
+      new Notice("Publy: 没有活动笔记");
       return;
     }
-    const raw = await this.app.vault.cachedRead(file);
+    const raw = rawArg ?? (await this.app.vault.cachedRead(f));
     new Notice("Publy: 正在渲染图片消息卡片…");
     try {
       const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-cards-"));
@@ -297,6 +389,7 @@ export default class PublyPlugin extends Plugin {
         base64: fs.readFileSync(c.file).toString("base64"),
       }));
       const view = await this.activatePreviewView();
+      view.refresh = () => this.previewCardDeck(f);
       view.setCards(cards, result.caption);
       if (!result.lint.ok) {
         new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
@@ -306,15 +399,14 @@ export default class PublyPlugin extends Plugin {
     }
   }
 
-  /** zero-config publish path: rich text on the clipboard, pasted into the
-   *  WeChat editor by hand — no server, no AppSecret, no IP whitelist */
-  private async copyRenderedHtml(): Promise<void> {
-    const file = this.currentFile();
-    if (!file) {
-      new Notice("Publy: no active note");
+  /** public: the preview-view toolbar calls back into it */
+  async copyRenderedHtml(file?: TFile): Promise<void> {
+    const f = file ?? this.currentFile();
+    if (!f) {
+      new Notice("Publy: 没有活动笔记");
       return;
     }
-    const raw = await this.app.vault.cachedRead(file);
+    const raw = await this.app.vault.cachedRead(f);
     try {
       const rendered = renderMarkdown(raw, this.renderOptions());
       for (const w of rendered.warnings) console.warn("[publy] " + w);
@@ -323,7 +415,7 @@ export default class PublyPlugin extends Plugin {
       }
       const item = new ClipboardItem({
         "text/html": new Blob([rendered.html], { type: "text/html" }),
-        "text/plain": new Blob([file.basename], { type: "text/plain" }),
+        "text/plain": new Blob([f.basename], { type: "text/plain" }),
       });
       await navigator.clipboard.write([item]);
       new Notice("Publy: 已复制排版 rich text — 到公众号编辑器 Ctrl+V 粘贴");
@@ -344,23 +436,29 @@ export default class PublyPlugin extends Plugin {
     }
   }
 
-  private async publishCurrentNote(): Promise<void> {
-    const file = this.currentFile();
-    if (!file) {
-      new Notice("Publy: no active note");
+  /** public: the preview-view toolbar calls back into it */
+  async publishCurrentNote(file?: TFile): Promise<void> {
+    const f = file ?? this.currentFile();
+    if (!f) {
+      new Notice("Publy: 没有活动笔记");
       return;
     }
-    if (!this.settings.server || !this.settings.apiKey) {
-      new Notice("Publy: 先在设置里填写 Server 和 API key");
+    if (!this.ensureConfigured()) return;
+    let publishUrl: URL;
+    try {
+      publishUrl = new URL("/v1/publish", this.settings.server);
+    } catch {
+      new Notice("Publy: Server 地址格式不对——需要带协议，例如 https://publy-api.example.com");
       return;
     }
-    const raw = await this.app.vault.cachedRead(file);
-    new Notice("Publy: 渲染中…");
+    const raw = await this.app.vault.cachedRead(f);
+    this.status("Publy: 渲染中…");
     let html: string;
     let payloadAttachments: { name: string; data: string; contentType: string }[];
     let coverName: string | undefined;
     let type: "article" | "image_post";
     let title: string;
+    let author: string | undefined;
     try {
       const rendered = renderMarkdown(raw, this.renderOptions());
       for (const w of rendered.warnings) console.warn("[publy] " + w);
@@ -375,16 +473,19 @@ export default class PublyPlugin extends Plugin {
       }
       html = rendered.html;
       type = rendered.type;
-      title = rendered.title || file.basename;
+      title = rendered.title || f.basename;
+      author = rendered.meta.author;
     } catch (err) {
+      this.status("");
       new Notice(`Publy: 渲染失败 — ${(err as Error).message}`);
       return;
     }
 
-    new Notice("Publy: 上传到公众号…");
+    this.status("Publy: 上传到公众号…");
+    const t0 = Date.now();
     try {
       const res = await requestUrl({
-        url: new URL("/v1/publish", this.settings.server).toString(),
+        url: publishUrl.toString(),
         method: "POST",
         headers: { "content-type": "application/json", "x-api-key": this.settings.apiKey },
         body: JSON.stringify({
@@ -394,7 +495,7 @@ export default class PublyPlugin extends Plugin {
           html,
           images: payloadAttachments,
           cover: coverName,
-          author: rendered.meta.author,
+          author,
         }),
       });
       const body = res.json as PublishResponse;
@@ -402,9 +503,11 @@ export default class PublyPlugin extends Plugin {
         new Notice(`Publy: 发布失败 — ${body.code ?? res.status}: ${body.message ?? ""}`);
         return;
       }
-      new Notice(`Publy: ✅ 草稿箱就绪 — media ${body.mediaId}`);
+      new Notice(`✅《${title}》已进公众号草稿箱（${((Date.now() - t0) / 1000).toFixed(1)} 秒）`);
     } catch (err) {
       new Notice(`Publy: 发布失败 — ${(err as Error).message}（公司网络请确认隧道已启动）`);
+    } finally {
+      this.status("");
     }
   }
 }
@@ -421,38 +524,104 @@ class PublySettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Server URL").addText((text) =>
-      text.setPlaceholder("https://your-server").setValue(this.plugin.settings.server).onChange(async (v) => {
-        this.plugin.settings.server = v;
+    // setup guide — the first thing a new user sees
+    const intro = containerEl.createEl("div");
+    intro.style.cssText =
+      "background:var(--background-secondary);border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px;line-height:1.9";
+    intro.createEl("div").setText("三步开始发布：① 服务开通账号（自托管或购买托管）拿 Server 地址和 API key → ② 填在下面，点「测试连接」确认 → ③ 打开任意笔记，点左侧 send 图标发布（不配置也能用：预览排版、复制 rich text，均纯本地）。");
+    const links = intro.createEl("div");
+    const mkLink = (text: string, url: string) => {
+      const a = links.createEl("a");
+      a.textContent = text;
+      a.href = url;
+      a.target = "_blank";
+    };
+    mkLink("使用手册", "https://publy.jrtx.site");
+    links.appendText(" · ");
+    mkLink("购买托管服务", "https://publy-api.jrtx.site/");
+    links.style.marginTop = "4px";
+
+    new Setting(containerEl).setName("Server 地址").setDesc("Publy 服务地址，带协议，例如 https://publy-api.example.com").addText((text) =>
+      text.setPlaceholder("https://…").setValue(this.plugin.settings.server).onChange(async (v) => {
+        this.plugin.settings.server = v.trim();
         await this.plugin.saveSettings();
       }),
     );
-    new Setting(containerEl).setName("API key").addText((text) =>
-      text.setPlaceholder("x-api-key").setValue(this.plugin.settings.apiKey).onChange(async (v) => {
-        this.plugin.settings.apiKey = v;
+    new Setting(containerEl).setName("API key").setDesc("只保存在本机 vault 配置里").addText((text) => {
+      text.setPlaceholder("publy_…").setValue(this.plugin.settings.apiKey).onChange(async (v) => {
+        this.plugin.settings.apiKey = v.trim();
+        await this.plugin.saveSettings();
+      });
+      text.inputEl.type = "password";
+    });
+    new Setting(containerEl).setName("公众号账号名").setDesc("服务端绑定的账号名（publy account add 时的名字）").addText((text) =>
+      text.setPlaceholder("my-account").setValue(this.plugin.settings.account).onChange(async (v) => {
+        this.plugin.settings.account = v.trim();
         await this.plugin.saveSettings();
       }),
     );
-    new Setting(containerEl).setName("Account").addText((text) =>
-      text.setPlaceholder("account name on the server").setValue(this.plugin.settings.account).onChange(async (v) => {
-        this.plugin.settings.account = v;
+    new Setting(containerEl).setName("媒体目录").setDesc("本地图片查找目录；留空 = 自动跟随 vault 附件设置").addText((text) =>
+      text.setPlaceholder("自动（vault 附件目录）").setValue(this.plugin.settings.mediaDir).onChange(async (v) => {
+        this.plugin.settings.mediaDir = v.trim();
         await this.plugin.saveSettings();
       }),
     );
-    new Setting(containerEl).setName("Media directory").addText((text) =>
-      text.setPlaceholder("absolute path to attachment folder").setValue(this.plugin.settings.mediaDir).onChange(async (v) => {
-        this.plugin.settings.mediaDir = v;
-        await this.plugin.saveSettings();
-      }),
-    );
-    new Setting(containerEl).setName("Theme").addDropdown((drop) =>
+    new Setting(containerEl).setName("主题").setDesc("文章排版主题；terminal 主题用深色代码高亮").addDropdown((drop) =>
       drop
-        .addOptions(Object.keys(THEME_CSS).map((t) => [t, t]).reduce((o, [k, v]) => ({ ...o, [k]: v }), {}))
+        .addOptions(THEME_LABELS)
         .setValue(this.plugin.settings.theme || "claude")
         .onChange(async (v) => {
           this.plugin.settings.theme = v;
           await this.plugin.saveSettings();
+          // live re-render if the preview is open
+          void this.plugin.previewCurrentNote();
         }),
     );
+    const connResult = containerEl.createEl("div");
+    connResult.style.cssText = "font-size:13px;padding:2px 0 10px";
+    new Setting(containerEl)
+      .setName("连接")
+      .setDesc("检查服务可达性、API key 与套餐配额")
+      .addButton((btn) =>
+        btn.setButtonText("测试连接").setCta().onClick(() => {
+          void this.testConnection(connResult);
+        }),
+      );
+  }
+
+  private async testConnection(resultEl: HTMLElement): Promise<void> {
+    const s = this.plugin.settings;
+    resultEl.setText("测试中…");
+    let base: URL;
+    try {
+      base = new URL(s.server);
+    } catch {
+      resultEl.setText("❌ Server 地址格式不对（要带 https:// 或 http://）");
+      return;
+    }
+    if (!s.apiKey) {
+      resultEl.setText("❌ 先填 API key");
+      return;
+    }
+    try {
+      const health = await requestUrl({ url: new URL("/health", base).toString(), method: "GET" });
+      if ((health.json as { status?: string } | null)?.status !== "ok") throw new Error("health 响应异常");
+      const quota = await requestUrl({
+        url: new URL("/v1/quota", base).toString(),
+        method: "GET",
+        headers: { "x-api-key": s.apiKey },
+      });
+      if (quota.status === 401 || quota.status === 403) {
+        resultEl.setText(`❌ key 无效或被停用（服务返回 ${quota.status}）`);
+        return;
+      }
+      const q = quota.json as { plan?: string; used?: number; limit?: number; admin?: boolean; unlimited?: boolean };
+      const usage = q.admin ? "管理员 key（无限额）" : `套餐 ${q.plan ?? "?"} · 本月 ${q.used ?? "?"}/${q.limit ?? "?"} 篇`;
+      resultEl.setText(
+        `✅ 连接正常 — ${usage}` + (s.account ? "" : " · 还没填公众号账号名，发布时会用服务端默认账号"),
+      );
+    } catch (err) {
+      resultEl.setText(`❌ 连接失败：${(err as Error).message} — 检查地址与 key；公司网络可能需要先启动隧道（publy tunnel）`);
+    }
   }
 }
