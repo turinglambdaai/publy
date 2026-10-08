@@ -747,7 +747,23 @@ export default class PublyPlugin extends Plugin {
     const raw = await this.app.vault.cachedRead(f);
     const rendered = renderMarkdown(raw, this.renderOptions());
     for (const w of rendered.warnings) console.warn("[publy] " + w);
-    return rendered.html;
+    return this.inlineImages(rendered.html, rendered.attachments);
+  }
+
+  /** preview-only: core emits attachment://<name> refs that publishing swaps
+   *  for WeChat CDN urls; nothing local can load that scheme, so inline the
+   *  files as data uris for display */
+  private inlineImages(html: string, attachments: { name: string; path: string; contentType: string }[]): string {
+    let out = html;
+    for (const a of attachments) {
+      try {
+        const b64 = fs.readFileSync(a.path).toString("base64");
+        out = out.split(`attachment://${a.name}`).join(`data:${a.contentType};base64,${b64}`);
+      } catch (err) {
+        console.warn("[publy] failed to inline image:", a.path, err);
+      }
+    }
+    return out;
   }
 
   private async activateView(viewType: string): Promise<ItemView> {
@@ -857,7 +873,7 @@ export default class PublyPlugin extends Plugin {
       for (const w of rendered.warnings) console.warn("[publy] " + w);
       const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCurrentNote(f);
-      view.setHtml(rendered.html, {
+      view.setHtml(this.inlineImages(rendered.html, rendered.attachments), {
         title: rendered.title || f.basename,
         author: rendered.meta.author,
         account: this.settings.account || undefined,
