@@ -2,8 +2,7 @@
 
 agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个托管服务负责稳定发布，一个主题商店负责排版资产分发。
 
-![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![status](https://img.shields.io/badge/status-M0%20design-orange)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-M0%20design-orange)
 
 [English](README.md) · **中文**
 
