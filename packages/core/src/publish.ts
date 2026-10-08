@@ -137,9 +137,12 @@ async function publishArticle(
     html = html.replaceAll(`${ATTACHMENT_SCHEME}${name}`, url);
   }
 
-  // cover: explicit cover attachment, else first uploaded content image
+  // cover: explicit cover attachment, else first uploaded content image,
+  // else a generated title card — every publishable note gets one
   let thumbMediaId = "";
+  let coverSource: "cover" | "first-image" | "auto" | undefined;
   if (req.cover) {
+    coverSource = "cover";
     const att = byName.get(req.cover);
     if (!att) throw new PublishError("ATTACHMENT_MISSING", `Cover attachment "${req.cover}" not found`);
     const buffer = Buffer.from(att.data, "base64");
@@ -154,6 +157,7 @@ async function publishArticle(
     if (first) {
       const { mediaId } = await upload(token, byName.get(first)!, "cover.jpg", cred.appId, cache);
       thumbMediaId = mediaId;
+      coverSource = "first-image";
     }
   }
   if (!thumbMediaId) {
@@ -163,6 +167,7 @@ async function publishArticle(
       const att: Attachment = { name: "auto-cover.png", data: coverPng.toString("base64"), contentType: "image/png" };
       const { mediaId } = await upload(token, att, "cover.jpg", cred.appId, cache);
       thumbMediaId = mediaId;
+      coverSource = "auto";
     }
   }
   if (!thumbMediaId) {
@@ -179,7 +184,7 @@ async function publishArticle(
     need_open_comment: req.needOpenComment ? 1 : 0,
     only_fans_can_comment: req.onlyFansCanComment ? 1 : 0,
   });
-  return { mediaId };
+  return { mediaId, coverSource };
 }
 
 async function publishImagePost(

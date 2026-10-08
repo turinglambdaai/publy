@@ -47,6 +47,8 @@ export interface JobInfo {
 
 export interface PublishResponse {
   mediaId: string;
+  /** which cover the draft ended up with: explicit cover, first body image, or generated title card */
+  coverSource?: "cover" | "first-image" | "auto";
 }
 
 export interface ErrorResponse {

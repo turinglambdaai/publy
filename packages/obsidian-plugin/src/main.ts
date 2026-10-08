@@ -114,6 +114,9 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   noActiveNote: { zh: "Publy: 没有活动笔记", en: "Publy: no active note" },
   errNoActiveNote: { zh: "没有活动笔记", en: "no active note" },
   healthBad: { zh: "health 响应异常", en: "unexpected health response" },
+  coverExplicit: { zh: "封面：指定封面图", en: "cover: chosen image" },
+  coverFirst: { zh: "封面：正文首图", en: "cover: first image" },
+  coverAuto: { zh: "封面：自动标题卡", en: "cover: auto title card" },
   ensureConfigured: { zh: "Publy: 还差一步——在设置里填 Server 地址和 API key（可用「测试连接」验证）", en: "Publy: almost there — set the Server URL and API key in settings (Test connection verifies it)" },
   inFlight: { zh: "Publy: 已有一篇在发布中——稍等，完成后会弹结果", en: "Publy: a publish is already running — the result will pop shortly" },
   rendering: { zh: "Publy: 渲染中…", en: "Publy: rendering…" },
@@ -217,6 +220,7 @@ interface PublishResponse {
   scheduled?: boolean;
   jobId?: string;
   runAt?: string;
+  coverSource?: "cover" | "first-image" | "auto";
 }
 
 interface HistoryEntry {
@@ -1081,7 +1085,10 @@ export default class PublyPlugin extends Plugin {
         void this.openHistory();
         return;
       }
-      new Notice(t("publishOk", { title, sec: ((Date.now() - t0) / 1000).toFixed(1) }), 5000);
+      const coverLabel = body.coverSource === "cover" ? t("coverExplicit")
+        : body.coverSource === "auto" ? t("coverAuto")
+        : t("coverFirst");
+      new Notice(`${t("publishOk", { title, sec: ((Date.now() - t0) / 1000).toFixed(1) })} · ${coverLabel}`, 6000);
     } catch (err) {
       progress.hide();
       this.status("");
