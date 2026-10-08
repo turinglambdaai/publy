@@ -22,6 +22,8 @@ export interface PublishRequest {
   images?: Attachment[];
   /** attachment name used as the article cover (thumb_media_id source) */
   cover?: string;
+  /** skip the first-image fallback and force the generated title card */
+  coverMode?: "auto";
   author?: string;
   digest?: string;
   contentSourceUrl?: string;

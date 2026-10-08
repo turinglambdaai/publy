@@ -152,7 +152,7 @@ async function publishArticle(
     const { mediaId } = await upload(token, coverAtt, "cover.jpg", cred.appId, cache);
     thumbMediaId = mediaId;
   }
-  if (!thumbMediaId) {
+  if (!thumbMediaId && req.coverMode !== "auto") {
     const first = unique[0];
     if (first) {
       const { mediaId } = await upload(token, byName.get(first)!, "cover.jpg", cred.appId, cache);

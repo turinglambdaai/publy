@@ -114,7 +114,10 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   noActiveNote: { zh: "Publy: 没有活动笔记", en: "Publy: no active note" },
   errNoActiveNote: { zh: "没有活动笔记", en: "no active note" },
   healthBad: { zh: "health 响应异常", en: "unexpected health response" },
-  coverExplicit: { zh: "封面：指定封面图", en: "cover: chosen image" },
+  coverExplicit: { zh: "封面：自选图片", en: "cover: your pick" },
+  coverPickTitle: { zh: "选择这篇的封面", en: "Pick a cover for this note" },
+  coverAutoTile: { zh: "自动标题卡", en: "Auto title card" },
+  btnConfirm: { zh: "确定", en: "OK" },
   coverFirst: { zh: "封面：正文首图", en: "cover: first image" },
   coverAuto: { zh: "封面：自动标题卡", en: "cover: auto title card" },
   ensureConfigured: { zh: "Publy: 还差一步——在设置里填 Server 地址和 API key（可用「测试连接」验证）", en: "Publy: almost there — set the Server URL and API key in settings (Test connection verifies it)" },
@@ -202,6 +205,8 @@ interface PublySettings {
   mediaDir: string;
   theme: string;
   lang: "auto" | "zh" | "en";
+  /** file path -> last cover choice ("auto" or attachment name) */
+  lastCover: Record<string, string>;
 }
 
 const DEFAULT_SETTINGS: PublySettings = {
@@ -211,6 +216,7 @@ const DEFAULT_SETTINGS: PublySettings = {
   mediaDir: "",
   theme: "claude",
   lang: "auto",
+  lastCover: {},
 };
 
 interface PublishResponse {
@@ -482,6 +488,93 @@ class AccountModal extends Modal {
   }
 
   onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+/** Pick this publish's cover: any body image, or the auto title card. */
+class CoverPickerModal extends Modal {
+  private plugin: PublyPlugin;
+  private file: TFile;
+  private candidates: { name: string; path: string; contentType: string }[];
+  private onPick: (choice: string | null) => void;
+  private chosen: string;
+  private picked = false;
+
+  constructor(app: App, plugin: PublyPlugin, file: TFile, candidates: { name: string; path: string; contentType: string }[], current: string, onPick: (choice: string | null) => void) {
+    super(app);
+    this.plugin = plugin;
+    this.file = file;
+    this.candidates = candidates;
+    this.chosen = current;
+    this.onPick = onPick;
+  }
+
+  onOpen(): void {
+    this.contentEl.createEl("h3").setText(t("coverPickTitle"));
+    const grid = this.contentEl.createEl("div");
+    grid.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin:10px 0;max-height:50vh;overflow-y:auto";
+    const tiles: [HTMLElement, string][] = [];
+    const paint = () => {
+      for (const [el, key] of tiles) el.style.borderColor = key === this.chosen ? "var(--interactive-accent)" : "var(--background-modifier-border)";
+    };
+    const addTile = (key: string, build: (box: HTMLElement) => void, label: string) => {
+      const el = grid.createEl("div");
+      el.style.cssText = "width:150px;border:2px solid var(--background-modifier-border);border-radius:8px;overflow:hidden;cursor:pointer";
+      const box = el.createEl("div");
+      box.style.cssText = "height:84px;display:flex;align-items:center;justify-content:center;background:var(--background-secondary);overflow:hidden";
+      build(box);
+      const lab = el.createEl("div");
+      lab.style.cssText = "font-size:12px;padding:4px 6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      lab.setText(label);
+      el.addEventListener("click", () => {
+        this.chosen = key;
+        paint();
+      });
+      tiles.push([el, key]);
+    };
+    for (const c of this.candidates.slice(0, 12)) {
+      let dataUri = "";
+      try {
+        dataUri = `data:${c.contentType};base64,${fs.readFileSync(c.path).toString("base64")}`;
+      } catch {
+        dataUri = "";
+      }
+      addTile(c.name, (box) => {
+        if (dataUri) {
+          const im = box.createEl("img");
+          im.src = dataUri;
+          im.style.cssText = "max-width:100%;max-height:100%;object-fit:cover";
+        } else {
+          box.setText("?");
+        }
+      }, c.name);
+    }
+    // the generated title card, previewed with this note's own title
+    addTile("auto", (box) => {
+      const d = box.createEl("div");
+      d.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f8f6f0;color:#b75c3d;font-weight:600;font-size:12px;text-align:center;padding:4px;line-height:1.4";
+      d.setText(this.file.basename);
+    }, t("coverAutoTile"));
+    paint();
+
+    const row = this.contentEl.createEl("div");
+    row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:6px";
+    const cancel = row.createEl("button");
+    cancel.textContent = t("btnCancel");
+    cancel.addEventListener("click", () => this.close());
+    const ok = row.createEl("button");
+    ok.textContent = t("btnConfirm");
+    ok.classList.add("mod-cta");
+    ok.addEventListener("click", () => {
+      this.picked = true;
+      this.close();
+      this.onPick(this.chosen);
+    });
+  }
+
+  onClose(): void {
+    if (!this.picked) this.onPick(null);
     this.contentEl.empty();
   }
 }
@@ -1017,6 +1110,8 @@ export default class PublyPlugin extends Plugin {
     let html: string;
     let payloadAttachments: { name: string; data: string; contentType: string }[];
     let coverName: string | undefined;
+    let explicitCover = false;
+    let coverMode: "auto" | undefined;
     let type: "article" | "image_post";
     let title: string;
     let author: string | undefined;
@@ -1030,7 +1125,10 @@ export default class PublyPlugin extends Plugin {
       }));
       if (rendered.cover) {
         const existing = rendered.attachments.find((a) => a.path === rendered.cover);
-        coverName = existing?.name;
+        if (existing) {
+          coverName = existing.name;
+          explicitCover = true;
+        }
       }
       html = rendered.html;
       type = rendered.type;
@@ -1041,6 +1139,31 @@ export default class PublyPlugin extends Plugin {
       this.status("");
       new Notice(t("renderFail", { msg: (err as Error).message }));
       return;
+    }
+
+    // no explicit cover -> let the user pick: any body image or the auto
+    // title card (first image is just the pre-selection, never a surprise)
+    if (type === "article" && !explicitCover && payloadAttachments.length === 0) {
+      // nothing to choose from — the title card is the only cover there is
+      coverMode = "auto";
+    }
+    if (type === "article" && !explicitCover && payloadAttachments.length > 0) {
+      const last = this.settings.lastCover?.[f.path];
+      const pre = last && (last === "auto" || payloadAttachments.some((c) => c.name === last))
+        ? last
+        : payloadAttachments[0]?.name ?? "auto";
+      const choice = await new Promise<string | null>((resolve) => {
+        new CoverPickerModal(this.app, this, f, payloadAttachments, pre, resolve).open();
+      });
+      if (choice === null) {
+        progress.hide();
+        this.status("");
+        return;
+      }
+      this.settings.lastCover = { ...(this.settings.lastCover ?? {}), [f.path]: choice };
+      await this.saveSettings();
+      if (choice === "auto") coverMode = "auto";
+      else coverName = choice;
     }
 
     progress.setMessage(t("uploading"));
@@ -1059,6 +1182,7 @@ export default class PublyPlugin extends Plugin {
           images: payloadAttachments,
           cover: coverName,
           author,
+          ...(coverMode ? { coverMode } : {}),
           // server dedupes on this within 10 min — a double-click cannot
           // create a second identical draft even if it slips past the lock
           idempotencyKey: "obs-" + crypto
