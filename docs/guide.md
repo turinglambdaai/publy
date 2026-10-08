@@ -208,27 +208,13 @@ pnpm install --frozen-lockfile && pnpm -r build
 
 服务端自带：access_token 缓存（两小时过期自动刷新、并发单飞）、素材去重（同图免重传）、幂等（同内容 10 分钟内重试不重复发布）、审计日志（`~/.publy/server-data/history.jsonl`，客户端 `publy history` 直读）、定时任务（`--at`，jobs.json 持久化 + 失败重试 3 次）、webhook（账号配置 `"webhook": "https://..."` 即推送 publish/failed 事件）。
 
-安全建议：API key 用 24+ 字节随机值（`node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`）；生产环境建议服务器前挂 Caddy 上 HTTPS（Caddyfile 两行：域名 + `reverse_proxy localhost:8081`），或让客户端走 SSH 隧道。
+安全建议：API key 用 24+ 字节随机值（`node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`）；生产环境建议服务器前挂 Caddy 上 HTTPS（Caddyfile 两行：域名 + `reverse_proxy localhost:8081`）。
 
 更新版本：
 
 ```bash
 cd /opt/publy && git pull && pnpm install --frozen-lockfile && pnpm -r build && systemctl restart publy-server
 ```
-
-### 公司网络注意
-
-部分企业网络会拦截大体积 POST（几十 KB 阈值）。现象：`/health` 通但 publish 超时。publy 内建了解法：
-
-1. 在 `~/.publy/config.json` 加一次隧道配置：
-
-```json
-"tunnel": { "ssh_target": "user@your-server", "local_port": 18081, "remote_port": 8081, "server": "http://127.0.0.1:18081" }
-```
-
-`server` 是隧道建立后使用的地址（默认 `http://127.0.0.1:<local_port>`）：当主地址（如 HTTPS 域名）被网络偶发拦截时，publish 自动切到隧道地址重试。
-
-2. 之后 `publy tunnel` 一条命令拉起并验证（幂等，已在则跳过）；`publy publish` 遇到连不上服务器时也会**自动拉起隧道重试一次**，无需手工干预。
 
 ## 查发布记录与定时任务
 
@@ -247,8 +233,7 @@ publy jobs cancel <id>   # 取消未执行的定时任务
 | 退出码 4 | 图片消息 lint 未过：按提示补 cover/ending 节、压 caption |
 | 退出码 5 + `WECHAT_40001` | AppSecret 不对或被重置，改服务器端 server.json |
 | 退出码 5 + `WECHAT_45166` | 图片消息内容超微信长度限制，精简 |
-| 连接拒绝 | 配了隧道就 `publy tunnel`；没配则 `systemctl status publy-server` 或查端口放行 |
-| health 通但 publish 超时 | 企业网络拦大 POST：配 tunnel，publish 会自动走隧道 |
+| 连接拒绝 | 服务端 `systemctl status publy-server`，检查安全组/防火墙端口放行 |
 | 卡片出现乱码方块 | 生僻字/emoji 超出内置 GB2312 子集：`--font-file` 指定全量字体（首次自动下载） |
 
 ## 设计边界（为什么没有这些）
