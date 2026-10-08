@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl } from "obsidian";
+import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl, Modal } from "obsidian";
 import {
   renderMarkdown,
   renderCards,
@@ -50,6 +50,7 @@ const THEME_LABELS: Record<string, string> = {
 };
 
 const VIEW_TYPE_PUBLY_PREVIEW = "publy-preview";
+const PUBLY_HISTORY_VIEW = "publy-history";
 
 // Obsidian evaluates plugin bundles with a synthetic module context
 // (module.filename = null, __dirname = electron.asar/renderer), so package
@@ -94,6 +95,29 @@ interface PublishResponse {
   mediaId?: string;
   code?: string;
   message?: string;
+  scheduled?: boolean;
+  jobId?: string;
+  runAt?: string;
+}
+
+interface HistoryEntry {
+  ts: string;
+  event: string;
+  account?: string;
+  title?: string;
+  type?: string;
+  mediaId?: string;
+  error?: string;
+}
+
+interface JobEntry {
+  id: string;
+  runAt: string;
+  status: string;
+  account?: string;
+  type?: string;
+  title?: string;
+  error?: string;
 }
 
 /** In-app preview leaf: article HTML or image-post card strip, with a small
@@ -157,10 +181,179 @@ class PublyPreviewView extends ItemView {
   }
 }
 
+/** Publish history + scheduled jobs leaf. */
+class PublyHistoryView extends ItemView {
+  plugin: PublyPlugin;
+  /** re-fetches and re-renders; set by the plugin on every render */
+  refresh: (() => Promise<void>) | null = null;
+
+  constructor(leaf: WorkspaceLeaf, plugin: PublyPlugin) {
+    super(leaf);
+    this.plugin = plugin;
+  }
+  getViewType(): string { return PUBLY_HISTORY_VIEW; }
+  getDisplayText(): string { return "Publy 发布历史"; }
+  getIcon(): string { return "history"; }
+  async onOpen(): Promise<void> { await this.plugin.openHistory(); }
+  async onClose(): Promise<void> { /* nothing */ }
+
+  renderMessage(text: string): void {
+    this.contentEl.empty();
+    const d = this.contentEl.createEl("div");
+    d.style.cssText = "padding:16px;font-size:13px;color:var(--text-muted)";
+    d.setText(text);
+  }
+
+  renderLoading(): void {
+    this.renderMessage("加载中…");
+  }
+
+  renderHistory(jobs: JobEntry[], entries: HistoryEntry[], onCancelJob: (id: string) => void): void {
+    this.contentEl.empty();
+    const bar = this.contentEl.createEl("div");
+    bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0";
+    const title = bar.createEl("div");
+    title.style.cssText = "font-size:15px;font-weight:600";
+    title.setText("发布历史");
+    const refreshBtn = bar.createEl("button");
+    refreshBtn.textContent = "↻ 刷新";
+    refreshBtn.addEventListener("click", () => void this.refresh?.());
+
+    const fmt = (iso: string) => {
+      try {
+        return new Date(iso).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      } catch {
+        return iso;
+      }
+    };
+    const typeLabel = (t?: string) => (t === "image_post" ? "图片消息" : "文章");
+    const div = (parent: HTMLElement, css?: string): HTMLElement => {
+      const d = parent.createEl("div");
+      if (css) d.style.cssText = css;
+      return d;
+    };
+
+    const section = (text: string): void => {
+      const h = div(this.contentEl, "padding:14px 16px 4px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em");
+      h.setText(text);
+    };
+
+    const pending = jobs.filter((j) => j.status === "pending");
+    section(`待发任务（${pending.length}）`);
+    if (pending.length === 0) {
+      div(this.contentEl, "padding:2px 16px;font-size:13px;color:var(--text-muted)").setText("没有待发的定时任务。右键笔记或命令面板可排期。");
+    }
+    for (const j of pending) {
+      const row = div(this.contentEl, "display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px");
+      row.createEl("span").setText("🕒");
+      const main = div(row, "flex:1;min-width:0");
+      div(main, "overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(j.title ?? "(无标题)");
+      div(main, "font-size:12px;color:var(--text-muted)").setText(`${fmt(j.runAt)} · ${j.account ?? "?"} · ${typeLabel(j.type)}`);
+      const cancel = row.createEl("button");
+      cancel.textContent = "取消";
+      cancel.addEventListener("click", () => onCancelJob(j.id));
+    }
+
+    section("最近记录");
+    if (entries.length === 0) {
+      div(this.contentEl, "padding:2px 16px;font-size:13px;color:var(--text-muted)").setText("还没有发布记录。");
+    }
+    for (const e of entries.slice().reverse()) {
+      const icon = e.event === "published" ? "✅" : e.event === "failed" ? "❌" : e.event === "scheduled" ? "🕒" : "✖️";
+      const row = div(this.contentEl, "display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px");
+      row.createEl("span").setText(icon);
+      const main = div(row, "flex:1;min-width:0");
+      div(main, "overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(e.title ?? "(无标题)");
+      const sub = e.event === "failed" && e.error ? `${fmt(e.ts)} · ${e.error}` : `${fmt(e.ts)} · ${e.account ?? "?"} · ${typeLabel(e.type)}`;
+      div(main, "font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(sub);
+    }
+  }
+}
+
+/** Simple list picker for switching accounts. */
+class AccountModal extends Modal {
+  private names: string[];
+  private current: string;
+  private onPick: (name: string) => void;
+
+  constructor(app: App, names: string[], current: string, onPick: (name: string) => void) {
+    super(app);
+    this.names = names;
+    this.current = current;
+    this.onPick = onPick;
+  }
+
+  onOpen(): void {
+    this.contentEl.createEl("h3").setText("切换公众号账号");
+    for (const n of this.names) {
+      const row = this.contentEl.createEl("div");
+      row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px";
+      row.createEl("span").setText(n === this.current ? `${n}（当前）` : n);
+      const b = row.createEl("button");
+      b.textContent = "切换";
+      b.disabled = n === this.current;
+      b.addEventListener("click", () => {
+        this.close();
+        this.onPick(n);
+      });
+    }
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
+/** Pick a local date+time for scheduled publishing. */
+class ScheduleModal extends Modal {
+  private onSubmit: (iso: string | null) => void;
+
+  constructor(app: App, onSubmit: (iso: string | null) => void) {
+    super(app);
+    this.onSubmit = onSubmit;
+  }
+
+  onOpen(): void {
+    this.contentEl.createEl("h3").setText("定时发布");
+    const desc = this.contentEl.createEl("p");
+    desc.style.cssText = "font-size:13px;color:var(--text-muted);margin:4px 0 12px";
+    desc.setText("到点由 Publy 服务自动发布到公众号草稿箱；配额在执行时计。");
+    const input = this.contentEl.createEl("input");
+    input.type = "datetime-local";
+    input.style.cssText = "font-size:14px;padding:6px 8px";
+    const min = new Date(Date.now() + 60_000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    input.min = `${min.getFullYear()}-${pad(min.getMonth() + 1)}-${pad(min.getDate())}T${pad(min.getHours())}:${pad(min.getMinutes())}`;
+    const row = this.contentEl.createEl("div");
+    row.style.cssText = "display:flex;gap:8px;margin-top:12px";
+    const ok = row.createEl("button");
+    ok.textContent = "排期";
+    ok.classList.add("mod-cta");
+    ok.addEventListener("click", () => {
+      const iso = input.value ? new Date(input.value).toISOString() : null;
+      if (input.value && (Number.isNaN(new Date(input.value).getTime()) || new Date(input.value).getTime() < Date.now() - 60_000)) {
+        new Notice("时间无效或已过去——重新选一个未来时间");
+        return;
+      }
+      this.close();
+      this.onSubmit(iso);
+    });
+    const cancel = row.createEl("button");
+    cancel.textContent = "取消";
+    cancel.addEventListener("click", () => this.close());
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export default class PublyPlugin extends Plugin {
   settings: PublySettings;
   wasmOk = false;
   statusBarItem: HTMLElement | null = null;
+  /** the note the in-app preview currently shows (for live re-render) */
+  private livePreviewPath: string | null = null;
 
   async onload(): Promise<void> {
     // WASM PNG renderer (community-plugin safe: no native binaries).
@@ -208,7 +401,19 @@ export default class PublyPlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 
     this.registerView(VIEW_TYPE_PUBLY_PREVIEW, (leaf: WorkspaceLeaf) => new PublyPreviewView(leaf, this));
+    this.registerView(PUBLY_HISTORY_VIEW, (leaf: WorkspaceLeaf) => new PublyHistoryView(leaf, this));
     this.statusBarItem = this.addStatusBarItem();
+
+    // live preview: re-render the previewed note shortly after it is saved
+    let liveTimer: number | undefined;
+    this.registerEvent(
+      this.app.vault.on("modify", (file) => {
+        if (!(file instanceof TFile) || file.path !== this.livePreviewPath) return;
+        if (this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW).length === 0) return;
+        window.clearTimeout(liveTimer);
+        liveTimer = window.setTimeout(() => void this.previewCurrentNote(file as TFile), 900);
+      }),
+    );
 
     // right-click any note → publish / preview / copy for THAT note
     this.registerEvent(
@@ -235,6 +440,12 @@ export default class PublyPlugin extends Plugin {
     });
 
     this.addCommand({
+      id: "publish-scheduled",
+      name: "Publish at scheduled time…",
+      callback: () => void this.publishScheduled(),
+    });
+
+    this.addCommand({
       id: "preview-current-note",
       name: "Preview (auto: article or image-post cards)",
       callback: () => this.previewCurrentNote(),
@@ -250,6 +461,18 @@ export default class PublyPlugin extends Plugin {
       id: "copy-rendered-html",
       name: "Copy rendered rich text (paste into WeChat editor)",
       callback: () => this.copyRenderedHtml(),
+    });
+
+    this.addCommand({
+      id: "show-history",
+      name: "Open publish history & scheduled jobs",
+      callback: () => void this.openHistory(),
+    });
+
+    this.addCommand({
+      id: "switch-account",
+      name: "Switch WeChat account",
+      callback: () => void this.switchAccount(),
     });
 
     this.addSettingTab(new PublySettingTab(this.app, this));
@@ -336,15 +559,92 @@ export default class PublyPlugin extends Plugin {
     return rendered.html;
   }
 
-  private async activatePreviewView(): Promise<PublyPreviewView> {
+  private async activateView(viewType: string): Promise<ItemView> {
     const { workspace } = this.app;
-    let leaf = workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW)[0] as WorkspaceLeaf | undefined;
+    let leaf = workspace.getLeavesOfType(viewType)[0] as WorkspaceLeaf | undefined;
     if (!leaf) {
       leaf = workspace.getRightLeaf(false);
-      await leaf.setViewState({ type: VIEW_TYPE_PUBLY_PREVIEW, active: true });
+      await leaf.setViewState({ type: viewType, active: true });
     }
     workspace.revealLeaf(leaf);
-    return leaf.view as PublyPreviewView;
+    return leaf.view as ItemView;
+  }
+
+  /** authenticated GET against the configured server; throws on config/HTTP errors */
+  async apiGet<T>(path: string): Promise<T> {
+    const base = new URL(this.settings.server);
+    const res = await requestUrl({
+      url: new URL(path, base).toString(),
+      method: "GET",
+      headers: { "x-api-key": this.settings.apiKey },
+    });
+    if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
+    return res.json as T;
+  }
+
+  async openHistory(): Promise<void> {
+    const view = (await this.activateView(PUBLY_HISTORY_VIEW)) as PublyHistoryView;
+    if (!this.ensureConfigured()) {
+      view.renderMessage("配置 Server 和 API key 后，这里会显示发布历史与待发的定时任务。");
+      return;
+    }
+    view.renderLoading();
+    view.refresh = () => this.openHistory();
+    try {
+      const [hist, jobs] = await Promise.all([
+        this.apiGet<{ history?: HistoryEntry[] }>("/v1/history?limit=50"),
+        this.apiGet<{ jobs?: JobEntry[] }>("/v1/jobs"),
+      ]);
+      view.renderHistory(jobs.jobs ?? [], hist.history ?? [], (id) => void this.cancelJob(id));
+    } catch (err) {
+      view.renderMessage(`加载失败：${(err as Error).message} — 检查「测试连接」里的地址与 key`);
+    }
+  }
+
+  async cancelJob(id: string): Promise<void> {
+    try {
+      const base = new URL(this.settings.server);
+      const res = await requestUrl({
+        url: new URL(`/v1/jobs/${id}`, base).toString(),
+        method: "DELETE",
+        headers: { "x-api-key": this.settings.apiKey },
+      });
+      if (res.status >= 400) {
+        new Notice(`取消失败：${(res.json as { message?: string } | null)?.message ?? res.status}`);
+      } else {
+        new Notice("已取消待发任务");
+      }
+    } catch (err) {
+      new Notice(`取消失败：${(err as Error).message}`);
+    }
+    await this.openHistory();
+  }
+
+  /** account picker over the accounts the key owns on the server */
+  async switchAccount(): Promise<void> {
+    if (!this.ensureConfigured()) return;
+    let names: string[] = [];
+    try {
+      const r = await this.apiGet<{ accounts?: { name: string }[] }>("/v1/accounts");
+      names = (r.accounts ?? []).map((a) => a.name);
+    } catch (err) {
+      new Notice(`获取账号列表失败：${(err as Error).message}`);
+      return;
+    }
+    if (names.length === 0) {
+      new Notice("这个 key 名下没有公众号账号——先在服务端绑定（购买页 /v1/bind 或 publy account add）");
+      return;
+    }
+    const pick = (name: string) => {
+      this.settings.account = name;
+      void this.saveSettings();
+      new Notice(`已切换到「${name}」`);
+    };
+    if (names.length === 1) {
+      pick(names[0]);
+      return;
+    }
+    new AccountModal(this.app, names, this.settings.account, pick).open();
   }
 
   /** one preview command: picks article or image-post cards from frontmatter.
@@ -356,13 +656,14 @@ export default class PublyPlugin extends Plugin {
       return;
     }
     const raw = await this.app.vault.cachedRead(f);
+    this.livePreviewPath = f.path;
     if (this.detectIsCards(raw)) {
       await this.previewCardDeck(f, raw);
       return;
     }
     try {
       const html = await this.renderCurrent(f);
-      const view = await this.activatePreviewView();
+      const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCurrentNote(f);
       view.setHtml(html);
     } catch (err) {
@@ -388,7 +689,7 @@ export default class PublyPlugin extends Plugin {
       const cards = result.cards.map((c) => ({
         base64: fs.readFileSync(c.file).toString("base64"),
       }));
-      const view = await this.activatePreviewView();
+      const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCardDeck(f);
       view.setCards(cards, result.caption);
       if (!result.lint.ok) {
@@ -438,7 +739,23 @@ export default class PublyPlugin extends Plugin {
 
   /** public: the preview-view toolbar calls back into it */
   async publishCurrentNote(file?: TFile): Promise<void> {
-    const f = file ?? this.currentFile();
+    await this.doPublish(file ?? this.currentFile(), undefined);
+  }
+
+  /** pick a time, then hand the note to the server's job queue */
+  async publishScheduled(): Promise<void> {
+    const f = this.currentFile();
+    if (!f) {
+      new Notice("Publy: 没有活动笔记");
+      return;
+    }
+    new ScheduleModal(this.app, (iso) => {
+      if (iso) void this.doPublish(f, iso);
+    }).open();
+  }
+
+  private async doPublish(fileArg: TFile | null, publishAt?: string): Promise<void> {
+    const f = fileArg;
     if (!f) {
       new Notice("Publy: 没有活动笔记");
       return;
@@ -496,11 +813,18 @@ export default class PublyPlugin extends Plugin {
           images: payloadAttachments,
           cover: coverName,
           author,
+          ...(publishAt ? { publishAt } : {}),
         }),
       });
       const body = res.json as PublishResponse;
       if (!res.status || res.status >= 400) {
         new Notice(`Publy: 发布失败 — ${body.code ?? res.status}: ${body.message ?? ""}`);
+        return;
+      }
+      if (body.scheduled) {
+        const when = body.runAt ? new Date(body.runAt).toLocaleString("zh-CN") : "";
+        new Notice(`🕒《${title}》已排期 ${when} — 在「发布历史」里可取消`);
+        void this.openHistory();
         return;
       }
       new Notice(`✅《${title}》已进公众号草稿箱（${((Date.now() - t0) / 1000).toFixed(1)} 秒）`);
@@ -554,12 +878,36 @@ class PublySettingTab extends PluginSettingTab {
       });
       text.inputEl.type = "password";
     });
-    new Setting(containerEl).setName("公众号账号名").setDesc("服务端绑定的账号名（publy account add 时的名字）").addText((text) =>
-      text.setPlaceholder("my-account").setValue(this.plugin.settings.account).onChange(async (v) => {
-        this.plugin.settings.account = v.trim();
-        await this.plugin.saveSettings();
-      }),
-    );
+    const acctSetting = new Setting(containerEl).setName("公众号账号名").setDesc("服务端绑定的账号名；配置好后自动列出 key 名下的账号");
+    void (async () => {
+      try {
+        const r = await this.plugin.apiGet<{ accounts?: { name: string }[] }>("/v1/accounts");
+        const names = (r.accounts ?? []).map((a) => a.name);
+        if (names.length === 0) throw new Error("no accounts");
+        const opts: Record<string, string> = {};
+        for (const n of names) opts[n] = n;
+        acctSetting.addDropdown((drop) =>
+          drop
+            .addOptions(opts)
+            .setValue(names.includes(this.plugin.settings.account) ? this.plugin.settings.account : names[0])
+            .onChange(async (v) => {
+              this.plugin.settings.account = v;
+              await this.plugin.saveSettings();
+            }),
+        );
+        if (!names.includes(this.plugin.settings.account)) {
+          this.plugin.settings.account = names[0];
+          await this.plugin.saveSettings();
+        }
+      } catch {
+        acctSetting.addText((text) =>
+          text.setPlaceholder("my-account（配置服务后可下拉选择）").setValue(this.plugin.settings.account).onChange(async (v) => {
+            this.plugin.settings.account = v.trim();
+            await this.plugin.saveSettings();
+          }),
+        );
+      }
+    })();
     new Setting(containerEl).setName("媒体目录").setDesc("本地图片查找目录；留空 = 自动跟随 vault 附件设置").addText((text) =>
       text.setPlaceholder("自动（vault 附件目录）").setValue(this.plugin.settings.mediaDir).onChange(async (v) => {
         this.plugin.settings.mediaDir = v.trim();

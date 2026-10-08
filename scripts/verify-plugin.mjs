@@ -49,11 +49,15 @@ class ItemView {
   async onClose() {}
   setHtml(html) { calls.push("view.setHtml(" + html.length + " chars)"); }
   setCards(cards, caption) { calls.push("view.setCards(" + cards.length + " cards)"); }
+  renderMessage(text) { calls.push("view.renderMessage:" + String(text).slice(0, 40)); }
+  renderLoading() { calls.push("view.renderLoading"); }
+  renderHistory(jobs, entries) { calls.push("view.renderHistory(jobs=" + jobs.length + ",entries=" + entries.length + ")"); }
 }
 class WorkspaceLeaf {
   constructor() { this.view = null; }
   async setViewState(state) {
-    if (state.type === "publy-preview") this.view = new ItemView(this);
+    this.view = new ItemView(this);
+    this.view.getViewType = () => state.type;
   }
 }
 class Plugin {
@@ -101,8 +105,15 @@ class Setting {
   addDropdown() { return this; }
   addButton() { return this; }
 }
+class Modal {
+  constructor() { this.contentEl = new Component(); }
+  open() { calls.push("modal.open"); }
+  close() {}
+  onOpen() {}
+  onClose() {}
+}
 class TFile { path = ""; }
-const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl: async () => ({ json: {}, status: 200 }) };
+const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, requestUrl: async () => ({ json: {}, status: 200 }) };
 
 // intercept module loading for obsidian/electron
 const origLoad = Module._load;
@@ -144,4 +155,9 @@ app.workspace.activeFile = { path: "samples/card-sample.md" };
 await inst.previewCurrentNote(); // smart dispatch -> card deck
 if (!calls.some((c) => c.startsWith("view.setCards("))) fail("card preview did not render — calls: " + calls.join(" | "));
 
-console.log("PASS — onload, article preview, card deck preview");
+// history view renders from the (stub) server API
+inst.settings = { ...inst.settings, server: "https://stub.test", apiKey: "k", account: "a" };
+await inst.openHistory();
+if (!calls.some((c) => c.startsWith("view.renderHistory("))) fail("history did not render — calls: " + calls.join(" | "));
+
+console.log("PASS — onload, article preview, card deck preview, history");
