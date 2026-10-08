@@ -176,6 +176,12 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   const full = `<html><head><style>${theme.css}\n${hljsCss}</style></head><body>${styled}</body></html>`;
   const inlined = juice(full, { removeStyleTags: true });
   const $out = cheerio.load(inlined);
+  // tables & code blocks must never blow out the column: WeChat wraps cell
+  // text (width:100% alone loses to unbreakable tokens like long urls), and
+  // pathological tables scroll inside the content width instead
+  $out("td, th").css({ "word-break": "break-word", "overflow-wrap": "anywhere" });
+  $out("table").wrap('<div style="overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%"></div>');
+  $out("pre").css("overflow-x", "auto");
   // outerHTML keeps the wrapper's inline styles (background, font-size) — the
   // WeChat editor pastes this div as-is.
   const html = $out.html("#publy") ?? "";
