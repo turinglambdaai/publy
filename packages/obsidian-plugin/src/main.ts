@@ -140,7 +140,8 @@ class PublyPreviewView extends ItemView {
 
   private toolbar(): void {
     const bar = this.contentEl.createEl("div");
-    bar.style.cssText = "display:flex;gap:8px;align-items:center;padding:10px 18px 0";
+    bar.style.cssText =
+      "display:flex;gap:8px;align-items:center;padding:10px 16px;background:var(--background-primary);border-bottom:1px solid var(--background-modifier-border)";
     const btn = (label: string, fn: () => void) => {
       const b = bar.createEl("button");
       b.textContent = label;
@@ -155,28 +156,36 @@ class PublyPreviewView extends ItemView {
   setHtml(html: string): void {
     this.contentEl.empty();
     this.toolbar();
-    const wrap = this.contentEl.createEl("div");
-    wrap.style.cssText = "background:#ddd;padding:18px";
-    const page = wrap.createEl("div");
-    page.style.cssText = "max-width:700px;margin:0 auto;background:#fff;min-height:60vh";
+    // themed canvas + elevated white paper (WeChat renders on white regardless
+    // of the app theme, so the page itself stays white in dark mode too)
+    const canvas = this.contentEl.createEl("div");
+    canvas.style.cssText =
+      "background:var(--background-secondary);padding:28px 18px 48px;min-height:calc(100vh - 140px);box-sizing:border-box";
+    const page = canvas.createEl("div");
+    page.style.cssText =
+      "max-width:700px;margin:0 auto;background:#fff;border-radius:10px;padding:40px 48px;min-height:70vh;box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.1),0 12px 36px rgba(0,0,0,.12)";
     page.innerHTML = html;
   }
   setCards(cards: { base64: string }[], caption: string): void {
     this.contentEl.empty();
     this.toolbar();
-    const wrap = this.contentEl.createEl("div");
-    wrap.style.cssText = "padding:18px";
-    const strip = wrap.createEl("div");
-    strip.style.cssText = "display:flex;gap:12px;overflow-x:auto;padding-bottom:10px";
+    const canvas = this.contentEl.createEl("div");
+    canvas.style.cssText =
+      "background:var(--background-secondary);padding:28px 18px 48px;min-height:calc(100vh - 140px);box-sizing:border-box";
+    // centered when the deck fits, scrollable when it does not
+    const strip = canvas.createEl("div");
+    strip.style.cssText =
+      "display:flex;gap:16px;overflow-x:auto;width:fit-content;max-width:100%;margin:0 auto;padding:4px 4px 16px";
     for (const c of cards) {
       const img = strip.createEl("img");
       img.src = "data:image/png;base64," + c.base64;
       img.style.height = "430px";
-      img.style.borderRadius = "10px";
-      img.style.boxShadow = "0 6px 24px rgba(0,0,0,.35)";
+      img.style.borderRadius = "12px";
+      img.style.boxShadow = "0 1px 3px rgba(0,0,0,.12),0 12px 32px rgba(0,0,0,.18)";
     }
-    const cap = wrap.createEl("div");
-    cap.style.cssText = "margin-top:14px;font-size:14px;line-height:1.7;white-space:pre-wrap";
+    const cap = canvas.createEl("div");
+    cap.style.cssText =
+      "max-width:700px;margin:8px auto 0;background:#fff;border-radius:10px;padding:16px 20px;font-size:14px;line-height:1.8;white-space:pre-wrap;box-shadow:0 1px 3px rgba(0,0,0,.1),0 8px 24px rgba(0,0,0,.1)";
     cap.textContent = caption;
   }
 }
