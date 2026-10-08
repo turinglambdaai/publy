@@ -1,4 +1,5 @@
 // Publy Obsidian plugin — client A: write in Obsidian, publish through a Publy server.
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -363,6 +364,8 @@ export default class PublyPlugin extends Plugin {
   statusBarItem: HTMLElement | null = null;
   /** the note the in-app preview currently shows (for live re-render) */
   private livePreviewPath: string | null = null;
+  /** one publish at a time — double-clicks must not create duplicate drafts */
+  private publishInFlight = false;
 
   async onload(): Promise<void> {
     // WASM PNG renderer (community-plugin safe: no native binaries).
@@ -769,6 +772,19 @@ export default class PublyPlugin extends Plugin {
       new Notice("Publy: 没有活动笔记");
       return;
     }
+    if (this.publishInFlight) {
+      new Notice("Publy: 已有一篇在发布中——稍等，完成后会弹结果");
+      return;
+    }
+    this.publishInFlight = true;
+    try {
+      await this.doPublishInner(f, publishAt);
+    } finally {
+      this.publishInFlight = false;
+    }
+  }
+
+  private async doPublishInner(f: TFile, publishAt?: string): Promise<void> {
     if (!this.ensureConfigured()) return;
     let publishUrl: URL;
     try {
@@ -779,6 +795,9 @@ export default class PublyPlugin extends Plugin {
     }
     const raw = await this.app.vault.cachedRead(f);
     this.status("Publy: 渲染中…");
+    // one sticky progress toast for the whole run — transient toasts vanish
+    // mid-publish and reads as "nothing happened", inviting double-clicks
+    const progress = new Notice("Publy: 渲染中…", 0);
     let html: string;
     let payloadAttachments: { name: string; data: string; contentType: string }[];
     let coverName: string | undefined;
@@ -802,11 +821,13 @@ export default class PublyPlugin extends Plugin {
       title = rendered.title || f.basename;
       author = rendered.meta.author;
     } catch (err) {
+      progress.hide();
       this.status("");
       new Notice(`Publy: 渲染失败 — ${(err as Error).message}`);
       return;
     }
 
+    progress.setMessage("Publy: 上传到公众号…");
     this.status("Publy: 上传到公众号…");
     const t0 = Date.now();
     try {
@@ -822,23 +843,37 @@ export default class PublyPlugin extends Plugin {
           images: payloadAttachments,
           cover: coverName,
           author,
+          // server dedupes on this within 10 min — a double-click cannot
+          // create a second identical draft even if it slips past the lock
+          idempotencyKey: "obs-" + crypto
+            .createHash("sha1")
+            .update([f.path, f.stat.mtime, type, title, html.length, publishAt ?? ""].join("|"))
+            .digest("hex"),
           ...(publishAt ? { publishAt } : {}),
         }),
       });
       const body = res.json as PublishResponse;
+      progress.hide();
+      this.status("");
       if (!res.status || res.status >= 400) {
-        new Notice(`Publy: 发布失败 — ${body.code ?? res.status}: ${body.message ?? ""}`);
+        new Notice(`Publy: 发布失败 — ${body.code ?? res.status}: ${body.message ?? ""}`, 8000);
+        return;
+      }
+      if (body.deduped) {
+        new Notice(`Publy: 10 分钟内已发过《${title}》——本次跳过（防重复）`, 6000);
         return;
       }
       if (body.scheduled) {
         const when = body.runAt ? new Date(body.runAt).toLocaleString("zh-CN") : "";
-        new Notice(`🕒《${title}》已排期 ${when} — 在「发布历史」里可取消`);
+        new Notice(`🕒《${title}》已排期 ${when} — 在「发布历史」里可取消`, 6000);
         void this.openHistory();
         return;
       }
-      new Notice(`✅《${title}》已进公众号草稿箱（${((Date.now() - t0) / 1000).toFixed(1)} 秒）`);
+      new Notice(`✅《${title}》已进公众号草稿箱（${((Date.now() - t0) / 1000).toFixed(1)} 秒）`, 5000);
     } catch (err) {
-      new Notice(`Publy: 发布失败 — ${(err as Error).message}（公司网络请确认隧道已启动）`);
+      progress.hide();
+      this.status("");
+      new Notice(`Publy: 发布失败 — ${(err as Error).message}（公司网络请确认隧道已启动）`, 8000);
     } finally {
       this.status("");
     }
