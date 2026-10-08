@@ -191,7 +191,7 @@ test("user keys see and cancel only their own scheduled jobs", async () => {
   // direct access and cancel are both refused
   const get = await app.inject({ method: "GET", url: `/v1/jobs/${adminJobId}`, headers: H(userKey) });
   assert.equal(get.statusCode, 403);
-  const del = await app.inject({ method: "DELETE", url: `/v1/jobs/${adminJobId}`, headers: H(userKey) });
+  const del = await app.inject({ method: "DELETE", url: `/v1/jobs/${adminJobId}`, headers: { "x-api-key": userKey } });
   assert.equal(del.statusCode, 403);
 
   // the user can schedule and cancel their own
@@ -203,7 +203,7 @@ test("user keys see and cancel only their own scheduled jobs", async () => {
   });
   assert.equal(own.json().scheduled, true);
   const ownId = own.json().jobId;
-  const cancel = await app.inject({ method: "DELETE", url: `/v1/jobs/${ownId}`, headers: H(userKey) });
+  const cancel = await app.inject({ method: "DELETE", url: `/v1/jobs/${ownId}`, headers: { "x-api-key": userKey } });
   assert.equal(cancel.statusCode, 200);
   assert.equal(cancel.json().ok, true);
 });

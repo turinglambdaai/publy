@@ -497,11 +497,17 @@ export function buildApp(config: ServerConfig) {
   });
 
   // accounts visible to the caller: names only — secrets and appIds never
-  // leave the server (used by clients for account pickers)
+  // leave the server (used by clients for account pickers). Admin sees
+  // config accounts (server.json) plus DB accounts; users see their own.
   app.get("/v1/accounts", async (req) => {
     const caller = (req as unknown as { caller: Caller }).caller;
-    const accounts = caller.admin ? store.listAccounts() : store.listAccounts().filter((a) => a.ownerUserId === caller.user.id);
-    return { accounts: accounts.map((a) => ({ name: a.name })) };
+    const configNames = new Set((config.accounts ?? []).map((a) => a.name));
+    const all: { name: string; ownerUserId: string | null }[] = [
+      ...(config.accounts ?? []).map((a) => ({ name: a.name, ownerUserId: null as string | null })),
+      ...store.listAccounts().filter((a) => !configNames.has(a.name)).map((a) => ({ name: a.name, ownerUserId: a.ownerUserId })),
+    ];
+    const visible = caller.admin ? all : all.filter((a) => a.ownerUserId === caller.user.id);
+    return { accounts: visible.map((a) => ({ name: a.name })) };
   });
 
   // tenant isolation: a user key sees only publish-relevant events for its
