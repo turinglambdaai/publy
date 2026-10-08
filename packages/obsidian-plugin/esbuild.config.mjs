@@ -1,7 +1,14 @@
-// Bundle the Obsidian plugin. @publy/core + @publy/shared are inlined;
-// the two wasm glue packages stay EXTERNAL, redirected to real files shipped
-// beside main.js — Obsidian's plugin require() resolves relative paths but
-// rejects bare package names.
+// Bundle the Obsidian plugin. @publy/core + @publy/shared are inlined.
+//
+// Obsidian evaluates plugin bundles with a synthetic module context
+// (module.filename = null, __dirname inside electron.asar), so NO package
+// require can ever resolve there — top-level or relative, bare or redirected.
+// Therefore: the plugin must never statically import a wasm glue package.
+//   - @resvg/resvg-wasm is loaded at runtime by src/main.ts via
+//     createRequire(manifest.dir); a static import fails the build.
+//   - harfbuzzjs is imported by satori itself at bundle-eval time, so it gets
+//     a shim whose `default` getter is a promise bridge; main.ts arms the
+//     bridge with the real module once the plugin dir is known.
 import esbuild from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,29 +20,58 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 fs.rmSync(path.join(here, "dist", "fonts"), { recursive: true, force: true });
 fs.cpSync(path.join(here, "..", "core", "fonts"), path.join(here, "dist", "fonts"), { recursive: true });
 for (const f of ["manifest.json", "versions.json"]) fs.copyFileSync(path.join(here, f), path.join(here, "dist", f));
-// wasm glue packages beside main.js:
+
+// wasm glue packages beside main.js (dereference: pnpm links must land as
+// real files — a symlinked node_modules breaks any machine but this one):
 //   @resvg/resvg-wasm (PNG renderer glue + index_bg.wasm)
 //   harfbuzzjs        (satori text-shaping glue + hb.wasm)
 const nm = path.join(here, "dist", "node_modules");
 fs.rmSync(nm, { recursive: true, force: true });
 fs.mkdirSync(nm, { recursive: true });
 for (const pkg of ["@resvg/resvg-wasm", "harfbuzzjs"]) {
-  fs.cpSync(path.join(here, "node_modules", pkg), path.join(nm, pkg), { recursive: true });
+  fs.cpSync(path.join(here, "node_modules", pkg), path.join(nm, pkg), { recursive: true, dereference: true });
+}
+// harfbuzzjs ships the full harfbuzz C++ tree; only the emscripten glue is
+// needed at runtime — prune the rest to keep the plugin package lean.
+const hbDir = path.join(nm, "harfbuzzjs");
+for (const entry of fs.readdirSync(hbDir)) {
+  if (!["index.js", "hb.js", "hbjs.js", "hb.wasm", "hb-subset.wasm", "package.json", "LICENSE", "README.md"].includes(entry)) {
+    fs.rmSync(path.join(hbDir, entry), { recursive: true, force: true });
+  }
 }
 
-// Obsidian's plugin require() does NOT resolve bare package names (only
-// obsidian/electron/builtins/relative) — redirect the wasm glue packages
-// to their shipped real files, marked external so they load at runtime.
 const wasmExternals = {
   name: "publy-wasm-externals",
   setup(build) {
-    build.onResolve({ filter: /^@resvg\/resvg-wasm$/ }, () => ({
-      path: "./node_modules/@resvg/resvg-wasm/index.js",
-      external: true,
-    }));
-    build.onResolve({ filter: /^harfbuzzjs$/ }, () => ({
-      path: "./node_modules/harfbuzzjs/index.js",
-      external: true,
+    // banned: a static import would emit a require that cannot resolve in
+    // Obsidian's loader and hard-fail plugin load
+    build.onResolve({ filter: /^@resvg\/resvg-wasm(\/.*)?$/ }, (args) => {
+      if (args.path.endsWith(".wasm")) return { path: args.path, external: true };
+      throw new Error(
+        "static import of @resvg/resvg-wasm is banned in the plugin — use loadPluginModule(pluginDir, ...) from src/main.ts",
+      );
+    });
+    // satori's own import: swap in a bridge shim instead of a real require.
+    // The exports are a THENABLE — whatever interop esbuild applies, an
+    // `await` of it always forwards to the bridge promise, which main.ts arms
+    // with the real module once the plugin dir is known.
+    build.onResolve({ filter: /^harfbuzzjs$/ }, () => ({ path: "harfbuzzjs-bridge", namespace: "publy-shim" }));
+    build.onLoad({ filter: /^harfbuzzjs-bridge$/, namespace: "publy-shim" }, () => ({
+      loader: "js",
+      contents: `
+var bridge = null;
+function getBridge() {
+  return bridge || (bridge = Promise.reject(new Error("publy: harfbuzzjs bridge not armed — plugin dir unknown")));
+}
+if (typeof globalThis !== "undefined") {
+  globalThis.__publyHarfbuzzBridge = function (p) { bridge = p; };
+}
+module.exports = {
+  then: function (onF, onR) { return getBridge().then(onF, onR); },
+  catch: function (onR) { return getBridge().catch(onR); },
+  finally: function (f) { return getBridge().finally(f); },
+};
+`,
     }));
   },
 };

@@ -9,7 +9,6 @@ import {
   setPngRenderer,
   setFontDir,
 } from "@publy/core";
-import { initWasm, Resvg as WasmResvg } from "@resvg/resvg-wasm";
 // theme/highlight css inlined as text by esbuild (loader ".css": "text")
 import claudeThemeCss from "../../core/themes/claude.css";
 import mediumThemeCss from "../../core/themes/medium.css";
@@ -38,6 +37,29 @@ const THEME_CSS: Record<string, string> = {
 };
 
 const VIEW_TYPE_PUBLY_PREVIEW = "publy-preview";
+
+// Obsidian evaluates plugin bundles with a synthetic module context
+// (module.filename = null, __dirname = electron.asar/renderer), so package
+// requires — top-level or relative — can never resolve. Node builtins still
+// work, so bootstrap the real resolver via createRequire and load the wasm
+// glue packages from the plugin dir by absolute path at runtime.
+type ResvgModule = typeof import("@resvg/resvg-wasm");
+let resvgModule: ResvgModule | null = null;
+
+function loadPluginModule<T>(pluginDir: string, rel: string): T {
+  const { createRequire } = require("node:module");
+  const req = createRequire(path.join(pluginDir, "manifest.json"));
+  return req(path.join(pluginDir, rel)) as T;
+}
+
+// manifest.dir is vault-relative in real Obsidian; createRequire and fs both
+// need absolute paths (and process.cwd() is the install dir, not the vault).
+function absolutePluginDir(plugin: Plugin): string {
+  const dir = plugin.manifest.dir ?? "";
+  return path.isAbsolute(dir)
+    ? dir
+    : path.join((plugin.app.vault.adapter as unknown as { getBasePath(): string }).getBasePath(), dir);
+}
 
 interface PublySettings {
   server: string;
@@ -117,17 +139,26 @@ export default class PublyPlugin extends Plugin {
     // Graceful degradation: if wasm init fails, article publish/preview still
     // work — only the card renderer is unavailable.
     try {
-      const pluginDir = this.manifest.dir;
+      const pluginDir = absolutePluginDir(this);
+      resvgModule = loadPluginModule<ResvgModule>(pluginDir, path.join("node_modules", "@resvg", "resvg-wasm", "index.js"));
       const wasmFile = path.join(pluginDir, "node_modules", "@resvg", "resvg-wasm", "index_bg.wasm");
       // BufferSource path — Node fetch() cannot read file:// URLs
-      await initWasm(fs.readFileSync(wasmFile));
+      await resvgModule.initWasm(fs.readFileSync(wasmFile));
+      // satori imports harfbuzzjs at bundle-eval time; the esbuild shim defers
+      // it behind a promise bridge, armed here with the real plugin dir.
+      const gp = globalThis as { __publyHarfbuzzBridge?: (p: Promise<unknown>) => void };
+      if (gp.__publyHarfbuzzBridge) {
+        gp.__publyHarfbuzzBridge(
+          Promise.resolve(loadPluginModule<unknown>(pluginDir, path.join("node_modules", "harfbuzzjs", "index.js"))),
+        );
+      }
       const fontDir = path.join(pluginDir, "fonts");
       const fontFiles = ["NotoSansSC-subset-Regular.otf", "NotoSansSC-subset-Bold.otf"]
         .map((f) => path.join(fontDir, f))
         .filter((p) => fs.existsSync(p));
       setFontDir(fontDir);
       setPngRenderer((svg, fitWidth) => {
-        const resvg = new WasmResvg(svg, {
+        const resvg = new resvgModule!.Resvg(svg, {
           font: { loadSystemFonts: false, fontFiles },
           ...(fitWidth ? { fitTo: { mode: "width", value: fitWidth } } : {}),
         });
