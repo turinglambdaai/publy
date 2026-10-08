@@ -378,11 +378,6 @@ export default class PublyPlugin extends Plugin {
   }
 }
 
-// placeholder to keep the helper referenced without dead-code churn
-function rendered_author(): string | undefined {
-  return undefined;
-}
-
 class PublySettingTab extends PluginSettingTab {
   plugin: PublyPlugin;
 
