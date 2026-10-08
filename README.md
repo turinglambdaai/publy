@@ -2,8 +2,7 @@
 
 Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown typesetting & image-post card rendering, one hosted service for reliable publishing, one theme store.
 
-![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
-![status](https://img.shields.io/badge/status-M0%20design-orange)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-M0%20design-orange)
 
 **English** · [中文](README.zh-CN.md)
 
