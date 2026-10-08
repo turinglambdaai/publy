@@ -564,9 +564,21 @@ export default class PublyPlugin extends Plugin {
         .map((f) => path.join(fontDir, f))
         .filter((p) => fs.existsSync(p));
       setFontDir(fontDir);
+      // the wasm resvg build silently loads NOTHING from fontFiles (paths) —
+      // raw buffers work. family mappings route the generic families external
+      // diagrams request (sans-serif/monospace/…) to the shipped subsets
+      const fontBuffers = fontFiles.map((f) => new Uint8Array(fs.readFileSync(f)));
       setPngRenderer((svg, fitWidth) => {
         const resvg = new resvgModule!.Resvg(svg, {
-          font: { loadSystemFonts: false, fontFiles },
+          font: {
+            fontBuffers,
+            defaultFontFamily: "Noto Sans SC",
+            sansSerifFamily: "Noto Sans SC",
+            serifFamily: "Noto Sans SC",
+            monospaceFamily: "Noto Sans SC",
+            cursiveFamily: "Noto Sans SC",
+            fantasyFamily: "Noto Sans SC",
+          },
           ...(fitWidth ? { fitTo: { mode: "width", value: fitWidth } } : {}),
         });
         return Buffer.from(resvg.render().asPng());
