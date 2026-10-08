@@ -8,6 +8,7 @@ Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown
 **English** · [中文](README.zh-CN.md)
 
 - **Write in Obsidian or any Markdown editor. Your agent ships it.** `publy publish a.md` — no GUI, no copy-paste into the WeChat web editor.
+- **The Obsidian plugin (this repo's `manifest.json`) renders and publishes the current note in place**: in-app article preview, image-post card deck preview, rich-text copy, publish progress — no browser needed.
 - **Image posts as a first-class citizen.** `publy card post.md` renders themed 3:4 card PNGs deterministically — pixel-perfect Chinese text, seconds per deck, no AI image generation.
 - **Theme store without the friction.** Themes are npm packages with rendered previews; `publy theme add` installs, `publy theme preview` shows before you commit.
 - **Open core, no lock-in.** The CLI and a self-hostable server are open source (AGPL-3.0) and speak the same protocol as the hosted cloud. The cloud sells reliability: stable egress IP for the WeChat API whitelist, AppSecret custody, token lifecycle, scheduling, multi-account.
