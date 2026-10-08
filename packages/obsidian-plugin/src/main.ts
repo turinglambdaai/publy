@@ -136,7 +136,21 @@ class PublyPreviewView extends ItemView {
   getViewType(): string { return VIEW_TYPE_PUBLY_PREVIEW; }
   getDisplayText(): string { return "Publy 预览"; }
   getIcon(): string { return "send"; }
-  async onOpen(): Promise<void> { /* content set by setHtml */ }
+  async onOpen(): Promise<void> {
+    // after a restart the restored leaf would sit empty — populate it with
+    // whatever note is active (or a hint until one is)
+    this.app.workspace.onLayoutReady(() => {
+      const active = this.app.workspace.getActiveFile();
+      if (active) void this.plugin.previewCurrentNote(active);
+      else this.renderHint();
+    });
+  }
+  renderHint(): void {
+    this.contentEl.empty();
+    const d = this.contentEl.createEl("div");
+    d.style.cssText = "padding:16px;font-size:13px;color:var(--text-muted)";
+    d.setText("打开一篇笔记，这里会实时预览它的公众号排版。");
+  }
   async onClose(): Promise<void> { /* nothing */ }
 
   private toolbar(): void {
@@ -452,12 +466,22 @@ export default class PublyPlugin extends Plugin {
     this.registerView(PUBLY_HISTORY_VIEW, (leaf: WorkspaceLeaf) => new PublyHistoryView(leaf, this));
     this.statusBarItem = this.addStatusBarItem();
 
-    // live preview: re-render the previewed note shortly after it is saved
+    // live preview: while the preview leaf is open it always shows the active
+    // note — switching notes re-renders, saving re-renders (~0.9s debounce)
     let liveTimer: number | undefined;
+    const previewOpen = () => this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW).length > 0;
+    this.registerEvent(
+      this.app.workspace.on("file-open", (file) => {
+        if (!previewOpen()) return;
+        if (!(file instanceof TFile) || file.extension !== "md") return;
+        if (file.path === this.livePreviewPath) return;
+        void this.previewCurrentNote(file);
+      }),
+    );
     this.registerEvent(
       this.app.vault.on("modify", (file) => {
+        if (!previewOpen()) return;
         if (!(file instanceof TFile) || file.path !== this.livePreviewPath) return;
-        if (this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW).length === 0) return;
         window.clearTimeout(liveTimer);
         liveTimer = window.setTimeout(() => void this.previewCurrentNote(file as TFile), 900);
       }),
