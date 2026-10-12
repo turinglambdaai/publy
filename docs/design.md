@@ -91,6 +91,9 @@ publy quota                                    # 群发配额余量
 ```
 
 - 所有命令支持 `--json`。退出码：`0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败 / `5` 服务端错误 / `6` 配额不足
+- `publish --json` 输出含 `warnings` 数组（渲染期非致命警告，如资源目录缺图）。警告同时打到 stderr，但 agent 消费 `--json` 时以该字段为准——不允许"发布成功但图片静默丢失"只留在 stderr
+- `config set` 支持键：`server` / `api_key` / `default_account` / `media_dirs`（逗号分隔多个目录）；不支持手编 `~/.publy/config.json`
+- 服务端不可达时 stderr 必须带底层原因（`ECONNREFUSED` / TLS 握手 / 超时分类不同），并给出下一步（检查 `--server` 或 `publy tunnel`）
 - 输入兼容 Obsidian：`![[img.png|650]]`、`[[wikilink|别名]]` 原生解析（`--media-dir` 指定资源目录）；frontmatter 的 `title` / `cover` / `type` / `theme` 直接消费
 - 密钥管理：配置文件只存环境变量名引用（`--secret-env`），与 tlai 技能的 `${VAR}` 约定一致
 
