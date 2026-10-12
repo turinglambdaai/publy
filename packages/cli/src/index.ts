@@ -180,12 +180,15 @@ async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
 
 async function cmdConfigSet(key: string, value: string): Promise<void> {
   const config = loadConfig();
-  const allowed = ["server", "api_key", "default_account"];
+  const allowed = ["server", "api_key", "default_account", "media_dirs"];
   if (!allowed.includes(key)) {
     console.error(`publy: unknown config key "${key}" (allowed: ${allowed.join(", ")})`);
     process.exit(1);
   }
-  (config as Record<string, unknown>)[key] = value;
+  // media_dirs is a string[] — accept comma-separated dirs; everything else is a plain string
+  (config as Record<string, unknown>)[key] = key === "media_dirs"
+    ? value.split(",").map((s) => s.trim()).filter(Boolean)
+    : value;
   saveConfig(config);
   console.log(`${key} = ${key === "api_key" ? "***" : value}`);
 }
@@ -269,6 +272,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   let images: Attachment[];
   let coverName: string | undefined;
   let title: string;
+  // surfaced on stderr and echoed in --json so agents don't miss silent
+  // failures like "attachment missing from media_dirs, image dropped"
+  const warnings: string[] = [];
+  const emitWarnings = (ws: readonly string[]) => {
+    for (const w of ws) {
+      console.error(`warn: ${w}`);
+      warnings.push(w);
+    }
+  };
 
   if (type === "image_post") {
     const mode = String((parsed.meta as Record<string, unknown>).mode ?? "text").toLowerCase();
@@ -296,7 +308,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
         footnote: false,
         footer: opts.footer,
       });
-      for (const w of rendered.warnings) console.error(`warn: ${w}`);
+      emitWarnings(rendered.warnings);
       ({ html, images, coverName } = textModePayload(rendered, raw));
     }
     title = opts.title || parsed.meta.title || path.basename(file, path.extname(file));
@@ -310,7 +322,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       footnote: opts.footnote !== false,
       footer: opts.footer,
     });
-    for (const w of rendered.warnings) console.error(`warn: ${w}`);
+    emitWarnings(rendered.warnings);
     const attachments: Attachment[] = rendered.attachments.map((a) => ({
       name: a.name,
       data: fs.readFileSync(a.path).toString("base64"),
@@ -401,9 +413,11 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
 
   let result: { res: Response; body: PublishResult } | null = null;
+  let netErr: unknown = null;
   try {
     result = await postPublish(server);
-  } catch {
+  } catch (err) {
+    netErr = err;
     /* network error — maybe the network blocks large POSTs and a tunnel is configured */
   }
   if (!result && config.tunnel) {
@@ -414,7 +428,12 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     }
   }
   if (!result) {
-    console.error(`publy: cannot reach server ${server}（若在限制大流量的公司网络内，先 publy tunnel）`);
+    // surface the underlying cause (ECONNREFUSED vs TLS handshake vs timeout
+    // behave differently) instead of swallowing it into one generic message
+    const cause = (netErr as Error | null)?.cause as { code?: string; message?: string } | undefined;
+    const detail = cause?.code ?? cause?.message ?? (netErr as Error | null)?.message ?? "";
+    console.error(`publy: cannot reach server ${server}${detail ? ` (${detail})` : ""}`);
+    console.error(`publy: check --server / config server, or run \`publy tunnel\` when a tunnel is configured (e.g. TLS failures on the public domain)`);
     process.exit(5);
   }
   const { res, body } = result;
@@ -424,7 +443,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt }));
+    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, warnings }));
   } else if (body.jobId) {
     console.log(`已创建定时任务 ${body.jobId}，将在 ${body.runAt} 自动发布到 ${accountName}（publy jobs 查看状态）`);
   } else {
@@ -571,7 +590,7 @@ export function createProgram(): Command {
     .command("set")
     .argument("<key>")
     .argument("<value>")
-    .description("set server / api_key / default_account")
+    .description("set server / api_key / default_account / media_dirs (comma-separated)")
     .action(async (key: string, value: string) => cmdConfigSet(key, value));
 
   const accountCmd = program.command("account").description("Manage accounts");
