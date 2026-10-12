@@ -1,6 +1,6 @@
 {
   "name": "@turinglambdaai/publy",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Agent-era publishing pipeline for WeChat Official Accounts: Markdown typesetting, image-post card rendering, reliable publishing",
   "type": "module",
   "main": "dist/index.js",
