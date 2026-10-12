@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.20.4",
     "typescript": "^5.6.0"
   },
   "exports": {
