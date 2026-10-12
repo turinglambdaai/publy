@@ -637,7 +637,13 @@ export function createProgram(): Command {
 
 import { pathToFileURL } from "node:url";
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+// resolve argv[1] through symlinks before comparing: npm -g installs the bin
+// as a symlink while import.meta.url is the real path — without realpath they
+// never match and the CLI silently exits with no output
+const invokedAs = process.argv[1]
+  ? pathToFileURL(fs.realpathSync(path.resolve(process.argv[1]))).href
+  : "";
+if (import.meta.url === invokedAs) {
   createProgram().parseAsync(process.argv).catch((err) => {
     console.error(err);
     process.exit(1);
