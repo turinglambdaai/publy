@@ -118,6 +118,13 @@ export async function publishToWechat(
   return publishArticle(req, cred, token, byName, materialCache);
 }
 
+/** Extract attachment names referenced in published HTML ("attachment://<name>" until the closing quote). */
+export function extractAttachmentRefs(html: string): string[] {
+  // greedy [^"']+ — a lazy `+?` here stops after a single character and every
+  // lookup misses (regression-tested in publish.test.ts)
+  return [...html.matchAll(new RegExp(`${ATTACHMENT_SCHEME}([^"']+)`, "g"))].map((m) => m[1]);
+}
+
 async function publishArticle(
   req: PublishRequest,
   cred: AccountCredential,
@@ -128,7 +135,7 @@ async function publishArticle(
   let html = req.html ?? "";
 
   // upload content images, replace attachment:// refs with wechat CDN urls
-  const refs = [...html.matchAll(new RegExp(`${ATTACHMENT_SCHEME}([^"']+?)`, "g"))].map((m) => m[1]);
+  const refs = extractAttachmentRefs(html);
   const unique = [...new Set(refs)];
   for (const name of unique) {
     const att = byName.get(name);
