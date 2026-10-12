@@ -24,7 +24,7 @@ markdown 文件 → publy CLI → publy-server（你的服务器）→ 微信官
 ### 2. 本机安装 CLI
 
 ```bash
-npm i -g @turinglambdaai/publy        # 推荐（包发布后）
+npm i -g @turinglambdaai/publy
 ```
 
 或从源码（开发期）：
@@ -39,13 +39,18 @@ pnpm install --frozen-lockfile && pnpm -r build
 
 ### 3. 配置客户端
 
+全部通过命令完成，无需手编文件：
+
 ```bash
-publy config set server http://your-server:8081     # 服务器地址
-publy config set api_key <你的APIkey>                # 与服务器端一致
+publy config set server http://your-server:8081          # 服务器地址
+publy config set api_key <你的APIkey>                     # 与服务器端一致
+publy config set media_dirs "D:/Notes/0.asset/media"     # 附件目录，多个用逗号分隔
 publy account add TuringLambdaAI --app-id wx... --author 吉人 --theme claude
+publy account add 另一个号 --theme medium                  # 多账号逐个 add
+publy account list
 ```
 
-配置落盘在 `~/.publy/config.json`，多账号直接改文件：
+配置落盘在 `~/.publy/config.json`，落盘结构供排查参考：
 
 ```json
 {
