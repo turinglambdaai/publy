@@ -1,0 +1,507 @@
+/* Publy Obsidian plugin — design system.
+   One accent token (WeChat green) on top of Obsidian's native CSS variables,
+   so the plugin follows the active theme in light and dark mode. The article
+   "paper" itself stays white on purpose: WeChat renders articles on white. */
+
+:root {
+  --publy-accent: #07c160;
+  --publy-accent-hover: #06ad56;
+  --publy-accent-soft: rgba(7, 193, 96, 0.1);
+  --publy-danger: #e5484d;
+  --publy-amber: #b8860b;
+  --publy-paper-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 12px 36px rgba(0, 0, 0, 0.12);
+}
+
+/* --- toolbar ---------------------------------------------------------- */
+
+.publy-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.publy-spacer {
+  flex: 1;
+}
+
+.publy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-normal);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+    box-shadow 0.15s ease, opacity 0.15s ease;
+}
+.publy-btn:hover {
+  background: var(--background-modifier-hover);
+}
+.publy-btn:disabled,
+.publy-btn.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+.publy-btn-primary {
+  background: var(--publy-accent);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 500;
+}
+.publy-btn-primary:hover {
+  background: var(--publy-accent-hover);
+}
+.publy-btn-primary.is-busy {
+  background: var(--publy-accent-hover);
+}
+/* busy spinner inside the primary button */
+.publy-btn .publy-spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: publy-rotate 0.7s linear infinite;
+}
+@keyframes publy-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* width switcher (mobile / desktop) */
+.publy-segpill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.publy-segpill .publy-seg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.publy-segpill .publy-seg:hover {
+  background: var(--background-modifier-hover);
+}
+.publy-segpill .publy-seg.is-active {
+  background: var(--publy-accent-soft);
+  color: var(--publy-accent);
+}
+
+/* theme quick-switch in the toolbar */
+.publy-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  max-width: 130px;
+}
+.publy-select:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+/* --- publish result bar ------------------------------------------------ */
+
+.publy-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  animation: publy-slide-in 0.25s ease;
+}
+.publy-result .publy-result-icon {
+  flex: none;
+  display: inline-flex;
+}
+.publy-result.is-ok {
+  background: var(--publy-accent-soft);
+  color: var(--publy-accent);
+  border: 1px solid rgba(7, 193, 96, 0.25);
+}
+.publy-result.is-scheduled {
+  background: rgba(184, 134, 11, 0.08);
+  color: var(--publy-amber);
+  border: 1px solid rgba(184, 134, 11, 0.25);
+}
+.publy-result.is-error {
+  background: rgba(229, 72, 77, 0.08);
+  color: var(--publy-danger);
+  border: 1px solid rgba(229, 72, 77, 0.25);
+}
+@keyframes publy-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.publy-result.publy-fade-out {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* --- article paper (the WeChat article simulation) ---------------------- */
+
+.publy-canvas {
+  background: var(--background-secondary);
+  padding: 28px 18px 48px;
+  min-height: calc(100vh - 140px);
+  box-sizing: border-box;
+}
+.publy-paper {
+  max-width: 700px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 36px 44px 44px;
+  min-height: 70vh;
+  box-sizing: border-box;
+  box-shadow: var(--publy-paper-shadow);
+  transition: max-width 0.25s ease, padding 0.25s ease, border-radius 0.25s ease;
+}
+.publy-paper.is-mobile {
+  max-width: 390px;
+  padding: 24px 20px 32px;
+  border-radius: 14px;
+}
+.publy-paper .publy-title {
+  margin: 0 0 14px;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #1a1a1a;
+  letter-spacing: 0.01em;
+}
+.publy-paper .publy-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.publy-paper .publy-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(183, 92, 61, 0.12);
+  color: #b75c3d;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.publy-paper .publy-account {
+  font-size: 13px;
+  color: #576b95;
+}
+.publy-paper .publy-author {
+  font-size: 13px;
+  color: #999;
+}
+.publy-paper .publy-pill {
+  margin-left: auto;
+  font-size: 11px;
+  color: #b0b0b0;
+  background: #f6f6f6;
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.publy-paper .publy-hairline {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 14px 0 20px;
+}
+
+/* card deck strip */
+.publy-strip {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 4px 4px 16px;
+}
+.publy-strip img {
+  height: 430px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease;
+}
+.publy-strip img:hover {
+  transform: translateY(-2px);
+}
+.publy-caption {
+  max-width: 700px;
+  margin: 8px auto 0;
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px 20px;
+  font-size: 14px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+.publy-paper.is-mobile ~ .publy-caption,
+.publy-canvas.is-mobile .publy-caption {
+  max-width: 390px;
+}
+
+/* --- empty state -------------------------------------------------------- */
+
+.publy-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 24px;
+}
+.publy-empty .publy-empty-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--publy-accent-soft);
+  color: var(--publy-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.publy-empty .publy-empty-icon .svg-icon {
+  width: 26px;
+  height: 26px;
+}
+
+/* --- history timeline ---------------------------------------------------- */
+
+.publy-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 0;
+}
+.publy-panel-head .publy-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.publy-section {
+  padding: 14px 16px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.publy-muted-line {
+  padding: 2px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.publy-timeline {
+  position: relative;
+  margin: 6px 16px 14px;
+  padding-left: 20px;
+}
+.publy-timeline::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--background-modifier-border);
+}
+.publy-tl-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+.publy-tl-item::before {
+  content: "";
+  position: absolute;
+  left: -19px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--background-modifier-border);
+  border: 2px solid var(--background-primary);
+  box-sizing: content-box;
+}
+.publy-tl-item.is-ok::before {
+  background: var(--publy-accent);
+}
+.publy-tl-item.is-fail::before {
+  background: var(--publy-danger);
+}
+.publy-tl-item.is-wait::before {
+  background: var(--publy-amber);
+}
+.publy-tl-item .publy-tl-main {
+  flex: 1;
+  min-width: 0;
+}
+.publy-tl-item .publy-tl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.publy-tl-item .publy-tl-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.publy-tl-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.publy-tl-item.is-ok .publy-tl-icon {
+  color: var(--publy-accent);
+}
+.publy-tl-item.is-fail .publy-tl-icon {
+  color: var(--publy-danger);
+}
+.publy-tl-item.is-wait .publy-tl-icon {
+  color: var(--publy-amber);
+}
+
+/* --- cover picker --------------------------------------------------------- */
+
+.publy-cover-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.publy-cover-tile {
+  width: 150px;
+  border: 2px solid var(--background-modifier-border);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--background-primary);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.publy-cover-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+.publy-cover-tile.is-chosen {
+  border-color: var(--publy-accent);
+  box-shadow: 0 0 0 3px rgba(7, 193, 96, 0.15);
+}
+/* 2.35:1 crop thumbnail — shows what the cover will actually look like */
+.publy-cover-crop {
+  aspect-ratio: 2.35 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background-secondary);
+  overflow: hidden;
+}
+.publy-cover-crop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.publy-cover-label {
+  font-size: 12px;
+  padding: 5px 8px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.publy-modal-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+/* --- account switcher ------------------------------------------------------ */
+
+.publy-acct-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.publy-acct-row:hover {
+  background: var(--background-modifier-hover);
+}
+.publy-acct-row.is-current {
+  color: var(--publy-accent);
+  font-weight: 500;
+}
+.publy-acct-row .publy-acct-name {
+  flex: 1;
+}
+
+/* --- misc ------------------------------------------------------------------ */
+
+.publy-view-msg {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.publy-sched-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 4px 0 12px;
+}
+.publy-sched-input {
+  font-size: 14px;
+  padding: 6px 8px;
+}

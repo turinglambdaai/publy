@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl, Modal } from "obsidian";
+import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl, Modal, setIcon } from "obsidian";
 import {
   renderMarkdown,
   renderCards,
@@ -160,6 +160,17 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   schedDesc: { zh: "到点由 Publy 服务自动发布到公众号草稿箱；配额在执行时计。", en: "The Publy server publishes to your WeChat drafts at the chosen time; quota counts at execution." },
   schedBtn: { zh: "排期", en: "Schedule" },
   schedInvalid: { zh: "时间无效或已过去——重新选一个未来时间", en: "That time is invalid or in the past — pick a future time" },
+  tipRefresh: { zh: "重新渲染预览", en: "Re-render the preview" },
+  tipCopy: { zh: "复制排版 rich text", en: "Copy rendered rich text" },
+  tipWidthMobile: { zh: "手机宽（390px）——公众号读者大多在手机", en: "Mobile width (390px) — most WeChat readers are on phones" },
+  tipWidthDesktop: { zh: "桌面宽（700px）", en: "Desktop width (700px)" },
+  tipTheme: { zh: "文章主题（切换即时重渲染）", en: "Article theme (re-renders instantly)" },
+  pubRunning: { zh: "发布中…", en: "Publishing…" },
+  resultOk: { zh: "已进草稿箱", en: "In your WeChat drafts" },
+  resultScheduled: { zh: "已排期", en: "Scheduled" },
+  resultDeduped: { zh: "10 分钟内已发过，本次跳过（防重复）", en: "Just published — skipped as duplicate" },
+  resultFail: { zh: "发布失败", en: "Publish failed" },
+  emptyOpenHint: { zh: "打开一篇笔记，这里会实时预览它的公众号排版", en: "Open a note — its WeChat-ready typeset shows up here, live" },
 };
 
 function t(key: string, vars?: Record<string, string | number>): string {
@@ -205,6 +216,8 @@ interface PublySettings {
   mediaDir: string;
   theme: string;
   lang: "auto" | "zh" | "en";
+  /** preview panel width: 390px "mobile" (the WeChat norm) or 700px "desktop" */
+  previewWidth: "mobile" | "desktop";
   /** file path -> last cover choice ("auto" or attachment name) */
   lastCover: Record<string, string>;
 }
@@ -216,6 +229,7 @@ const DEFAULT_SETTINGS: PublySettings = {
   mediaDir: "",
   theme: "claude",
   lang: "auto",
+  previewWidth: "desktop",
   lastCover: {},
 };
 
@@ -256,6 +270,8 @@ class PublyPreviewView extends ItemView {
   plugin: PublyPlugin;
   /** re-renders the current preview; set on every render by the plugin */
   refresh: (() => Promise<void>) | null = null;
+  private publishBtn: HTMLButtonElement | null = null;
+  private resultEl: HTMLElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, plugin: PublyPlugin) {
     super(leaf);
@@ -275,96 +291,186 @@ class PublyPreviewView extends ItemView {
   }
   renderHint(): void {
     this.contentEl.empty();
+    this.resultEl = null;
+    this.publishBtn = null;
     const d = this.contentEl.createEl("div");
-    d.style.cssText = "padding:16px;font-size:13px;color:var(--text-muted)";
-    d.setText(t("previewHint"));
+    d.addClass("publy-empty");
+    const icon = d.createEl("div");
+    icon.addClass("publy-empty-icon");
+    setIcon(icon, "send");
+    d.createEl("div").setText(t("emptyOpenHint"));
   }
   async onClose(): Promise<void> { /* nothing */ }
 
+  /** dim the publish button while a publish runs (spinner + label swap) */
+  setPublishing(busy: boolean): void {
+    if (!this.publishBtn) return;
+    this.publishBtn.toggleClass("is-busy", busy);
+    this.publishBtn.disabled = busy;
+    const label = this.publishBtn.querySelector(".publy-btn-label");
+    if (label) label.textContent = busy ? t("pubRunning") : t("btnPublish");
+    // spinner element is toggled via CSS (.publy-spin shown when is-busy)
+    let spin = this.publishBtn.querySelector(".publy-spin");
+    if (busy && !spin) {
+      spin = this.publishBtn.createEl("span");
+      spin.addClass("publy-spin");
+      this.publishBtn.prepend(spin);
+    } else if (!busy) {
+      spin?.remove();
+    }
+  }
+
+  /** colored feedback strip between toolbar and canvas (ok / scheduled / error) */
+  setPublishResult(kind: "ok" | "scheduled" | "error" | "deduped", text: string): void {
+    this.resultEl?.remove();
+    const bar = this.contentEl.createEl("div");
+    bar.addClass("publy-result");
+    bar.addClass(kind === "ok" ? "is-ok" : kind === "scheduled" ? "is-scheduled" : kind === "deduped" ? "is-scheduled" : "is-error");
+    const icon = bar.createEl("span");
+    icon.addClass("publy-result-icon");
+    setIcon(icon, kind === "ok" ? "check-circle-2" : kind === "scheduled" ? "clock" : kind === "deduped" ? "copy-x" : "x-circle");
+    bar.createEl("span").setText(text);
+    this.contentEl.prepend(bar);
+    this.resultEl = bar;
+    window.setTimeout(() => {
+      bar.addClass("publy-fade-out");
+      window.setTimeout(() => bar.remove(), 300);
+    }, 6000);
+  }
+
   private toolbar(): void {
     const bar = this.contentEl.createEl("div");
-    bar.style.cssText =
-      "display:flex;gap:8px;align-items:center;padding:10px 16px;background:var(--background-primary);border-bottom:1px solid var(--background-modifier-border)";
-    const btn = (label: string, fn: () => void) => {
+    bar.addClass("publy-toolbar");
+
+    const ghost = (icon: string, tip: string, fn: () => void) => {
       const b = bar.createEl("button");
-      b.textContent = label;
-      b.style.cssText = "font-size:13px;cursor:pointer";
+      b.addClass("publy-btn");
+      b.setAttribute("aria-label", tip);
+      b.setAttribute("title", tip);
+      setIcon(b, icon);
       b.addEventListener("click", fn);
       return b;
     };
-    btn(t("btnRefresh"), () => void this.refresh?.());
-    btn(t("btnCopy"), () => void this.plugin.copyRenderedHtml());
-    const publish = btn(t("btnPublish"), () => void this.plugin.publishCurrentNote());
-    // the family's WeChat-green primary CTA (same accent as the purchase page)
-    publish.style.cssText =
-      "font-size:13px;cursor:pointer;background:#07C160;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-weight:500";
-    publish.addEventListener("mouseenter", () => (publish.style.background = "#06ad56"));
-    publish.addEventListener("mouseleave", () => (publish.style.background = "#07C160"));
+    ghost("refresh-cw", t("tipRefresh"), () => void this.refresh?.());
+    ghost("copy", t("tipCopy"), () => void this.plugin.copyRenderedHtml());
+
+    // mobile / desktop width pill — WeChat readers are mostly on phones
+    const pill = bar.createEl("div");
+    pill.addClass("publy-segpill");
+    const widthMode = () => this.plugin.settings.previewWidth ?? "desktop";
+    const seg = (mode: "mobile" | "desktop", icon: string, tip: string) => {
+      const s = pill.createEl("button");
+      s.addClass("publy-seg");
+      s.setAttribute("aria-label", tip);
+      s.setAttribute("title", tip);
+      setIcon(s, icon);
+      s.toggleClass("is-active", widthMode() === mode);
+      s.addEventListener("click", () => {
+        this.plugin.settings.previewWidth = mode;
+        void this.plugin.saveSettings();
+        for (const el of pill.querySelectorAll(".publy-seg")) el.removeClass("is-active");
+        s.addClass("is-active");
+        this.canvasEl()?.toggleClass("is-mobile", mode === "mobile");
+        this.paperEl()?.toggleClass("is-mobile", mode === "mobile");
+      });
+    };
+    seg("mobile", "smartphone", t("tipWidthMobile"));
+    seg("desktop", "monitor", t("tipWidthDesktop"));
+
+    const spacer = bar.createEl("div");
+    spacer.addClass("publy-spacer");
+
+    // theme quick switch — re-renders instantly, same as the setting page
+    const sel = bar.createEl("select");
+    sel.addClass("publy-select");
+    sel.setAttribute("title", t("tipTheme"));
+    for (const [id, label] of Object.entries(THEME_LABELS)) {
+      const opt = sel.createEl("option");
+      opt.value = id;
+      opt.textContent = label;
+    }
+    sel.value = this.plugin.settings.theme || "claude";
+    sel.addEventListener("change", () => {
+      this.plugin.settings.theme = sel.value;
+      void this.plugin.saveSettings();
+      void this.refresh?.();
+    });
+
+    const publish = bar.createEl("button");
+    publish.addClass("publy-btn");
+    publish.addClass("publy-btn-primary");
+    setIcon(publish, "send");
+    publish.createEl("span").addClass("publy-btn-label");
+    (publish.querySelector(".publy-btn-label") as HTMLElement).textContent = t("btnPublish");
+    publish.addEventListener("click", () => void this.plugin.publishCurrentNote());
+    this.publishBtn = publish;
+  }
+
+  private canvasEl(): HTMLElement | null {
+    return this.contentEl.querySelector(".publy-canvas");
+  }
+  private paperEl(): HTMLElement | null {
+    return this.contentEl.querySelector(".publy-paper");
   }
 
   setHtml(html: string, meta?: { title?: string; author?: string; account?: string }): void {
     this.contentEl.empty();
+    this.resultEl = null;
     this.toolbar();
     // themed canvas + elevated white paper (WeChat renders on white regardless
     // of the app theme, so the page itself stays white in dark mode too)
     const canvas = this.contentEl.createEl("div");
-    canvas.style.cssText =
-      "background:var(--background-secondary);padding:28px 18px 48px;min-height:calc(100vh - 140px);box-sizing:border-box";
+    canvas.addClass("publy-canvas");
+    if ((this.plugin.settings.previewWidth ?? "desktop") === "mobile") canvas.addClass("is-mobile");
     const page = canvas.createEl("div");
-    page.style.cssText =
-      "max-width:700px;margin:0 auto;background:#fff;border-radius:10px;padding:36px 44px 44px;min-height:70vh;box-sizing:border-box;box-shadow:0 1px 3px rgba(0,0,0,.1),0 12px 36px rgba(0,0,0,.12)";
+    page.addClass("publy-paper");
+    if ((this.plugin.settings.previewWidth ?? "desktop") === "mobile") page.addClass("is-mobile");
     // WeChat-article header: title, then account/author meta, hairline, body —
     // system font stack shared with the product's web pages
     page.style.fontFamily = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif';
     if (meta?.title || meta?.account) {
       const title = page.createEl("h1");
-      title.style.cssText = "margin:0 0 14px;font-size:21px;font-weight:600;line-height:1.4;color:#1a1a1a;letter-spacing:.01em";
+      title.addClass("publy-title");
       title.setText(meta.title || t("noTitle"));
       const metaRow = page.createEl("div");
-      metaRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:4px";
+      metaRow.addClass("publy-meta-row");
       if (meta.account) {
         const avatar = metaRow.createEl("span");
+        avatar.addClass("publy-avatar");
         avatar.textContent = meta.account.slice(0, 1).toUpperCase();
-        avatar.style.cssText =
-          "width:20px;height:20px;border-radius:50%;background:rgba(183,92,61,.12);color:#b75c3d;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none";
         const name = metaRow.createEl("span");
+        name.addClass("publy-account");
         name.textContent = meta.account;
-        name.style.cssText = "font-size:13px;color:#576b95";
       }
       if (meta.author) {
         const a = metaRow.createEl("span");
+        a.addClass("publy-author");
         a.textContent = meta.author;
-        a.style.cssText = "font-size:13px;color:#999";
       }
       const pill = metaRow.createEl("span");
+      pill.addClass("publy-pill");
       pill.textContent = t("pillDraft");
-      pill.style.cssText = "margin-left:auto;font-size:11px;color:#b0b0b0;background:#f6f6f6;border-radius:999px;padding:2px 9px";
       const hr = page.createEl("div");
-      hr.style.cssText = "height:1px;background:#f0f0f0;margin:14px 0 20px";
+      hr.addClass("publy-hairline");
     }
     const body = page.createEl("div");
     body.innerHTML = html;
   }
   setCards(cards: { base64: string }[], caption: string): void {
     this.contentEl.empty();
+    this.resultEl = null;
     this.toolbar();
     const canvas = this.contentEl.createEl("div");
-    canvas.style.cssText =
-      "background:var(--background-secondary);padding:28px 18px 48px;min-height:calc(100vh - 140px);box-sizing:border-box";
+    canvas.addClass("publy-canvas");
     // centered when the deck fits, scrollable when it does not
     const strip = canvas.createEl("div");
-    strip.style.cssText =
-      "display:flex;gap:16px;overflow-x:auto;width:fit-content;max-width:100%;margin:0 auto;padding:4px 4px 16px";
+    strip.addClass("publy-strip");
     for (const c of cards) {
       const img = strip.createEl("img");
       img.src = "data:image/png;base64," + c.base64;
-      img.style.height = "430px";
-      img.style.borderRadius = "12px";
-      img.style.boxShadow = "0 1px 3px rgba(0,0,0,.12),0 12px 32px rgba(0,0,0,.18)";
     }
     const cap = canvas.createEl("div");
-    cap.style.cssText =
-      "max-width:700px;margin:8px auto 0;background:#fff;border-radius:10px;padding:16px 20px;font-size:14px;line-height:1.8;white-space:pre-wrap;box-shadow:0 1px 3px rgba(0,0,0,.1),0 8px 24px rgba(0,0,0,.1)";
+    cap.addClass("publy-caption");
     cap.textContent = caption;
   }
 }
@@ -388,7 +494,7 @@ class PublyHistoryView extends ItemView {
   renderMessage(text: string): void {
     this.contentEl.empty();
     const d = this.contentEl.createEl("div");
-    d.style.cssText = "padding:16px;font-size:13px;color:var(--text-muted)";
+    d.addClass("publy-view-msg");
     d.setText(text);
   }
 
@@ -399,12 +505,14 @@ class PublyHistoryView extends ItemView {
   renderHistory(jobs: JobEntry[], entries: HistoryEntry[], onCancelJob: (id: string) => void): void {
     this.contentEl.empty();
     const bar = this.contentEl.createEl("div");
-    bar.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0";
+    bar.addClass("publy-panel-head");
     const title = bar.createEl("div");
-    title.style.cssText = "font-size:15px;font-weight:600";
+    title.addClass("publy-panel-title");
     title.setText(t("histTitle"));
     const refreshBtn = bar.createEl("button");
-    refreshBtn.textContent = t("btnRefresh");
+    refreshBtn.addClass("publy-btn");
+    setIcon(refreshBtn, "refresh-cw");
+    refreshBtn.setAttribute("title", t("tipRefresh"));
     refreshBtn.addEventListener("click", () => void this.refresh?.());
 
     const fmt = (iso: string) => {
@@ -415,45 +523,54 @@ class PublyHistoryView extends ItemView {
       }
     };
     const typeLabel = (kind?: string) => (kind === "image_post" ? t("typeImagePost") : t("typeArticle"));
-    const div = (parent: HTMLElement, css?: string): HTMLElement => {
+    const div = (parent: HTMLElement, cls?: string): HTMLElement => {
       const d = parent.createEl("div");
-      if (css) d.style.cssText = css;
+      if (cls) d.addClass(cls);
       return d;
     };
-
     const section = (text: string): void => {
-      const h = div(this.contentEl, "padding:14px 16px 4px;font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em");
-      h.setText(text);
+      div(this.contentEl, "publy-section").setText(text);
     };
 
     const pending = jobs.filter((j) => j.status === "pending");
     section(t("histJobs", { n: pending.length }));
     if (pending.length === 0) {
-      div(this.contentEl, "padding:2px 16px;font-size:13px;color:var(--text-muted)").setText(t("histJobsEmpty"));
+      div(this.contentEl, "publy-muted-line").setText(t("histJobsEmpty"));
     }
     for (const j of pending) {
-      const row = div(this.contentEl, "display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px");
-      row.createEl("span").setText("🕒");
-      const main = div(row, "flex:1;min-width:0");
-      div(main, "overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(j.title ?? t("noTitle"));
-      div(main, "font-size:12px;color:var(--text-muted)").setText(`${fmt(j.runAt)} · ${j.account ?? "?"} · ${typeLabel(j.type)}`);
-      const cancel = row.createEl("button");
+      const tl = div(this.contentEl, "publy-timeline");
+      const item = div(tl, "publy-tl-item");
+      item.addClass("is-wait");
+      const icon = item.createEl("span");
+      icon.addClass("publy-tl-icon");
+      setIcon(icon, "clock");
+      const main = div(item, "publy-tl-main");
+      div(main, "publy-tl-title").setText(j.title ?? t("noTitle"));
+      div(main, "publy-tl-sub").setText(`${fmt(j.runAt)} · ${j.account ?? "?"} · ${typeLabel(j.type)}`);
+      const cancel = item.createEl("button");
+      cancel.addClass("publy-btn");
       cancel.textContent = t("btnCancel");
       cancel.addEventListener("click", () => onCancelJob(j.id));
     }
 
     section(t("histRecent"));
     if (entries.length === 0) {
-      div(this.contentEl, "padding:2px 16px;font-size:13px;color:var(--text-muted)").setText(t("histEmpty"));
+      div(this.contentEl, "publy-muted-line").setText(t("histEmpty"));
     }
+    const tl = div(this.contentEl, "publy-timeline");
     for (const e of entries.slice().reverse()) {
-      const icon = e.event === "published" ? "✅" : e.event === "failed" ? "❌" : e.event === "scheduled" ? "🕒" : "✖️";
-      const row = div(this.contentEl, "display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px");
-      row.createEl("span").setText(icon);
-      const main = div(row, "flex:1;min-width:0");
-      div(main, "overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(e.title ?? t("noTitle"));
+      const isOk = e.event === "published";
+      const isFail = e.event === "failed";
+      const isSched = e.event === "scheduled";
+      const item = div(tl, "publy-tl-item");
+      item.addClass(isOk ? "is-ok" : isFail ? "is-fail" : isSched ? "is-wait" : "is-fail");
+      const icon = item.createEl("span");
+      icon.addClass("publy-tl-icon");
+      setIcon(icon, isOk ? "check-circle-2" : isFail ? "x-circle" : isSched ? "clock" : "ban");
+      const main = div(item, "publy-tl-main");
+      div(main, "publy-tl-title").setText(e.title ?? t("noTitle"));
       const sub = e.event === "failed" && e.error ? `${fmt(e.ts)} · ${e.error}` : `${fmt(e.ts)} · ${e.account ?? "?"} · ${typeLabel(e.type)}`;
-      div(main, "font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap").setText(sub);
+      div(main, "publy-tl-sub").setText(sub);
     }
   }
 }
@@ -475,15 +592,28 @@ class AccountModal extends Modal {
     this.contentEl.createEl("h3").setText(t("acctModalTitle"));
     for (const n of this.names) {
       const row = this.contentEl.createEl("div");
-      row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;font-size:14px";
-      row.createEl("span").setText(n === this.current ? t("acctCurrent", { name: n }) : n);
-      const b = row.createEl("button");
-      b.textContent = t("acctSwitchBtn");
-      b.disabled = n === this.current;
-      b.addEventListener("click", () => {
+      row.addClass("publy-acct-row");
+      if (n === this.current) row.addClass("is-current");
+      row.addEventListener("click", () => {
+        if (n === this.current) return;
         this.close();
         this.onPick(n);
       });
+      const name = row.createEl("span");
+      name.addClass("publy-acct-name");
+      name.setText(n);
+      if (n === this.current) {
+        setIcon(row, "check");
+      } else {
+        const b = row.createEl("button");
+        b.addClass("publy-btn");
+        b.textContent = t("acctSwitchBtn");
+        b.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          this.close();
+          this.onPick(n);
+        });
+      }
     }
   }
 
@@ -513,19 +643,21 @@ class CoverPickerModal extends Modal {
   onOpen(): void {
     this.contentEl.createEl("h3").setText(t("coverPickTitle"));
     const grid = this.contentEl.createEl("div");
-    grid.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin:10px 0;max-height:50vh;overflow-y:auto";
+    grid.addClass("publy-cover-grid");
     const tiles: [HTMLElement, string][] = [];
     const paint = () => {
-      for (const [el, key] of tiles) el.style.borderColor = key === this.chosen ? "var(--interactive-accent)" : "var(--background-modifier-border)";
+      for (const [el, key] of tiles) el.toggleClass("is-chosen", key === this.chosen);
     };
     const addTile = (key: string, build: (box: HTMLElement) => void, label: string) => {
       const el = grid.createEl("div");
-      el.style.cssText = "width:150px;border:2px solid var(--background-modifier-border);border-radius:8px;overflow:hidden;cursor:pointer";
+      el.addClass("publy-cover-tile");
+      // 2.35:1 crop thumbnail — what the cover actually looks like after the
+      // server's center-crop, not the raw image
       const box = el.createEl("div");
-      box.style.cssText = "height:84px;display:flex;align-items:center;justify-content:center;background:var(--background-secondary);overflow:hidden";
+      box.addClass("publy-cover-crop");
       build(box);
       const lab = el.createEl("div");
-      lab.style.cssText = "font-size:12px;padding:4px 6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+      lab.addClass("publy-cover-label");
       lab.setText(label);
       el.addEventListener("click", () => {
         this.chosen = key;
@@ -544,7 +676,6 @@ class CoverPickerModal extends Modal {
         if (dataUri) {
           const im = box.createEl("img");
           im.src = dataUri;
-          im.style.cssText = "max-width:100%;max-height:100%;object-fit:cover";
         } else {
           box.setText("?");
         }
@@ -559,13 +690,15 @@ class CoverPickerModal extends Modal {
     paint();
 
     const row = this.contentEl.createEl("div");
-    row.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:6px";
+    row.addClass("publy-modal-row");
     const cancel = row.createEl("button");
+    cancel.addClass("publy-btn");
     cancel.textContent = t("btnCancel");
     cancel.addEventListener("click", () => this.close());
     const ok = row.createEl("button");
+    ok.addClass("publy-btn");
+    ok.addClass("publy-btn-primary");
     ok.textContent = t("btnConfirm");
-    ok.classList.add("mod-cta");
     ok.addEventListener("click", () => {
       this.picked = true;
       this.close();
@@ -591,19 +724,20 @@ class ScheduleModal extends Modal {
   onOpen(): void {
     this.contentEl.createEl("h3").setText(t("schedTitle"));
     const desc = this.contentEl.createEl("p");
-    desc.style.cssText = "font-size:13px;color:var(--text-muted);margin:4px 0 12px";
+    desc.addClass("publy-sched-desc");
     desc.setText(t("schedDesc"));
     const input = this.contentEl.createEl("input");
     input.type = "datetime-local";
-    input.style.cssText = "font-size:14px;padding:6px 8px";
+    input.addClass("publy-sched-input");
     const min = new Date(Date.now() + 60_000);
     const pad = (n: number) => String(n).padStart(2, "0");
     input.min = `${min.getFullYear()}-${pad(min.getMonth() + 1)}-${pad(min.getDate())}T${pad(min.getHours())}:${pad(min.getMinutes())}`;
     const row = this.contentEl.createEl("div");
-    row.style.cssText = "display:flex;gap:8px;margin-top:12px";
+    row.addClass("publy-modal-row");
     const ok = row.createEl("button");
+    ok.addClass("publy-btn");
+    ok.addClass("publy-btn-primary");
     ok.textContent = t("schedBtn");
-    ok.classList.add("mod-cta");
     ok.addEventListener("click", () => {
       const iso = input.value ? new Date(input.value).toISOString() : null;
       if (input.value && (Number.isNaN(new Date(input.value).getTime()) || new Date(input.value).getTime() < Date.now() - 60_000)) {
@@ -614,6 +748,7 @@ class ScheduleModal extends Modal {
       this.onSubmit(iso);
     });
     const cancel = row.createEl("button");
+    cancel.addClass("publy-btn");
     cancel.textContent = t("btnCancel");
     cancel.addEventListener("click", () => this.close());
   }
@@ -838,6 +973,12 @@ export default class PublyPlugin extends Plugin {
 
   private status(text: string): void {
     this.statusBarItem?.setText(text);
+  }
+
+  /** the open preview panel, if any — publish progress mirrors into it */
+  private previewView(): PublyPreviewView | null {
+    const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW)[0] as WorkspaceLeaf | undefined;
+    return (leaf?.view as PublyPreviewView | undefined) ?? null;
   }
 
   private renderOptions() {
@@ -1104,6 +1245,8 @@ export default class PublyPlugin extends Plugin {
     }
     const raw = await this.app.vault.cachedRead(f);
     this.status(t("rendering"));
+    const view = this.previewView();
+    view?.setPublishing(true);
     // one sticky progress toast for the whole run — transient toasts vanish
     // mid-publish and reads as "nothing happened", inviting double-clicks
     const progress = new Notice(t("rendering"), 0);
@@ -1137,6 +1280,8 @@ export default class PublyPlugin extends Plugin {
     } catch (err) {
       progress.hide();
       this.status("");
+      view?.setPublishing(false);
+      view?.setPublishResult("error", t("resultFail") + " — " + (err as Error).message);
       new Notice(t("renderFail", { msg: (err as Error).message }));
       return;
     }
@@ -1158,6 +1303,7 @@ export default class PublyPlugin extends Plugin {
       if (choice === null) {
         progress.hide();
         this.status("");
+        view?.setPublishing(false);
         return;
       }
       this.settings.lastCover = { ...(this.settings.lastCover ?? {}), [f.path]: choice };
@@ -1195,16 +1341,21 @@ export default class PublyPlugin extends Plugin {
       const body = res.json as PublishResponse;
       progress.hide();
       this.status("");
+      view?.setPublishing(false);
       if (!res.status || res.status >= 400) {
-        new Notice(t("publishFail", { msg: `${body.code ?? res.status}: ${body.message ?? ""}` }), 8000);
+        const msg = `${body.code ?? res.status}: ${body.message ?? ""}`;
+        view?.setPublishResult("error", t("resultFail") + " — " + msg);
+        new Notice(t("publishFail", { msg }), 8000);
         return;
       }
       if (body.deduped) {
+        view?.setPublishResult("deduped", `${t("resultDeduped")} ·《${title}》`);
         new Notice(t("deduped", { title }), 6000);
         return;
       }
       if (body.scheduled) {
         const when = body.runAt ? new Date(body.runAt).toLocaleString("zh-CN") : "";
+        view?.setPublishResult("scheduled", `${t("resultScheduled")} ·《${title}》${when ? " · " + when : ""}`);
         new Notice(t("scheduledOk", { title, when }), 6000);
         void this.openHistory();
         return;
@@ -1212,10 +1363,14 @@ export default class PublyPlugin extends Plugin {
       const coverLabel = body.coverSource === "cover" ? t("coverExplicit")
         : body.coverSource === "auto" ? t("coverAuto")
         : t("coverFirst");
+      const who = this.settings.account ? ` · ${this.settings.account}` : "";
+      view?.setPublishResult("ok", `${t("resultOk")} ·《${title}》${who} · ${coverLabel} · ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       new Notice(`${t("publishOk", { title, sec: ((Date.now() - t0) / 1000).toFixed(1) })} · ${coverLabel}`, 6000);
     } catch (err) {
       progress.hide();
       this.status("");
+      view?.setPublishing(false);
+      view?.setPublishResult("error", t("resultFail") + " — " + (err as Error).message);
       new Notice(t("netFail", { msg: (err as Error).message }), 8000);
     } finally {
       this.status("");

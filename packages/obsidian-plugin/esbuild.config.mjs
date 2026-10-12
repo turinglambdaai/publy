@@ -19,7 +19,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // ship bundled GB2312 font subsets beside main.js (card rendering, offline)
 fs.rmSync(path.join(here, "dist", "fonts"), { recursive: true, force: true });
 fs.cpSync(path.join(here, "..", "core", "fonts"), path.join(here, "dist", "fonts"), { recursive: true });
-for (const f of ["manifest.json", "versions.json"]) fs.copyFileSync(path.join(here, f), path.join(here, "dist", f));
+for (const f of ["manifest.json", "versions.json", "styles.css"]) fs.copyFileSync(path.join(here, f), path.join(here, "dist", f));
 
 // wasm glue packages beside main.js (dereference: pnpm links must land as
 // real files — a symlinked node_modules breaks any machine but this one):
