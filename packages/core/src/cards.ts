@@ -251,7 +251,13 @@ export function lintCards(sections: CardSection[], caption: string): LintResult 
 
 export async function renderCards(
   raw: string,
-  opts: { theme?: string; outDir?: string; fontFiles?: string[] } = {},
+  opts: {
+    theme?: string;
+    outDir?: string;
+    fontFiles?: string[];
+    /** progressive rendering: fires as soon as each card is rasterized */
+    onCard?: (card: CardOutput, index: number, total: number) => void;
+  } = {},
 ): Promise<RenderCardsResult> {
   const warnings: string[] = [];
   const { meta, sections, caption } = parseCardSource(raw);
@@ -288,7 +294,9 @@ export async function renderCards(
     const file = path.join(outDir, name);
     fs.copyFileSync(png, file);
     fs.rmSync(path.dirname(png), { recursive: true, force: true });
-    cards.push({ kind: sections[i].kind, name, file });
+    const out: CardOutput = { kind: sections[i].kind, name, file };
+    cards.push(out);
+    opts.onCard?.(out, i, sections.length);
   }
 
   return { cards, caption, meta, warnings, lint: lintCards(sections, caption) };

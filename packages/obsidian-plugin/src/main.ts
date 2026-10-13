@@ -467,21 +467,55 @@ class PublyPreviewView extends ItemView {
     body.innerHTML = html;
   }
   setCards(cards: { base64: string }[], caption: string): void {
+    this.beginCards(cards.length);
+    for (const c of cards) this.appendCard(c.base64);
+    this.finishCards(caption);
+  }
+
+  /** progressive card rendering: skeleton first, cards pop in one by one */
+  private cardStrip: HTMLElement | null = null;
+  private cardCounter: HTMLElement | null = null;
+  private cardTotal = 0;
+  private cardDone = 0;
+
+  beginCards(total = 0): void {
     this.contentEl.empty();
     this.resultEl = null;
+    this.cardStrip = null;
+    this.cardTotal = total;
+    this.cardDone = 0;
     this.toolbar();
     const canvas = this.contentEl.createEl("div");
     canvas.addClass("publy-canvas");
-    // centered when the deck fits, scrollable when it does not
     const strip = canvas.createEl("div");
     strip.addClass("publy-strip");
-    for (const c of cards) {
-      const img = strip.createEl("img");
-      img.src = "data:image/png;base64," + c.base64;
+    this.cardStrip = strip;
+    const progress = canvas.createEl("div");
+    progress.addClass("publy-caption");
+    progress.setText(total > 0 ? `0 / ${total}` : t("cardsRendering"));
+    this.cardCounter = progress;
+  }
+
+  appendCard(base64: string): void {
+    const img = this.cardStrip?.createEl("img");
+    if (img) img.src = "data:image/png;base64," + base64;
+    this.cardDone += 1;
+    if (this.cardCounter && this.cardTotal > 0) {
+      this.cardCounter.setText(`${this.cardDone} / ${this.cardTotal}`);
     }
-    const cap = canvas.createEl("div");
-    cap.addClass("publy-caption");
-    cap.textContent = caption;
+  }
+
+  finishCards(caption: string): void {
+    if (this.cardStrip) {
+      const canvas = this.cardStrip.parentElement;
+      const cap = canvas?.createEl("div");
+      if (cap) {
+        cap.addClass("publy-caption");
+        cap.textContent = caption;
+      }
+    }
+    this.cardStrip = null;
+    this.cardCounter = null;
   }
 }
 
@@ -1099,12 +1133,22 @@ export default class PublyPlugin extends Plugin {
 
   /** preview-only: core emits attachment://<name> refs that publishing swaps
    *  for WeChat CDN urls; nothing local can load that scheme, so inline the
-   *  files as data uris for display */
+   *  files as data uris for display. base64 results are cached by
+   *  (path, mtime) — between two keystrokes the images never change, only
+   *  the html does, so image-heavy drafts stop re-reading megabytes. */
+  private imgCache = new Map<string, { mtime: number; b64: string }>();
+
   private inlineImages(html: string, attachments: { name: string; path: string; contentType: string }[]): string {
     let out = html;
     for (const a of attachments) {
       try {
-        const b64 = fs.readFileSync(a.path).toString("base64");
+        const mtime = fs.statSync(a.path).mtimeMs;
+        const hit = this.imgCache.get(a.path);
+        const b64 = hit && hit.mtime === mtime ? hit.b64 : fs.readFileSync(a.path).toString("base64");
+        if (!hit || hit.mtime !== mtime) {
+          if (this.imgCache.size > 64) this.imgCache.clear();
+          this.imgCache.set(a.path, { mtime, b64 });
+        }
         out = out.split(`attachment://${a.name}`).join(`data:${a.contentType};base64,${b64}`);
       } catch (err) {
         console.warn("[publy] failed to inline image:", a.path, err);
@@ -1241,16 +1285,25 @@ export default class PublyPlugin extends Plugin {
       return;
     }
     const raw = rawArg ?? (await this.app.vault.cachedRead(f));
-    new Notice(t("cardsRendering"));
     try {
       const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-cards-"));
-      const result = await renderCards(raw, { outDir });
-      const cards = result.cards.map((c) => ({
-        base64: fs.readFileSync(c.file).toString("base64"),
-      }));
       const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCardDeck(f);
-      view.setCards(cards, result.caption);
+      // progressive: the panel skeleton appears immediately and each card
+      // pops in as its rasterization lands — 9-card decks stop feeling
+      // like a 9x wait
+      view.beginCards();
+      const result = await renderCards(raw, {
+        outDir,
+        onCard: (card) => {
+          try {
+            view.appendCard(fs.readFileSync(card.file).toString("base64"));
+          } catch (err) {
+            console.warn("[publy] failed to read card:", card.file, err);
+          }
+        },
+      });
+      view.finishCards(result.caption);
       if (!result.lint.ok) {
         new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
       }

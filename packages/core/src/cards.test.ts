@@ -48,6 +48,27 @@ test("lint requires cover and ending", () => {
   assert.equal(result.problems.length, 3); // count + cover + ending
 });
 
+test("renderCards fires onCard progressively, in order", async () => {
+  const os = await import("node:os");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-oncard-"));
+  const seen: number[] = [];
+  let totalSeen = 0;
+  const result = await renderCards(SAMPLE, {
+    theme: "naive",
+    outDir,
+    onCard: (_card, index, total) => {
+      seen.push(index);
+      totalSeen = total;
+    },
+  });
+  assert.equal(totalSeen, result.cards.length);
+  assert.deepEqual(seen, result.cards.map((_, i) => i));
+  assert.ok(seen.length >= 2);
+  fs.rmSync(outDir, { recursive: true, force: true });
+});
+
 test("renderCards produces real PNGs via bundled subset fonts", async () => {
   const os = await import("node:os");
   const fs = await import("node:fs");
