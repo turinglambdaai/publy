@@ -40,6 +40,6 @@ jobs:
           variant: CS
           version: stable
       - name: Install websocket library
-        run: raco pkg install --auto --batch https://github.com/turinglambdaai/websocket
+        run: raco pkg install --auto --batch https://github.com/turinglambdaai/websocket.git
       - name: Run publy-ws tests
         run: raco test racket
