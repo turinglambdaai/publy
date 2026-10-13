@@ -31,6 +31,26 @@ fs.mkdirSync(nm, { recursive: true });
 for (const pkg of ["@resvg/resvg-wasm", "harfbuzzjs"]) {
   fs.cpSync(path.join(here, "node_modules", pkg), path.join(nm, pkg), { recursive: true, dereference: true });
 }
+// mathjax-full rides along for TeX formulas (loaded at runtime by core's
+// math.ts via createRequire). The npm package is ~30MB of sources, tests and
+// bundled demos — ship only the runtime subtree the TeX→SVG chain touches.
+{
+  // mathjax-full is a dependency of @publy/core — under pnpm's strict layout
+  // it resolves from core's node_modules, not the plugin package's
+  const mjSrc = path.join(here, "..", "core", "node_modules", "mathjax-full");
+  const mjDst = path.join(nm, "mathjax-full");
+  fs.rmSync(mjDst, { recursive: true, force: true });
+  fs.mkdirSync(mjDst, { recursive: true });
+  fs.copyFileSync(path.join(mjSrc, "package.json"), path.join(mjDst, "package.json"));
+  fs.cpSync(path.join(mjSrc, "js"), path.join(mjDst, "js"), { recursive: true, dereference: true });
+  for (const junk of ["components", "demos", "ts", "mathjax.json", "README.md"]) {
+    fs.rmSync(path.join(mjDst, "js", junk), { recursive: true, force: true });
+  }
+  // bundle tests live beside the sources
+  for (const entry of fs.readdirSync(mjDst, { recursive: true })) {
+    if (String(entry).endsWith(".d.ts")) fs.rmSync(path.join(mjDst, String(entry)));
+  }
+}
 // harfbuzzjs ships the full harfbuzz C++ tree; only the emscripten glue is
 // needed at runtime — prune the rest to keep the plugin package lean.
 const hbDir = path.join(nm, "harfbuzzjs");
