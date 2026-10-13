@@ -109,7 +109,17 @@ class Setting {
 }
 class Modal {
   constructor() { this.contentEl = new Component(); }
-  open() { calls.push("modal.open"); }
+  open() {
+    calls.push("modal.open");
+    // simulate the user confirming the dialog's default choice (the auto
+    // title card for the cover picker) — the real onOpen renders a DOM the
+    // stub does not model
+    if (typeof this.onPick === "function") {
+      this.picked = true;
+      this.onPick("auto");
+    }
+    this.close();
+  }
   close() {}
   onOpen() {}
   onClose() {}

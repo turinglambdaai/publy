@@ -11,6 +11,16 @@ export type PngRenderer = (svg: string, fitWidth?: number) => Buffer;
 
 let renderer: PngRenderer | null = null;
 
+// font buffers the native renderer should load (bundled CJK subsets) — the
+// wasm seam passes its fonts at injection time; native needs this nudge
+let nativeFontBuffers: Buffer[] | null = null;
+
+/** Provide bundled font buffers to the native renderer so SVG text using the
+ *  shipped CJK subsets renders identically on machines without the fonts. */
+export function setPngFontBuffers(buffers: Buffer[] | null): void {
+  nativeFontBuffers = buffers;
+}
+
 /** require relative to this module — works in real ESM (import.meta) and in
  *  esbuild-cjs bundles (__dirname); returns null when neither is available. */
 function nodeRequire(): NodeRequire | null {
@@ -31,7 +41,9 @@ function nativeRenderer(): PngRenderer {
   if (!req) throw new Error("native @resvg/resvg-js unavailable in this environment");
   const { Resvg } = req("@resvg/resvg-js") as typeof import("@resvg/resvg-js");
   return (svg: string, fitWidth?: number) => {
-    const opts: Record<string, unknown> = { font: { loadSystemFonts: true } };
+    const font: Record<string, unknown> = { loadSystemFonts: true };
+    if (nativeFontBuffers) font.fontBuffers = nativeFontBuffers;
+    const opts: Record<string, unknown> = { font };
     if (fitWidth) opts.fitTo = { mode: "width", value: fitWidth };
     return Buffer.from(new Resvg(svg, opts as ResvgRenderOptions).render().asPng());
   };

@@ -9,6 +9,7 @@ import {
   renderCards,
   setPngRenderer,
   setFontDir,
+  generateTitleCover,
 } from "@publy/core";
 // theme/highlight css inlined as text by esbuild (loader ".css": "text")
 import claudeThemeCss from "../../core/themes/claude.css";
@@ -160,6 +161,8 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   schedDesc: { zh: "到点由 Publy 服务自动发布到公众号草稿箱；配额在执行时计。", en: "The Publy server publishes to your WeChat drafts at the chosen time; quota counts at execution." },
   schedBtn: { zh: "排期", en: "Schedule" },
   schedInvalid: { zh: "时间无效或已过去——重新选一个未来时间", en: "That time is invalid or in the past — pick a future time" },
+  browseLocal: { zh: "从本机选择图片…", en: "Pick an image from this computer…" },
+  coverLocal: { zh: "本机图片", en: "Local image" },
   tipRefresh: { zh: "重新渲染预览", en: "Re-render the preview" },
   tipCopy: { zh: "复制排版 rich text", en: "Copy rendered rich text" },
   tipWidthMobile: { zh: "手机宽（390px）——公众号读者大多在手机", en: "Mobile width (390px) — most WeChat readers are on phones" },
@@ -575,6 +578,43 @@ class PublyHistoryView extends ItemView {
   }
 }
 
+const IMAGE_EXT_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+};
+
+function imageContentType(p: string): string {
+  return IMAGE_EXT_TYPES[path.extname(p).toLowerCase()] ?? "image/png";
+}
+
+/** native open-file dialog (desktop only via electron remote); null when
+ *  unavailable or cancelled */
+function pickLocalImage(): string | null {
+  try {
+    const electron = require("electron") as {
+      remote?: {
+        dialog?: { showOpenDialog: (win: unknown, opts: unknown) => { canceled: boolean; filePaths: string[] } | undefined };
+        getCurrentWindow?: () => unknown;
+      };
+    };
+    const remote = electron?.remote;
+    if (remote?.dialog?.showOpenDialog && remote?.getCurrentWindow) {
+      const res = remote.dialog.showOpenDialog(remote.getCurrentWindow(), {
+        title: t("browseLocal"),
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+        properties: ["openFile"],
+      });
+      if (res && !res.canceled && res.filePaths?.length) return res.filePaths[0];
+    }
+  } catch {
+    /* dialog unavailable */
+  }
+  return null;
+}
+
 /** Simple list picker for switching accounts. */
 class AccountModal extends Modal {
   private names: string[];
@@ -648,7 +688,7 @@ class CoverPickerModal extends Modal {
     const paint = () => {
       for (const [el, key] of tiles) el.toggleClass("is-chosen", key === this.chosen);
     };
-    const addTile = (key: string, build: (box: HTMLElement) => void, label: string) => {
+    const makeTile = (key: string, build: (box: HTMLElement) => void, label: string): HTMLElement => {
       const el = grid.createEl("div");
       el.addClass("publy-cover-tile");
       // 2.35:1 crop thumbnail — what the cover actually looks like after the
@@ -664,6 +704,7 @@ class CoverPickerModal extends Modal {
         paint();
       });
       tiles.push([el, key]);
+      return el;
     };
     for (const c of this.candidates.slice(0, 12)) {
       let dataUri = "";
@@ -672,7 +713,7 @@ class CoverPickerModal extends Modal {
       } catch {
         dataUri = "";
       }
-      addTile(c.name, (box) => {
+      makeTile(c.name, (box) => {
         if (dataUri) {
           const im = box.createEl("img");
           im.src = dataUri;
@@ -681,13 +722,41 @@ class CoverPickerModal extends Modal {
         }
       }, c.name);
     }
-    // the generated title card, previewed with this note's own title
-    addTile("auto", (box) => {
-      const d = box.createEl("div");
-      d.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f8f6f0;color:#b75c3d;font-weight:600;font-size:12px;text-align:center;padding:4px;line-height:1.4";
-      d.setText(this.file.basename);
+    // the auto title card, rendered for real with this note's own title — the
+    // same card the server would generate (fonts ship with the plugin)
+    makeTile("auto", (box) => {
+      const png = generateTitleCover(this.file.basename);
+      if (png) {
+        const im = box.createEl("img");
+        im.src = "data:image/png;base64," + png.toString("base64");
+      } else {
+        const d = box.createEl("div");
+        d.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f8f6f0;color:#b75c3d;font-weight:600;font-size:12px;text-align:center;padding:4px;line-height:1.4";
+        d.setText(this.file.basename);
+      }
     }, t("coverAutoTile"));
     paint();
+
+    // pick any image from this computer — articles without body images still
+    // deserve a real cover
+    const browseRow = this.contentEl.createEl("div");
+    browseRow.style.cssText = "margin-top:8px";
+    const browse = browseRow.createEl("button");
+    browse.addClass("publy-btn");
+    browse.textContent = t("browseLocal");
+    browse.addEventListener("click", () => {
+      const picked = pickLocalImage();
+      if (!picked || this.candidates.some((c) => c.path === picked)) return;
+      const cand = { name: path.basename(picked), path: picked, contentType: imageContentType(picked) };
+      this.candidates.unshift(cand);
+      const el = makeTile(cand.path, (box) => {
+        const im = box.createEl("img");
+        im.src = `data:${cand.contentType};base64,${fs.readFileSync(picked).toString("base64")}`;
+      }, `${t("coverLocal")} · ${cand.name}`);
+      grid.prepend(el);
+      this.chosen = cand.path;
+      paint();
+    });
 
     const row = this.contentEl.createEl("div");
     row.addClass("publy-modal-row");
@@ -1286,17 +1355,13 @@ export default class PublyPlugin extends Plugin {
       return;
     }
 
-    // no explicit cover -> let the user pick: any body image or the auto
-    // title card (first image is just the pre-selection, never a surprise)
-    if (type === "article" && !explicitCover && payloadAttachments.length === 0) {
-      // nothing to choose from — the title card is the only cover there is
-      coverMode = "auto";
-    }
-    if (type === "article" && !explicitCover && payloadAttachments.length > 0) {
+    // no explicit cover -> the user picks: body images, a file from this
+    // computer, or the auto title card (shown as a real render). Applies to
+    // image-less articles too — silence must never choose the cover.
+    if (type === "article" && !explicitCover) {
       const last = this.settings.lastCover?.[f.path];
-      const pre = last && (last === "auto" || payloadAttachments.some((c) => c.name === last))
-        ? last
-        : payloadAttachments[0]?.name ?? "auto";
+      const known = (k: string) => k === "auto" || payloadAttachments.some((c) => c.name === k) || fs.existsSync(k);
+      const pre = last && known(last) ? last : payloadAttachments[0]?.name ?? "auto";
       const choice = await new Promise<string | null>((resolve) => {
         new CoverPickerModal(this.app, this, f, payloadAttachments, pre, resolve).open();
       });
@@ -1308,8 +1373,19 @@ export default class PublyPlugin extends Plugin {
       }
       this.settings.lastCover = { ...(this.settings.lastCover ?? {}), [f.path]: choice };
       await this.saveSettings();
-      if (choice === "auto") coverMode = "auto";
-      else coverName = choice;
+      if (choice === "auto") {
+        coverMode = "auto";
+      } else if (!payloadAttachments.some((c) => c.name === choice)) {
+        // a file picked from this computer — rides the payload like a body image
+        payloadAttachments.push({
+          name: path.basename(choice),
+          data: fs.readFileSync(choice).toString("base64"),
+          contentType: imageContentType(choice),
+        });
+        coverName = path.basename(choice);
+      } else {
+        coverName = choice;
+      }
     }
 
     progress.setMessage(t("uploading"));
