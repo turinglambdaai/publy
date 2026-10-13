@@ -962,6 +962,7 @@ export default class PublyPlugin extends Plugin {
     // autoPreview extends this to zero-interaction: opening any note brings
     // the panel up by itself.
     let liveTimer: number | undefined;
+    let switchTimer: number | undefined;
     const previewOpen = () => this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW).length > 0;
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
@@ -969,7 +970,11 @@ export default class PublyPlugin extends Plugin {
         const open = previewOpen();
         if (!open && !this.settings.autoPreview) return;
         if (open && file.path === this.livePreviewPath) return;
-        void this.previewCurrentNote(file);
+        // autoPreview flips through notes as fast as the user clicks; a
+        // 250ms settle window keeps the synchronous render from blocking
+        // every one of those clicks
+        window.clearTimeout(switchTimer);
+        switchTimer = window.setTimeout(() => void this.previewCurrentNote(file), 250);
       }),
     );
     this.registerEvent(
@@ -1213,7 +1218,7 @@ export default class PublyPlugin extends Plugin {
         new Notice(t("cancelOk"));
       }
     } catch (err) {
-      new Notice(`取消失败：${(err as Error).message}`);
+      new Notice(t("cancelFail", { msg: (err as Error).message }));
     }
     await this.openHistory();
   }
@@ -1245,6 +1250,10 @@ export default class PublyPlugin extends Plugin {
     new AccountModal(this.app, names, this.settings.account, pick).open();
   }
 
+  /** monotonically increasing preview generation: a slow card-deck render
+   *  must never paint over a note the user switched to afterwards */
+  private previewGen = 0;
+
   /** one preview command: picks article or image-post cards from frontmatter.
    *  public: the preview-view toolbar and the theme dropdown call back into it. */
   async previewCurrentNote(file?: TFile): Promise<void> {
@@ -1253,15 +1262,22 @@ export default class PublyPlugin extends Plugin {
       new Notice(t("noActiveNote"));
       return;
     }
+    if (f.extension !== "md") return;
+    const gen = ++this.previewGen;
     const raw = await this.app.vault.cachedRead(f);
+    if (gen !== this.previewGen) return; // user moved on while we read
     this.livePreviewPath = f.path;
     if (this.detectIsCards(raw)) {
-      await this.previewCardDeck(f, raw);
+      await this.previewCardDeck(f, raw, gen);
       return;
     }
+    // let the UI paint the note switch before the (synchronous) render
+    await new Promise<void>((r) => setTimeout(r, 0));
+    if (gen !== this.previewGen) return;
     try {
       const rendered = renderMarkdown(raw, this.renderOptions());
       for (const w of rendered.warnings) console.warn("[publy] " + w);
+      if (gen !== this.previewGen) return;
       const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
       view.refresh = () => this.previewCurrentNote(f);
       view.setHtml(this.inlineImages(rendered.html, rendered.attachments), {
@@ -1270,11 +1286,11 @@ export default class PublyPlugin extends Plugin {
         account: this.settings.account || undefined,
       });
     } catch (err) {
-      new Notice(`Publy: ${(err as Error).message}`);
+      if (gen === this.previewGen) new Notice(`Publy: ${(err as Error).message}`);
     }
   }
 
-  private async previewCardDeck(file?: TFile, rawArg?: string): Promise<void> {
+  private async previewCardDeck(file?: TFile, rawArg?: string, gen?: number): Promise<void> {
     if (!this.wasmOk) {
       new Notice(t("wasmDown"));
       return;
@@ -1285,6 +1301,8 @@ export default class PublyPlugin extends Plugin {
       return;
     }
     const raw = rawArg ?? (await this.app.vault.cachedRead(f));
+    const stale = () => gen !== undefined && gen !== this.previewGen;
+    if (stale()) return;
     try {
       const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-cards-"));
       const view = (await this.activateView(VIEW_TYPE_PUBLY_PREVIEW)) as PublyPreviewView;
@@ -1296,6 +1314,7 @@ export default class PublyPlugin extends Plugin {
       const result = await renderCards(raw, {
         outDir,
         onCard: (card) => {
+          if (stale()) return; // drop late cards instead of overpainting
           try {
             view.appendCard(fs.readFileSync(card.file).toString("base64"));
           } catch (err) {
@@ -1303,6 +1322,7 @@ export default class PublyPlugin extends Plugin {
           }
         },
       });
+      if (stale()) return; // a newer note took the panel — do not paint over it
       view.finishCards(result.caption);
       if (!result.lint.ok) {
         new Notice(`Publy lint: ${result.lint.problems[0] ?? "check the preview"}`);
