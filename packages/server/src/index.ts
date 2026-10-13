@@ -16,9 +16,10 @@ import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import type { JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
 import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
-import { Store, PLAN_LIMITS, type AccountRow, type Plan, type UserRow } from "./store.js";
+import { Store, PLAN_LIMITS, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
 import { createProvider } from "./payments.js";
-import { purchasePage, adminPage } from "./pages.js";
+import { purchasePage } from "./pages.js";
+import { adminPage } from "./admin-page.js";
 
 export interface ServerAccount {
   name: string;
@@ -641,6 +642,56 @@ export function buildApp(config: ServerConfig) {
     if (!done) return reply.code(404).send({ code: "NOT_FOUND", message: "no such order" });
     audit({ event: "admin-order-completed", orderId: done.id, contact: done.contact });
     return { ok: done.status === "paid", order: done };
+  });
+
+  // operator dashboard aggregates (one round-trip for the whole overview)
+  app.get("/v1/admin/overview", async (req, reply) => {
+    if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
+    const users = store.listUsers();
+    const mk = monthKey();
+    const pro = users.filter((u) => store.isProActive(u)).length;
+    const disabled = users.filter((u) => u.disabledAt).length;
+    const monthTotal = users
+      .filter((u) => u.monthKey === mk)
+      .reduce((acc, u) => acc + u.publishCount, 0);
+    const orders = store.listOrders();
+    const pending = orders.filter((o) => o.status === "pending").length;
+    const paid = orders.filter((o) => o.status === "paid");
+    const todayPrefix = new Date().toISOString().slice(0, 10);
+    let eventsToday = 0;
+    try {
+      const lines = fs.readFileSync(historyFile, "utf-8").trim().split("\n").slice(-2000);
+      for (const line of lines) {
+        try { if (String(JSON.parse(line).ts ?? "").startsWith(todayPrefix)) eventsToday += 1; }
+        catch { /* skip malformed */ }
+      }
+    } catch { /* no history yet */ }
+    return {
+      users: { total: users.length, pro, disabled },
+      publishes: { monthTotal },
+      orders: { pending, paid: paid.length, revenueFen: paid.reduce((a, o) => a + o.amountFen, 0) },
+      accounts: { total: (config.accounts ?? []).length + store.listAccounts().length },
+      eventsToday,
+    };
+  });
+
+  // account inventory for the console: names + appIds + resolved owner
+  // contact; secrets never leave the server
+  app.get("/v1/admin/accounts", async (req, reply) => {
+    if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
+    const configNames = new Set((config.accounts ?? []).map((a) => a.name));
+    const all = [
+      ...(config.accounts ?? []).map((a) => ({ name: a.name, appId: a.appId, owner: null as string | null, source: "config" })),
+      ...store.listAccounts()
+        .filter((a) => !configNames.has(a.name))
+        .map((a) => ({
+          name: a.name,
+          appId: a.appId,
+          owner: a.ownerUserId ? (store.findUserById(a.ownerUserId)?.contact ?? null) : null,
+          source: "db",
+        })),
+    ];
+    return { accounts: all };
   });
 
   // --- idempotency ------------------------------------------------------------

@@ -41,6 +41,51 @@ test("auth rejects wrong key and accepts the right one", async () => {
   assert.deepEqual(good.json().accounts, ["TestAcct"]);
 });
 
+test("admin overview aggregates users, orders and accounts", async () => {
+  const deny = await app.inject({ method: "GET", url: "/v1/admin/overview" });
+  assert.equal(deny.statusCode, 401);
+  const res = await app.inject({ method: "GET", url: "/v1/admin/overview", headers: { "x-api-key": "test-key" } });
+  assert.equal(res.statusCode, 200);
+  const d = res.json();
+  assert.equal(d.users.total, 0);
+  assert.equal(d.users.pro, 0);
+  assert.equal(d.publishes.monthTotal, 0);
+  assert.equal(d.orders.pending, 0);
+  assert.equal(d.orders.revenueFen, 0);
+  assert.ok(d.accounts.total >= 1); // server.json declares TestAcct
+  assert.equal(d.eventsToday, 0);
+});
+
+test("admin accounts lists config and db accounts with owner resolved", async () => {
+  const deny = await app.inject({ method: "GET", url: "/v1/admin/accounts" });
+  assert.equal(deny.statusCode, 401);
+  // a user binds their own account via the admin endpoint
+  await app.inject({
+    method: "POST", url: "/v1/admin/users",
+    headers: { "x-api-key": "test-key", "content-type": "application/json" },
+    payload: { contact: "owner@example.com", plan: "pro", months: 1 },
+  });
+  await app.inject({
+    method: "POST", url: "/v1/admin/accounts",
+    headers: { "x-api-key": "test-key", "content-type": "application/json" },
+    payload: { name: "owned-acct", appId: "wx_owned", appSecret: "s", ownerContact: "owner@example.com" },
+  });
+  const res = await app.inject({ method: "GET", url: "/v1/admin/accounts", headers: { "x-api-key": "test-key" } });
+  assert.equal(res.statusCode, 200);
+  const d = res.json();
+  const owned = d.accounts.find((a: { name: string }) => a.name === "owned-acct");
+  assert.ok(owned);
+  assert.equal(owned.owner, "owner@example.com");
+  assert.equal(owned.source, "db");
+  assert.ok(!JSON.stringify(d).includes("secret"), "appSecret must never be listed");
+});
+
+test("admin page shell is served publicly", async () => {
+  const res = await app.inject({ method: "GET", url: "/admin" });
+  assert.equal(res.statusCode, 200);
+  assert.ok(res.body.includes("Publy"));
+});
+
 test("publish validates required fields", async () => {
   const headers = { "x-api-key": "test-key", "content-type": "application/json" };
   const noAccount = await app.inject({ method: "POST", url: "/v1/publish", headers, payload: { type: "article", title: "t" } });
