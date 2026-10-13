@@ -163,6 +163,7 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   schedInvalid: { zh: "时间无效或已过去——重新选一个未来时间", en: "That time is invalid or in the past — pick a future time" },
   browseLocal: { zh: "从本机选择图片…", en: "Pick an image from this computer…" },
   coverLocal: { zh: "本机图片", en: "Local image" },
+  localCoverLost: { zh: "本机封面图已失效——请重新选择", en: "Local cover image lost — pick it again" },
   tipRefresh: { zh: "重新渲染预览", en: "Re-render the preview" },
   tipCopy: { zh: "复制排版 rich text", en: "Copy rendered rich text" },
   tipWidthMobile: { zh: "手机宽（390px）——公众号读者大多在手机", en: "Mobile width (390px) — most WeChat readers are on phones" },
@@ -590,29 +591,37 @@ function imageContentType(p: string): string {
   return IMAGE_EXT_TYPES[path.extname(p).toLowerCase()] ?? "image/png";
 }
 
-/** native open-file dialog (desktop only via electron remote); null when
- *  unavailable or cancelled */
-function pickLocalImage(): string | null {
-  try {
-    const electron = require("electron") as {
-      remote?: {
-        dialog?: { showOpenDialog: (win: unknown, opts: unknown) => { canceled: boolean; filePaths: string[] } | undefined };
-        getCurrentWindow?: () => unknown;
-      };
-    };
-    const remote = electron?.remote;
-    if (remote?.dialog?.showOpenDialog && remote?.getCurrentWindow) {
-      const res = remote.dialog.showOpenDialog(remote.getCurrentWindow(), {
-        title: t("browseLocal"),
-        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
-        properties: ["openFile"],
-      });
-      if (res && !res.canceled && res.filePaths?.length) return res.filePaths[0];
-    }
-  } catch {
-    /* dialog unavailable */
+async function fileToBase64(f: File): Promise<string> {
+  const buf = new Uint8Array(await f.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 0x8000) {
+    bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
   }
-  return null;
+  return btoa(bin);
+}
+
+/** native file picker via <input type="file"> — the community-plugin-safe way
+ *  (electron.remote is banned by Obsidian's review rules, and the HTML input
+ *  works everywhere). Resolves with the chosen files; [] when cancelled. */
+function pickLocalImageFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp,image/gif";
+    input.multiple = true;
+    input.style.display = "none";
+    let settled = false;
+    const done = (files: File[]) => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+      resolve(files);
+    };
+    input.addEventListener("change", () => done(input.files ? Array.from(input.files) : []));
+    input.addEventListener("cancel", () => done([]));
+    document.body.appendChild(input);
+    input.click();
+  });
 }
 
 /** Simple list picker for switching accounts. */
@@ -738,24 +747,31 @@ class CoverPickerModal extends Modal {
     paint();
 
     // pick any image from this computer — articles without body images still
-    // deserve a real cover
+    // deserve a real cover. Content-addressed keys (local-<hash>) live in the
+    // session registry; electron.remote is banned by Obsidian review rules.
     const browseRow = this.contentEl.createEl("div");
     browseRow.style.cssText = "margin-top:8px";
     const browse = browseRow.createEl("button");
     browse.addClass("publy-btn");
     browse.textContent = t("browseLocal");
-    browse.addEventListener("click", () => {
-      const picked = pickLocalImage();
-      if (!picked || this.candidates.some((c) => c.path === picked)) return;
-      const cand = { name: path.basename(picked), path: picked, contentType: imageContentType(picked) };
-      this.candidates.unshift(cand);
-      const el = makeTile(cand.path, (box) => {
-        const im = box.createEl("img");
-        im.src = `data:${cand.contentType};base64,${fs.readFileSync(picked).toString("base64")}`;
-      }, `${t("coverLocal")} · ${cand.name}`);
-      grid.prepend(el);
-      this.chosen = cand.path;
-      paint();
+    browse.addEventListener("click", async () => {
+      const files = await pickLocalImageFiles();
+      let added = false;
+      for (const f of files) {
+        const data = await fileToBase64(f);
+        const key = "local-" + crypto.createHash("sha1").update(data).digest("hex").slice(0, 10);
+        const contentType = f.type || imageContentType(f.name);
+        this.plugin.localImages.set(key, { name: f.name, data, contentType });
+        if (tiles.some(([, k]) => k === key)) continue;
+        const el = makeTile(key, (box) => {
+          const im = box.createEl("img");
+          im.src = `data:${contentType};base64,${data}`;
+        }, f.name);
+        grid.prepend(el);
+        this.chosen = key;
+        added = true;
+      }
+      if (added) paint();
     });
 
     const row = this.contentEl.createEl("div");
@@ -831,6 +847,9 @@ export default class PublyPlugin extends Plugin {
   settings: PublySettings;
   wasmOk = false;
   statusBarItem: HTMLElement | null = null;
+  /** session-local registry of images picked from this computer for covers
+   *  (key: local-<sha1 of content>) — no file paths are kept, only payload */
+  localImages = new Map<string, { name: string; data: string; contentType: string }>();
   /** the note the in-app preview currently shows (for live re-render) */
   private livePreviewPath: string | null = null;
   /** one publish at a time — double-clicks must not create duplicate drafts */
@@ -1360,7 +1379,8 @@ export default class PublyPlugin extends Plugin {
     // image-less articles too — silence must never choose the cover.
     if (type === "article" && !explicitCover) {
       const last = this.settings.lastCover?.[f.path];
-      const known = (k: string) => k === "auto" || payloadAttachments.some((c) => c.name === k) || fs.existsSync(k);
+      const known = (k: string) =>
+        k === "auto" || payloadAttachments.some((c) => c.name === k) || this.localImages.has(k) || fs.existsSync(k);
       const pre = last && known(last) ? last : payloadAttachments[0]?.name ?? "auto";
       const choice = await new Promise<string | null>((resolve) => {
         new CoverPickerModal(this.app, this, f, payloadAttachments, pre, resolve).open();
@@ -1375,14 +1395,19 @@ export default class PublyPlugin extends Plugin {
       await this.saveSettings();
       if (choice === "auto") {
         coverMode = "auto";
-      } else if (!payloadAttachments.some((c) => c.name === choice)) {
-        // a file picked from this computer — rides the payload like a body image
-        payloadAttachments.push({
-          name: path.basename(choice),
-          data: fs.readFileSync(choice).toString("base64"),
-          contentType: imageContentType(choice),
-        });
-        coverName = path.basename(choice);
+      } else if (choice.startsWith("local-")) {
+        // a file picked from this computer (content-addressed in the session
+        // registry) — rides the payload like a body image
+        const img = this.localImages.get(choice);
+        if (!img) {
+          progress.hide();
+          this.status("");
+          view?.setPublishing(false);
+          new Notice(t("localCoverLost"));
+          return;
+        }
+        payloadAttachments.push({ name: img.name, data: img.data, contentType: img.contentType });
+        coverName = img.name;
       } else {
         coverName = choice;
       }
