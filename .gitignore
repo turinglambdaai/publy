@@ -13,3 +13,6 @@ packages/*/src/**/*.js.map
 
 # obsidian plugin build output (shipped via releases)
 packages/obsidian-plugin/dist/
+
+# release artifacts live on GitHub Releases, not in the repo
+packages/obsidian-plugin/publy-obsidian-*.zip
