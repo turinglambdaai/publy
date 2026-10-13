@@ -10,7 +10,7 @@ Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown
 - **The Obsidian plugin (this repo's `manifest.json`) renders and publishes the current note in place**: in-app article preview, image-post card deck preview, rich-text copy, publish progress — no browser needed.
 - **Image posts as a first-class citizen.** `publy card post.md` renders themed 3:4 card PNGs deterministically — pixel-perfect Chinese text, seconds per deck, no AI image generation.
 - **Theme store without the friction.** Themes are npm packages with rendered previews; `publy theme add` installs, `publy theme preview` shows before you commit.
-- **Open core, no lock-in.** The CLI and a self-hostable server are open source (AGPL-3.0) and speak the same protocol as the hosted cloud. The cloud sells reliability: stable egress IP for the WeChat API whitelist, AppSecret custody, token lifecycle, scheduling, multi-account.
+- **Same code everywhere.** The CLI speaks the exact protocol the hosted cloud runs. The cloud sells reliability: stable egress IP for the WeChat API whitelist, AppSecret custody, token lifecycle, scheduling, multi-account.
 
 Compliance: Publy only uses official WeChat MP APIs. No account simulation, no browser automation.
 
@@ -32,4 +32,7 @@ Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [themes.publy.jrtx
 
 ## License
 
-AGPL-3.0
+Proprietary — all rights reserved (turinglambdaai). Historical releases
+published before 2026-10-13 were distributed under AGPL-3.0 and remain
+governed by that license; current versions are for authorized customers
+under individual agreements.
