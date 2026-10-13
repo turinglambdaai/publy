@@ -67,6 +67,7 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   cmdHistory: { zh: "打开发布历史与待发任务", en: "Open publish history & scheduled jobs" },
   cmdSwitch: { zh: "切换公众号账号", en: "Switch WeChat account" },
   ribbon: { zh: "Publy: 发布当前笔记", en: "Publy: publish current note" },
+  ribbonPreview: { zh: "Publy: 预览当前笔记", en: "Publy: preview current note" },
   menuPublish: { zh: "Publy: 发布到公众号草稿箱", en: "Publy: Publish to WeChat drafts" },
   menuPreview: { zh: "Publy: 预览排版", en: "Publy: Preview typeset" },
   menuCopy: { zh: "Publy: 复制排版富文本", en: "Publy: Copy rich text" },
@@ -79,6 +80,8 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   previewHint: { zh: "打开一篇笔记，这里会实时预览它的公众号排版。", en: "Open a note — its WeChat-ready typeset shows up here, live." },
   noTitle: { zh: "(无标题)", en: "(untitled)" },
   setLang: { zh: "界面语言", en: "Language" },
+  setAutoPreview: { zh: "打开笔记时自动预览", en: "Auto-preview on note open" },
+  setAutoPreviewDesc: { zh: "每个笔记打开时自动渲染公众号排版预览（高频预览零交互）；预览面板已开时切换笔记本就自动跟随", en: "Render the WeChat preview automatically as each note opens; with the panel open, switching notes already follows along" },
   setLangDesc: { zh: "自动跟随 Obsidian 界面语言；命令名需重载插件后更新", en: "Auto follows the Obsidian UI language; command names update after reload" },
   langAuto: { zh: "自动", en: "Auto" },
   langReload: { zh: "Publy: 界面语言已保存——命令名等将在重载插件后完全生效", en: "Publy: language saved — command names update fully after reload" },
@@ -220,6 +223,8 @@ interface PublySettings {
   mediaDir: string;
   theme: string;
   lang: "auto" | "zh" | "en";
+  /** open the preview panel automatically as each markdown note opens */
+  autoPreview: boolean;
   /** preview panel width: 390px "mobile" (the WeChat norm) or 700px "desktop" */
   previewWidth: "mobile" | "desktop";
   /** file path -> last cover choice ("auto" or attachment name) */
@@ -233,6 +238,7 @@ const DEFAULT_SETTINGS: PublySettings = {
   mediaDir: "",
   theme: "claude",
   lang: "auto",
+  autoPreview: false,
   previewWidth: "desktop",
   lastCover: {},
 };
@@ -918,14 +924,17 @@ export default class PublyPlugin extends Plugin {
     this.statusBarItem = this.addStatusBarItem();
 
     // live preview: while the preview leaf is open it always shows the active
-    // note — switching notes re-renders, saving re-renders (~0.9s debounce)
+    // note — switching notes re-renders, saving re-renders (~0.9s debounce).
+    // autoPreview extends this to zero-interaction: opening any note brings
+    // the panel up by itself.
     let liveTimer: number | undefined;
     const previewOpen = () => this.app.workspace.getLeavesOfType(VIEW_TYPE_PUBLY_PREVIEW).length > 0;
     this.registerEvent(
       this.app.workspace.on("file-open", (file) => {
-        if (!previewOpen()) return;
         if (!(file instanceof TFile) || file.extension !== "md") return;
-        if (file.path === this.livePreviewPath) return;
+        const open = previewOpen();
+        if (!open && !this.settings.autoPreview) return;
+        if (open && file.path === this.livePreviewPath) return;
         void this.previewCurrentNote(file);
       }),
     );
@@ -955,6 +964,8 @@ export default class PublyPlugin extends Plugin {
     );
 
     this.addRibbonIcon("send", t("ribbon"), () => this.publishCurrentNote());
+    // preview is the high-frequency action — it gets its own one-click icon
+    this.addRibbonIcon("eye", t("ribbonPreview"), () => this.previewCurrentNote());
 
     this.addCommand({
       id: "publish-current-note",
@@ -1502,6 +1513,14 @@ class PublySettingTab extends PluginSettingTab {
           new Notice(t("langReload"), 6000);
           this.display();
         }),
+    );
+
+    new Setting(containerEl).setName(t("setAutoPreview")).setDesc(t("setAutoPreviewDesc")).addToggle((tgl) =>
+      tgl.setValue(this.plugin.settings.autoPreview ?? false).onChange(async (v) => {
+        this.plugin.settings.autoPreview = v;
+        await this.plugin.saveSettings();
+        if (v) void this.plugin.previewCurrentNote();
+      }),
     );
 
     // setup guide — the first thing a new user sees
