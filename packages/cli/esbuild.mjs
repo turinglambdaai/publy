@@ -31,6 +31,8 @@ await esbuild.build({
     "cheerio",
     "markdown-it",
     "gray-matter",
+    "mathjax-full",
+    "mathjax-full/*",
   ],
   logLevel: "info",
 });

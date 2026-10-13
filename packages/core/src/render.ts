@@ -1,6 +1,8 @@
 // Markdown → inline-styled HTML for the WeChat editor.
 
+import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js/lib/common";
@@ -11,6 +13,7 @@ import { parseSource, publishType, type SourceMeta } from "./frontmatter.js";
 import { preprocessObsidian, resolveAsset } from "./obsidian.js";
 import { loadTheme, loadThemeFromCss, loadHighlightCss, resolveVars } from "./theme.js";
 import { svgToPng } from "./svg.js";
+import { texToPng } from "./math.js";
 
 export interface RenderOptions {
   theme?: string;
@@ -65,6 +68,69 @@ function highlight(code: string, lang: string): string {
   }
 }
 
+// --- math (TeX) -------------------------------------------------------------
+// $...$ inline, $$...$$ block. The rules emit placeholder <img> nodes carrying
+// the raw TeX; the DOM pass rasterizes them through mathjax → PNG (see
+// math.ts) so WeChat never sees markup its editor would strip.
+
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function mathPlaceholder(tex: string, display: boolean): string {
+  const hex = crypto.createHash("sha1").update(tex + (display ? "\u0001" : "\u0000")).digest("hex").slice(0, 10);
+  return `<img class="publy-math" src="publy-math://${hex}" alt="${escapeAttr(tex)}" data-tex="${escapeAttr(tex)}" data-display="${display ? 1 : 0}" data-hex="${hex}">`;
+}
+
+function mathInlineRule(state: any, silent: boolean): boolean {
+  const src = state.src;
+  const pos = state.pos;
+  if (src.charCodeAt(pos) !== 0x24 /* $ */) return false;
+  // find the closer: a $ with an even number of backslashes before it
+  let end = pos + 1;
+  for (;;) {
+    end = src.indexOf("$", end);
+    if (end === -1) return false;
+    let bs = 0;
+    for (let k = end - 1; src.charCodeAt(k) === 0x5c; k--) bs++;
+    if (bs % 2 === 0) break;
+    end++;
+  }
+  const content = src.slice(pos + 1, end);
+  if (!content.trim() || /[\n\r]/.test(content)) return false;
+  // pandoc-style guard: no unescaped whitespace hugging the delimiters
+  if (/^\s|\s$/.test(content)) return false;
+  if (!silent) state.push("html_inline", "", 0).content = mathPlaceholder(content, false);
+  state.pos = end + 1;
+  return true;
+}
+
+function mathBlockRule(state: any, startLine: number, endLine: number, silent: boolean): boolean {
+  const startPos = state.bMarks[startLine] + state.tShift[startLine];
+  if (state.src.charCodeAt(startPos) !== 0x24 || state.src.charCodeAt(startPos + 1) !== 0x24) return false;
+  let pos = startPos + 2;
+  let closeLine = startLine;
+  let closeIdx = -1;
+  while (closeLine < endLine) {
+    const lineEnd = state.eMarks[closeLine];
+    const rel = state.src.slice(pos, lineEnd).indexOf("$$");
+    if (rel !== -1) {
+      closeIdx = pos + rel;
+      break;
+    }
+    closeLine++;
+    pos = state.bMarks[closeLine] + state.tShift[closeLine];
+  }
+  if (closeIdx === -1) return false;
+  const content = state.src.slice(startPos + 2, closeIdx).trim();
+  if (!content) return false;
+  if (!silent) {
+    state.push("html_block", "", 0).content = mathPlaceholder(content, true) + "\n";
+  }
+  state.line = closeLine + 1;
+  return true;
+}
+
 class AttachmentCollector {
   attachments: Attachment[] = [];
   private used = new Set<string>();
@@ -103,6 +169,8 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
 
   // 2. markdown → html fragment
   const md = new MarkdownIt({ html: true, breaks: false, highlight });
+  md.block.ruler.before("fence", "publy_math_block", mathBlockRule);
+  md.inline.ruler.after("escape", "publy_math_inline", mathInlineRule);
   const bodyHtml = md.render(pre.body);
   const theme = opts.customThemePath
     ? loadThemeFromCss(opts.customThemePath)
@@ -129,10 +197,44 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
     });
   }
 
+  // 3a-math. TeX formulas → PNG attachments: images survive the WeChat editor,
+  // HTML/CSS math does not. Same TeX hashes to the same file name, so repeated
+  // formulas upload once (and hit the server's material cache).
+  const mathNames = new Map<string, string>();
+  $("img.publy-math").each((_, el) => {
+    const texStr = $(el).attr("data-tex") ?? "";
+    const display = $(el).attr("data-display") === "1";
+    const hex = $(el).attr("data-hex") ?? crypto.randomBytes(5).toString("hex");
+    const img = texToPng(texStr, display);
+    if (!img) {
+      warnings.push(`Math not rendered (mathjax-full unavailable or TeX error): ${texStr.slice(0, 40)}`);
+      $(el).replaceWith(`<code>${escapeText(texStr)}</code>`);
+      return;
+    }
+    let name = mathNames.get(hex);
+    if (!name) {
+      const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-math-"));
+      const outPath = path.join(outDir, `formula-${hex}.png`);
+      fs.writeFileSync(outPath, img.png);
+      name = collector.add(outPath);
+      mathNames.set(hex, name);
+    }
+    $(el).attr("src", `${ATTACHMENT_SCHEME}${name}`);
+    // inline style wins over theme `img` rules — themes set display:block on
+    // images, which would tear an inline formula out of the text line
+    $(el).attr(
+      "style",
+      display
+        ? `display:block;margin:12px auto;width:${img.widthPx}px`
+        : `display:inline-block;width:${img.widthPx}px;vertical-align:${img.valignPx}px;border-radius:0`,
+    );
+    $(el).removeAttr("data-tex data-display data-hex");
+  });
+
   // 3b. images: svg → png, local files → attachment refs
   $("img").each((_, el) => {
     const src = $(el).attr("src");
-    if (!src || src.startsWith("http") || src.startsWith("data:")) return;
+    if (!src || src.startsWith("http") || src.startsWith("data:") || src.startsWith(ATTACHMENT_SCHEME)) return;
     let filePath = decodeURIComponent(src);
     if (!path.isAbsolute(filePath)) {
       const resolved = resolveAsset(path.basename(filePath), mediaDirs);

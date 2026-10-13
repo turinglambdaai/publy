@@ -15,6 +15,24 @@ markdown 文件 → publy CLI → publy-server（你的服务器）→ 微信官
 - **文章**：标准图文消息，主题化排版
 - **图片消息**：图片消息，图文分离（text）或卡片渲染（cards）两种模式
 
+## 托管服务（推荐新手，五分钟发布）
+
+不想自己维护服务器？购买页付款拿 key，三步完成：
+
+```bash
+npm i -g @turinglambdaai/publy
+publy config set server https://publy-api.jrtx.site
+publy config set api_key <购买页发放的key>
+```
+
+然后 [§配置客户端](#3-配置客户端) 一节里 `account add` 后即可 `publy publish`。购买与开通：
+
+1. 浏览器打开 `http://<服务地址>/`（购买页）→ 选档位（Free 30 次/月 免费体验，Pro 无限额）；
+2. 按页内方式付款，用「key 找回」输入联系方式取回 key；
+3. `publy quota` 确认连接与配额。
+
+服务条款与隐私政策见 [terms.md](terms.md) / [privacy.md](privacy.md)：AppSecret 加密托管不出服务器、正文不落盘、随时可迁出自托管。
+
 ## 准备工作
 
 ### 1. 一台有稳定 IP 的服务器
