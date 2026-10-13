@@ -175,8 +175,8 @@ export function purchasePage(publicIp = "你的服务器公网 IP"): string {
 
   <div style="text-align:center;margin-top:28px;font-size:12px;color:var(--text-3);line-height:2">
     免费档：1 账号 · 30 次/月，联系管理员开通。<br>
-    仅走微信公众号官方 API · AppSecret 加密存储永不下发<br>
-    <a href="https://themes.publy.jrtx.site">主题画廊</a> · <a href="https://publy.jrtx.site">publy.jrtx.site</a>
+    仅走微信公众号官方 API · AppSecret 加密存储永不下发 · 开源 AGPL<br>
+    <a href="https://github.com/turinglambdaai/publy">GitHub</a> · <a href="https://themes.publy.jrtx.site">主题画廊</a> · <a href="https://publy.jrtx.site">publy.jrtx.site</a>
   </div>
 </div>
 <script>
