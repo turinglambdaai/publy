@@ -1,3 +1,5 @@
+# **[2026-10-13 搁置]** 仓库转私有后此计划作废（社区目录要求开源）。
+
 # Obsidian 社区目录提审材料
 
 目标：把 Publy 插件提交到 [obsidianmd/obsidian-releases](https://github.com/obsidianmd/obsidian-releases) 的社区插件目录。本文档是提交所需材料的唯一权威草稿。

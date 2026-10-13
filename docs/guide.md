@@ -48,7 +48,8 @@ npm i -g @turinglambdaai/publy
 或从源码（开发期）：
 
 ```bash
-git clone https://github.com/turinglambdaai/publy.git && cd publy
+# 授权用户：从私有仓库（需协作者权限）clone，或使用分发的安装包
+# git clone https://github.com/turinglambdaai/publy.git && cd publy
 pnpm install --frozen-lockfile && pnpm -r build
 # 把 publy 命令指向 packages/cli/dist/index.js（全局 bin 或 alias）
 ```
@@ -222,7 +223,8 @@ publy config set api_key publy_你的key
 ## 自托管服务器
 
 ```bash
-git clone https://github.com/turinglambdaai/publy.git /opt/publy && cd /opt/publy
+# git clone https://github.com/turinglambdaai/publy.git /opt/publy && cd /opt/publy
+# （私有仓库——需协作者权限；或解压分发的部署包到 /opt/publy）
 pnpm install --frozen-lockfile && pnpm -r build
 # 写 /root/.publy/server.json（见上），然后 systemd 托管：
 # ExecStart=node /opt/publy/packages/server/dist/index.js
