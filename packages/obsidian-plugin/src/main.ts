@@ -81,7 +81,7 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   noTitle: { zh: "(无标题)", en: "(untitled)" },
   setLang: { zh: "界面语言", en: "Language" },
   setAutoPreview: { zh: "打开笔记时自动预览", en: "Auto-preview on note open" },
-  setAutoPreviewDesc: { zh: "每个笔记打开时自动渲染公众号排版预览（高频预览零交互）；预览面板已开时切换笔记本就自动跟随", en: "Render the WeChat preview automatically as each note opens; with the panel open, switching notes already follows along" },
+  setAutoPreviewDesc: { zh: "每个笔记打开时自动渲染公众号排版预览（高频预览零交互）；预览面板已开时切换笔记自动跟随；重度用户也可在 设置→快捷键 里为「预览当前笔记」绑热键", en: "Render the WeChat preview automatically as each note opens; with the panel open, switching notes follows along; heavy users can also bind a hotkey to 'Preview current note' in Settings → Hotkeys" },
   setLangDesc: { zh: "自动跟随 Obsidian 界面语言；命令名需重载插件后更新", en: "Auto follows the Obsidian UI language; command names update after reload" },
   langAuto: { zh: "自动", en: "Auto" },
   langReload: { zh: "Publy: 界面语言已保存——命令名等将在重载插件后完全生效", en: "Publy: language saved — command names update fully after reload" },
@@ -964,8 +964,6 @@ export default class PublyPlugin extends Plugin {
     );
 
     this.addRibbonIcon("send", t("ribbon"), () => this.publishCurrentNote());
-    // preview is the high-frequency action — it gets its own one-click icon
-    this.addRibbonIcon("eye", t("ribbonPreview"), () => this.previewCurrentNote());
 
     this.addCommand({
       id: "publish-current-note",
