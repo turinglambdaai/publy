@@ -15,3 +15,12 @@ key as X-API-Key>`. The publishing server itself must stay untouched by
 gateway work. Replay ends with a `{"control":"replay-done"}` marker —
 clients synchronize on it. Tests: `raco test racket` (CI job `racket-ws`;
 the websocket library installs from GitHub until it reaches the catalog).
+
+`racket/publy-stats.rkt` is the read-only operational stats companion —
+same posture (next to the server, `users.db` opened read-only,
+`app_secret`/`api_key` never selected) and zero dependency on `@publy/core`.
+It aggregates publish outcomes, top errors, monthly-quota pressure and
+paid revenue from `history.jsonl` + `users.db`, bucketed in Asia/Shanghai
+wall time. Human report by default, `--json` for agents. New Racket-side
+components must follow this pattern: sidecar next to the server, read-only
+over the data plane, no engine dependency.

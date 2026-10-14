@@ -33,7 +33,7 @@ git clone https://github.com/turinglambdaai/publy && cd publy && pnpm -r build
 tar -xzf publy-backup-YYYY-MM-DD.tar.gz -C ~
 # 3. start server + event gateway (ports default 8081 / 8082)
 node packages/server/dist/index.js &
-node racket/publy-ws.rkt &
+racket racket/publy-ws.rkt &
 ```
 
 `secretKey` inside `server.json` decrypts the stored AppSecrets — restoring
@@ -49,3 +49,17 @@ cd publy && git pull && pnpm -r build
 
 `users.db` is SQLite; the event gateway only ever opens it read-only, so a
 rolling restart of the gateway is safe while the server keeps serving.
+
+## Operational stats
+
+```bash
+racket racket/publy-stats.rkt                    # human report, last 30 days
+racket racket/publy-stats.rkt --days 90 --json   # machine-readable, for agents
+```
+
+Read-only over the same data dir (`users.db` opened read-only,
+`app_secret`/`api_key` never selected, `history.jsonl` only read) — safe to
+run while the server is live. Reports publish volume and failure rate per
+day, top WeChat errors, accounts near their monthly plan quota, the
+user/plan mix and paid revenue by month, all bucketed in Asia/Shanghai
+wall time. `--config` points at a non-default `server.json`.
