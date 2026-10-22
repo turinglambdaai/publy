@@ -24,3 +24,9 @@ paid revenue from `history.jsonl` + `users.db`, bucketed in Asia/Shanghai
 wall time. Human report by default, `--json` for agents. New Racket-side
 components must follow this pattern: sidecar next to the server, read-only
 over the data plane, no engine dependency.
+
+## 组合定位（Portfolio placement）
+
+- 轨道与授权：轨道 3 免费 + 托管 Pro；授权形态：AGPL-3.0（核心）；商业归属：CLI 永久免费，托管发布服务后期订阅。
+- 组合归属唯一权威：[PORTFOLIO.md](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/PORTFOLIO.md)（turinglambdaai.github.io 仓库）。改归属/授权先改权威档，再同步本节。
+- 纪律：价格只进本仓 `PRICING.md`，且收费开始时才发布；README 与产品站不做价格预告。
