@@ -1,47 +1,9 @@
-# Publy 商业模式
+# Commercial design notes
 
-## 1. 开源边界
+**English** · [简体中文](business.zh-CN.md)
 
-| 开源（AGPL-3.0） | 闭源 |
-|---|---|
-| core / cli / server（自托管）/ 主题注册表 / 官方主题 | cloud 控制面（计费、多租户、调度、托管运维） |
+This file explains the tradeoff only. Root [PRICING.md](../PRICING.md) is the sole implementation policy for prices, authorization, quotas and launch gates. There are no actual users or open purchases. Earlier revenue forecasts, early-bird, team and unlimited plans are retired in Git history rather than retained as implementation instructions.
 
-AGPL 的意义：任何人可以自托管自用，但拿去开 SaaS 必须开源——保护云服务这条收入线。
+CLI, local rendering, default themes, Obsidian and self-hosting stay free. Future hosting charges for stable egress, credential custody, scheduling and recoverable delivery; a delivered draft is not a public post. No unlimited compute/delivery or theme marketplace is planned. Prove the single-account fixed-egress pilot in #8 before the idempotency, unknown-outcome recovery, tenant boundaries and deletion/recovery work in #7.
 
-## 2. 定价
-
-| 档位 | 价格 | 内容 |
-|---|---|---|
-| Free | ¥0 | 1 个账号、30 次发布/月、社区主题、7 天发布历史 |
-| Pro | ¥39/月（¥390/年） | 3 账号、无限发布、定时发布、webhook、无限历史、优先队列 |
-| Team | ¥129/月 | 10 账号、5 席位、审批流、审计日志 |
-| 自托管 | 免费 forever | 与云同协议的 Docker 镜像；企业白标另议 |
-| 主题市场（二期） | 70/30 分成 | 付费卡片/文章主题 |
-
-锚点：壹伴/mdnice 的月费区间相近，人群付费意愿已被验证；我们卖的不是排版（排版免费开放），而是**发布可靠性与自动化**——IP 白名单、密钥托管、定时、多账号、幂等群发。
-
-## 3. 目标客户（按付费优先级）
-
-1. **矩阵/MCN 运营**：多账号、定时、审批、审计——Team 档主力，付费动机最强
-2. **agent 原生创作者**：Pro 档，为省心、配额和图片消息管线付费；早期口碑来源
-3. **想把发布嵌进自家产品的 SaaS**：API 按量计费（后期）
-
-## 4. GTM
-
-1. **自吞狗粮**：先替换自己 tlai-wechat-publish 技能的后端，自己每天用，问题在自己账号上暴露完再对外开放
-2. **开源 CLI 发布**：npm + GitHub + 一篇《agent 时代怎么发公众号》——用 publy 发这篇，产品即内容
-3. **图片消息打样**：图片消息管线是传播点（现在没人做好），演示「一条命令出 9 张卡片」
-4. **jrtx.site 产品页**：按现有产品页体系挂作品区，docs/ 即页面真源
-
-## 5. 竞品与验证
-
-Obsidian 社区存在 8+ 个同类公众号发布插件（2026-09 调研），全部为"本地插件 + 用户自配密钥"模式，**最高星数 9**——需求被反复验证，但无人跑通规模化。卡点恰是 Publy 的商业层：密钥托管、IP 白名单代管、自动收款。图片消息管线无任何竞品触及。
-
-## 6. 风险与对策
-
-| 风险 | 对策 |
-|---|---|
-| 微信政策收紧（白名单/接口权限） | 官方接口合规路径；协议层隔离；不做任何模拟登录灰产路径 |
-| 用户不信任托管 AppSecret | 自托管对等 + 加密 + 审计透明；把「随时可迁出」写进文档 |
-| 大厂/现有编辑器下场做 API | 速度：先占 agent + 图片消息心智；GUI 包袱他们背不动 |
-| 早期付费转化慢 | Free 档够用拉新；优先打矩阵客户（付费动机最强）；CLI 免费建立装机量 |
+[Public use and limitations](USER-GUIDE.md). Customer navigation must not substitute these notes or draft prices for actual usage instructions.

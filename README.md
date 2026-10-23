@@ -1,6 +1,6 @@
 # Publy
 
-Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown typesetting & image-post card rendering, one hosted service for reliable publishing, one theme store.
+Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown typesetting & image-post card rendering, one self-hosted service for draft delivery, one theme store.
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-pipeline%20implemented-blue)
 
@@ -10,16 +10,22 @@ Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown
 - **The Obsidian plugin (this repo's `manifest.json`) renders and publishes the current note in place**: in-app article preview, image-post card deck preview, rich-text copy, publish progress — no browser needed.
 - **Image posts as a first-class citizen.** `publy card post.md` renders themed 3:4 card PNGs deterministically — pixel-perfect Chinese text, seconds per deck, no AI image generation.
 - **Theme store without the friction.** Themes are npm packages with rendered previews; `publy theme add` installs, `publy theme preview` shows before you commit.
-- **Open core, no lock-in.** The CLI and a self-hostable server are open source (AGPL-3.0) and speak the same protocol as the hosted cloud. The cloud sells reliability: stable egress IP for the WeChat API whitelist, AppSecret custody, token lifecycle, scheduling, multi-account.
+- **Open core, no lock-in.** The CLI and a self-hostable server are open source (AGPL-3.0) and speak the same protocol as the hosted cloud. The future hosted service would provide: stable egress IP for the WeChat API whitelist, AppSecret custody, token lifecycle, scheduling, multi-account.
 
 Compliance: Publy only uses official WeChat MP APIs. No account simulation, no browser automation.
 
-Status: pipeline implemented and dogfooding — articles and image-post cards publish through it daily.
+Status: local rendering and delivery components exist; public hosted onboarding and commercial operation are not open.
+
+## Start here
+
+CLI, default themes, Obsidian and self-hosting remain free under their existing licences. Public hosted subscriptions are not open; there is no unlimited plan for sale. CLI and Obsidian workflows; this is not a Rivet/Glaze desktop application. Published release assets currently include the Obsidian plugin. A server needs stable outbound IP and the account’s actual official API permissions.
+
+[Installation, first use, privacy, backup and recovery](docs/USER-GUIDE.md) · [简体中文](docs/USER-GUIDE.zh-CN.md)
 
 ## Quick start
 
 ```bash
-publy config set server http://your-server:8081
+publy config set server https://your-server.example
 publy config set api_key <key>
 publy account add me --app-id wx... --theme claude
 publy preview article.md     # see it before you ship it
@@ -28,16 +34,8 @@ publy publish article.md     # typeset draft lands in the WeChat backend
 
 Image-post: write sections (`## cover` / `## point` / `## list` / `## ending`) with `mode: cards` in frontmatter, run `publy card post.md --preview`, then `publy publish post.md`.
 
-Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
+Full manual: [English manual](docs/guide.md) · [中文手册](docs/guide.zh-CN.md) · Theme gallery: [themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
 
 ## License
 
 AGPL-3.0
-
-## Feedback and diagnostics
-
-Report reproducible bugs and feature requests through [GitHub Issues](https://github.com/turinglambdaai/publy/issues). Include the release, OS/architecture and steps; inspect and redact diagnostics before sharing. Do not post API keys, license files, vault contents or private documents. For sensitive security reports, follow SECURITY.md when present; otherwise request a private contact route without disclosing sensitive details. Nothing is uploaded automatically.
-
-## Product & pricing
-
-Free CLI/self-hosting with a hosted publishing subscription. Read the complete [English pricing and product policy](PRICING.md) or [简体中文](PRICING.zh-CN.md) for target prices, free/paid boundaries and launch gates. This is a launch design, not a live offer; this documentation does not add payment restrictions to current development builds.

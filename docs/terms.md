@@ -1,49 +1,11 @@
-# Publy 托管服务 — 服务条款
+# Publy service status and onboarding boundary
 
-生效日期：2026-10-13
+**English** · [简体中文](terms.zh-CN.md)
 
-使用 Publy 托管服务（以下简称「本服务」）即表示你同意本条款。自托管版本（AGPL-3.0 开源）不受本条款约束。
+Public hosted registration, purchases and payment are not open. This page replaces the earlier purported live hosting terms. Old prices, refund promises, multi-replica availability and automatic onboarding claims are withdrawn; do not pay or submit account secrets on that basis.
 
-## 1. 服务定义
+CLI, default themes, Obsidian and self-hosting remain available under their existing source licences. A self-hosting operator must identify its own service, support and data handling; repository documentation does not automatically supply that operator’s customer terms.
 
-本服务提供微信公众号内容的排版与发布自动化：渲染引擎把 Markdown 转为公众号兼容的排版 HTML 与图片消息卡片，通过微信公众号官方 API 将内容送入你的公众号草稿箱。**群发动作始终由你在公众号后台手动完成**——这是官方 API 的边界，也是本服务的安全边界。
+Before a future sale, publish matching English/Chinese operator identity/contact, final tax/fee disclosure, metering, billing period and auto-renewal status, cancellation/refunds, failure/support scope and export/deletion procedures, then verify purchase through fulfilment. [PRICING.md](../PRICING.md) owns the implementation design, not a current sales contract.
 
-## 2. 账号与密钥
-
-- 使用本服务需要一个 API key（购买后发放）。key 即身份凭据，请妥善保管；泄露产生的发布量消耗由 key 持有者承担。
-- 你的公众号 AppId / AppSecret 通过服务端绑定（`/v1/bind` 或 CLI）。AppSecret 仅存于服务器（加密落盘），永不明文下发、永不出服务器。
-- 你可随时在服务端解绑账号；解绑后相关密钥即刻失效。
-
-## 3. 订阅与退款
-
-- Pro 档：¥39/月 或 ¥390/年；Team 档：¥129/月（以购买页展示为准）。
-- 订阅按自然周期开通，到期后服务降级为 Free 档（1 账号、30 次/月），已发布内容不受影响。
-- 开通后 7 日内且用量 ≤ 5 次可申请全额退款；之后按剩余天数比例退款，最低退 50%。联系购买页展示的客服渠道办理。
-
-## 4. 可接受使用
-
-你承诺通过本服务发布的内容：
-
-- 遵守《微信公众平台服务协议》及中国大陆法律法规；
-- 不包含违法违规信息，不侵犯他人知识产权、肖像权、隐私权；
-- 不利用本服务从事垃圾营销、刷量、爬取或任何危害微信平台生态的行为。
-
-违反上述承诺，我们有权立即停用相关 key 且不予退款；由此产生的法律责任由你自行承担。
-
-## 5. 服务可用性
-
-- 本服务按「现状」提供。我们以多副本与监控保障可用性，但不承诺 100% 无中断；微信官方 API 的变更或故障不属于本服务的控制范围。
-- 计划内维护会尽量安排在低峰时段并提前公告。
-
-## 6. 免责与责任限制
-
-- 你对通过本服务发布的内容承担全部责任；我们对内容的合法性、准确性不作担保。
-- 在法律允许的最大范围内，我们对间接损失、数据损失、商业损失不承担责任；累计赔偿责任以你过去 12 个月实际支付的服务费为上限。
-
-## 7. 随时迁出
-
-锁定的从来不是数据：你的笔记在你的 Obsidian / 本地磁盘，你的公众号在你手里。任何时刻可改用同协议的自托管 server（开源，AGPL-3.0），CLI 与配置零改动，只换 server 地址。
-
-## 8. 条款变更
-
-重大变更会通过购买页公告；继续使用即视为接受新条款。
+See the [current user path](USER-GUIDE.md) and [privacy status](privacy.md).

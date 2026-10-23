@@ -7,7 +7,7 @@ Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the se
 - `docs/design.md` 是产品唯一权威设计；实现与文档冲突时先改文档再改代码
 - 当前阶段：渲染/发布管线已实现并自用，公开托管商业交付仍有门禁，进度见 `docs/roadmap.md`
 - 动代码前必读 design.md 第 3 节（CLI 契约）与第 4 节（图片消息管线）
-- 文档用中文；代码注释用英文
+- Public user documentation is English with a complete Chinese path; historical internal design notes may remain Chinese. Code comments use English.
 - 退出码与 `--json` 输出是对外契约，变更需同步 design.md 第 3 节
 
 ## racket/ — Racket components (2026-10-13)
@@ -45,3 +45,7 @@ over the data plane, no engine dependency.
 ## Documentation languages
 
 Public default documentation is English; maintain complete Chinese user paths in `*.zh-CN.md`, with reciprocal links. Update both languages when prices, quotas, installation, recovery, privacy or supported platforms change. API/protocol identifiers and commands remain unchanged; do not maintain a second normative protocol or implementation. Follow the [family language policy](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/docs/DOCUMENTATION-LANGUAGES.md). Existing internal notes are not a claim that every document is bilingual.
+
+## Public product documentation
+
+The paired `docs/USER-GUIDE.md` / `docs/USER-GUIDE.zh-CN.md` own the public installation, first-use, data/recovery, privacy and availability path. Keep the homepage and both README entry points aligned with them when behavior changes. Detailed technical contracts and the current implementation queue retain their existing owners. Do not publish target prices, a purchase link or a ready/secure/platform claim before its release evidence exists.
