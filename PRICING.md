@@ -1,37 +1,35 @@
-# Publy 产品与收费方案
+# Publy product and pricing plan
 
-## 首发与执行边界
+**English** · [简体中文](PRICING.zh-CN.md)
 
-- 本方案版本 `2026-10-v2`。用户确认所有产品仍在开发、没有实际用户；本文件替代此前冲突的定价/早鸟/Pro 设想，不存在需要迁移的现有客户群。**价格是首发目标，不表示已经开卖或已完成相应功能。**
-- 只发布已交付平台的权益；新计划不改变已经发布源码的 LICENSE。开源源码的使用/修改/再分发权与官方商品、更新和服务分别说明。
-- 修复安全漏洞、读取/备份/导出自己的数据不以再次购买作为条件。模型 key、支付渠道密钥和签发私钥各有边界，不在宿主代码里直接收款或签发。
+## Launch status and implementation boundaries
 
-## 决策
+- Policy version: `2026-10-v2`, 2026-10-23. The owner confirmed that every product is still in development and has no actual users. This document replaces conflicting previous pricing, early-bird and Pro proposals; there is no existing customer cohort to migrate. **Prices are launch targets, not live offers or claims that the listed features are implemented.**
+- Entitlements cover delivered platforms only. New commercial plans do not change the LICENSE of released source. Source use, modification and redistribution rights are separate from official products, updates and services.
+- Security fixes and reading, backing up or exporting your own data must not require another purchase. BYOK keys, payment-provider secrets and issuer private keys have different owners. Native hosts do not collect payment or issue credentials directly.
 
-**免费 CLI/自托管 + 发布托管订阅**
+## Decision
 
-首发目标：**个人 ¥29 / US$5 每月（年付 ¥290 / US$50）；工作室 ¥79 / US$12 每月（年付 ¥790 / US$120）**。人民币和美元是分别设定的地区目标价格，不是实时汇率换算。
+**Free CLI/self-hosting with a hosted publishing subscription**
 
-固定出口、凭据生命周期、排程与恢复是持续服务，不适合买断；只做两档，不提前做主题市场抽成/无限账户/企业 SLA。
+Launch target: **Personal: ¥29 / US$5 per month, or ¥290 / US$50 per year. Studio: ¥79 / US$12 per month, or ¥790 / US$120 per year**. CNY and USD are independently set regional targets, not a live exchange-rate conversion.
 
-## 免费与付费边界
+Stable egress, credential lifecycle, scheduling and recovery are continuous services. Use two subscription tiers rather than lifetime hosting, a theme-market commission, unlimited accounts or an enterprise SLA.
 
-免费 / 评估：CLI、排版、卡片渲染、官方默认主题、Obsidian 插件和自托管服务器免费；已生成内容始终可导出，不收每次本地排版费。
+## Free and paid scope
 
-付费：个人：1 个公众号、每月 30 个成功发布任务、1 GB 活跃附件。工作室：3 个公众号、每月 150 个成功任务、5 GB 附件。卖稳定出口、密钥托管、排程与失败恢复。一次任务为一个文章/卡片稿投递至一个账户；失败、重试和重复回调不重复计数。微信平台限额仍适用，不保证平台额外权限。
+Free / evaluation: CLI, typesetting, card rendering, official default themes, the Obsidian plugin and a self-hosted server are free. Generated content always remains exportable. No charge per local typesetting operation.
 
-## 订阅约束
+Paid: Personal: 1 WeChat Official Account, 30 successful publishing jobs per month and 1 GB of active attachments. Studio: 3 accounts, 150 successful jobs per month and 5 GB. Payment covers stable egress, credential custody, scheduling and failure recovery. One job delivers one article/card draft to one account. Failures, retries and duplicate callbacks never count twice. WeChat platform limits still apply; no additional platform permissions are promised.
 
-托管按账户而非设备计量；当前月/年周期内按公开配额提供服务。取消后不续扣，已付期继续；期满不再提供托管计算，仍能读取并导出本地数据。无永久托管授权、自动超额扣款或隐藏 fair-use 限制。年付预收并不降低持续服务义务。取消/退款/保留与删除时限、模型列表和总价必须在真实结账前清楚展示并经过端到端验收。
+## Subscription boundaries
 
-## 开卖前的下一步
+Hosted usage is metered by account, not device. Service within the current monthly/annual period follows the published allowance. Cancellation stops renewal, while the paid period remains available. After expiry, hosted compute stops; local data remains readable and exportable. No lifetime hosting, automatic overage charge or hidden fair-use restriction. An annual prepayment does not reduce the obligation to provide the paid service. Cancellation/refund rules, retention/deletion periods, model lists and total price must be clear before real checkout and verified end to end.
 
-先完成 #7 的幂等发布、防重复、凭据轮换、撤销与配额。账期按 UTC 支付周期，月配额不结转；超限停止接新任务、不静默收费。取消后已付周期继续，期满停止新托管任务，保留 30 天内容导出后删除托管副本（备份/日志另公开明确期限），不影响本地内容；托管当前不在售。
+## Next gate before sales
 
-执行入口：[本仓 #7](https://github.com/turinglambdaai/publy/issues/7)。先交付这个切片，再扩展商业功能。
+Complete idempotent publishing, duplicate prevention, credential rotation, revocation and quotas in #7. Quotas follow the UTC payment billing cycle, do not roll over, and stop new jobs when exhausted without silent overage charges. Cancellation leaves the paid period available. At expiry, stop new hosted jobs, allow 30 days to export content, then delete hosted content copies; backup/log retention must be separately published with definite periods. Local content is unaffected. Hosting is not on sale.
 
-## English
+Execution entry: [issue #7](https://github.com/turinglambdaai/publy/issues/7). Complete this bounded slice before expanding commercial features.
 
-Launch design, not a live offer. Publy: 个人 ¥29 / US$5 每月（年付 ¥290 / US$50）；工作室 ¥79 / US$12 每月（年付 ¥790 / US$120）. Hosted service only, with explicit account quotas. BYOK/local or self-hosted functionality remains free. No lifetime hosting offer.
-
-组合定位及通用边界：[PORTFOLIO](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/PORTFOLIO.md)。
+Portfolio role and shared boundaries: [PORTFOLIO](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/PORTFOLIO.md).
