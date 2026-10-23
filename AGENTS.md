@@ -1,5 +1,9 @@
 # Publy
 
+## Authorization decision before implementation
+
+Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the server with current account state and atomic quotas; no desktop activation lease. Read the complete [local authorization decision](PRICING.md#authorization-decision-for-implementation) and its Chinese counterpart before commercial, trial, update-eligibility or credential work. Record this decision revision and the source/policy SHAs actually read in the PR/handoff. Refresh at each bounded slice; existing agent conversations do not receive this change automatically. Follow the existing product contract and implementation issue; do not activate a payment gate merely because a plan exists.
+
 - `docs/design.md` 是产品唯一权威设计；实现与文档冲突时先改文档再改代码
 - 当前阶段：渲染/发布管线已实现并自用，公开托管商业交付仍有门禁，进度见 `docs/roadmap.md`
 - 动代码前必读 design.md 第 3 节（CLI 契约）与第 4 节（图片消息管线）
