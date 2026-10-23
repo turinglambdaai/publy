@@ -82,3 +82,9 @@ Obsidian 社区已有 **8+ 个同类公众号发布插件**（Markdown Publisher
 KaTeX 数学公式（公众号不支持原生公式 → KaTeX 渲染为内联样式 HTML，juice 内联——多竞品的主打功能，高需求）
 
 MCP 薄封装 / 付费主题市场（70/30）/ Team 审批流 / API 按量计费
+
+## 当前交付优先级（2026-10-23）
+
+先验证发布幂等/超时恢复与凭据边界；审计 WebSocket URL 的长期 key。托管套餐按账号与有界发布配额设计，CLI/自托管路径保留。
+
+执行场景与完成标准见[本仓审查 issue](https://github.com/turinglambdaai/publy/issues/7)及家族[交付标准](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/docs/PRODUCT-STANDARD.md)。未完成的跨平台、硬件或真实支付验证仍是显式门禁；本节不表示这些验证已通过。后续一次认领一个切片，证据回填本文件与 issue。

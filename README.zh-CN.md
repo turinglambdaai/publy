@@ -2,7 +2,7 @@
 
 agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个托管服务负责稳定发布，一个主题商店负责排版资产分发。
 
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-M0%20design-orange)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-pipeline%20implemented-blue)
 
 [English](README.md) · **中文**
 
@@ -33,8 +33,12 @@ publy publish article.md     # 排版稿进公众号草稿箱
 
 - [docs/design.md](docs/design.md) — 产品设计：定位、形态、CLI 契约、图片消息管线、主题商店、架构
 - [docs/business.md](docs/business.md) — 开源边界、定价、GTM
-- [docs/roadmap.md](docs/roadmap.md) — M0 → M3
+- [docs/roadmap.md](docs/roadmap.md) — 当前交付与商业门禁
 
 ## License
 
 AGPL-3.0
+
+## 反馈与诊断
+
+问题和建议请使用 [GitHub Issues](https://github.com/turinglambdaai/publy/issues)，附版本、系统/架构和复现步骤。分享前先检查并脱敏诊断；不要公开 API key、授权凭据、密钥库或私有文档。安全敏感问题优先按 SECURITY.md 联系；未提供私密渠道时，先请求私下联系方式，不在公开 issue 中披露敏感细节。此入口不会自动上传数据。

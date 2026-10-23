@@ -2,7 +2,7 @@
 
 Agent-era publishing pipeline for WeChat Official Accounts: one CLI for Markdown typesetting & image-post card rendering, one hosted service for reliable publishing, one theme store.
 
-[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-M0%20design-orange)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-pipeline%20implemented-blue)
 
 **English** · [中文](README.zh-CN.md)
 
@@ -33,3 +33,7 @@ Full manual: [docs/guide.md](docs/guide.md) · Theme gallery: [themes.publy.jrtx
 ## License
 
 AGPL-3.0
+
+## Feedback and diagnostics
+
+Report reproducible bugs and feature requests through [GitHub Issues](https://github.com/turinglambdaai/publy/issues). Include the release, OS/architecture and steps; inspect and redact diagnostics before sharing. Do not post API keys, license files, vault contents or private documents. For sensitive security reports, follow SECURITY.md when present; otherwise request a private contact route without disclosing sensitive details. Nothing is uploaded automatically.
