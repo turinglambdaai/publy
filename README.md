@@ -37,3 +37,7 @@ AGPL-3.0
 ## Feedback and diagnostics
 
 Report reproducible bugs and feature requests through [GitHub Issues](https://github.com/turinglambdaai/publy/issues). Include the release, OS/architecture and steps; inspect and redact diagnostics before sharing. Do not post API keys, license files, vault contents or private documents. For sensitive security reports, follow SECURITY.md when present; otherwise request a private contact route without disclosing sensitive details. Nothing is uploaded automatically.
+
+## Product & pricing
+
+免费 CLI/自托管 + 发布托管订阅. Launch design, not a live offer: see [PRICING.md](PRICING.md) for prices, boundaries and release gates. Current development builds do not gain payment restrictions from this documentation change.
