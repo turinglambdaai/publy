@@ -4,7 +4,7 @@
 
 Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the server with current account state and atomic quotas; no desktop activation lease. Read the complete [local authorization decision](PRICING.md#authorization-decision-for-implementation) and its Chinese counterpart before commercial, trial, update-eligibility or credential work. Record this decision revision and the source/policy SHAs actually read in the PR/handoff. Refresh at each bounded slice; existing agent conversations do not receive this change automatically. Follow the existing product contract and implementation issue; do not activate a payment gate merely because a plan exists.
 
-- `docs/design.md` 是产品唯一权威设计；实现与文档冲突时先改文档再改代码
+- 先读 `docs/design.md` 的 Current scope and interaction decision：它负责产品形态与交互；`PRICING.md` / 中文版负责商业权益；用户指南与实际发行/运营证据负责当前可用性。历史市场/群发/开卖设想不能覆盖当前范围。
 - 当前阶段：渲染/发布管线已实现并自用，公开托管商业交付仍有门禁，进度见 `docs/roadmap.md`
 - 动代码前必读 design.md 第 3 节（CLI 契约）与第 4 节（图片消息管线）
 - Public user documentation is English with a complete Chinese path; historical internal design notes may remain Chinese. Code comments use English.

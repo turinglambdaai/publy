@@ -1,10 +1,32 @@
 # Publy 产品设计
 
-> 状态：M0 设计定稿。本文档是产品的唯一权威设计，实现与文档冲突时以本文档为准；要改实现先改文档。
+> 当前决策：2026-10-23 interaction review。本文件负责产品形态与交互，商业权益以 `PRICING.md` / `PRICING.zh-CN.md` 为准，实际可用性以用户指南和发行/运营证据为准。下述当前范围优先于早期设想；旧里程碑勾选不是公开上线证明。
+
+## Current scope and interaction decision / 当前范围与交互决定
+
+The primary task is **write in the existing editor → local preview/copy → explicitly deliver to the selected WeChat account's drafts → inspect the result**. The CLI and Obsidian plugin are both clients; neither an additional desktop editor nor a theme marketplace is required for this loop. Local rendering/copy and the self-host path remain free under the existing licence. Public hosted service is not yet open for sale.
+
+主任务是**在既有编辑器写作 → 本地预览/复制 → 明确投递至选定公众号草稿箱 → 查看结果**。CLI 与 Obsidian 插件都是客户端，不要求先做新桌面编辑器或主题交易市场。本地渲染/复制、自托管继续按现行许可免费，公开托管尚未开售。
+
+Before a remote submission show the note/title, destination account and the actual draft-only operation. Preview must not mutate the source or submit remotely. Rich-text copy must disclose local-image limitations. Public sending, mass sending and scheduling are distinct capabilities, not synonyms for creating a draft; only expose a capability after it has its own permission, confirmation and outcome/recovery evidence.
+
+远程提交前展示笔记/标题、目标账号与真实的草稿投递动作。预览不修改原文、不触发发送；富文本复制明确本地图片限制。公开发布、群发、排程是独立能力，不能作为创建草稿的同义词；各自具备权限、确认与结果/恢复证据后才能开放。
+
+Use explicit states: local preview, submitting, outcome unknown, draft confirmed, scheduled draft, duplicate suppressed and failed. A timeout does not prove failure. Keep the submitted source/account/request identity stable while the user switches notes or accounts; query/retry the original operation before offering a new submission. Confirmation/result text must name the submitted destination, not whatever preview is now visible. Existing implementation requires validation; these are the target acceptance rules, not a claim that every state is already implemented.
+
+明确区分本地预览、提交中、结果未知、草稿已确认、草稿已排程、去重跳过和失败。超时不代表失败。切换笔记/账号后仍保留原提交的内容、账号和请求身份，先查询/重试原操作再提供新提交；结果必须指向原目标，不能随当前预览漂移。现有实现仍需验收，本节是目标契约，不宣称所有状态已完成。
+
+Do one slice from [issue #7](https://github.com/turinglambdaai/publy/issues/7) at a time, with the [controlled deployment pilot #8](https://github.com/turinglambdaai/publy/issues/8) as the hosted-readiness owner. Validate no-server preview/copy, double submit, lost response, retry, note/account switching and recovery with synthetic fixtures before any real publishing. Keep CLI flags, JSON fields and exit codes unchanged in this documentation correction.
+
+一次只实施 [#7](https://github.com/turinglambdaai/publy/issues/7) 的一个切片，托管准备沿用[受控部署试点 #8](https://github.com/turinglambdaai/publy/issues/8)。先用合成 fixture 验证无服务器预览/复制、重复点击、丢失响应、重试、切换笔记/账号和恢复，再做真实发布验收。本次文档修正不变更 CLI 参数、JSON 字段或退出码。
+
+The historical rationale and unshipped ideas below are context. Theme-marketplace revenue, new multi-account/mass-send surfaces and old hosted pricing are not the current implementation queue. Reuse validated rendering/theme-package mechanisms; restoring a historical idea requires a separate product decision.
+
+以下早期论证和未交付设想作为背景保留。主题市场收入、新多账号/群发操作面和旧托管定价不再是当前实施队列；已验证的渲染/主题包机制可继续复用。恢复历史设想需另做产品决定。
 
 ## 0. 一句话
 
-**Publy 是面向 agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个托管服务负责稳定的微信发布，一个主题商店负责排版资产分发。**
+**Publy 是 Markdown 到微信公众号草稿的交付工具：CLI 与 Obsidian 插件负责预览、排版和卡片渲染，自托管服务负责草稿投递；公开托管服务仍需通过运营门禁。**
 
 写作留在 Obsidian / 任意 Markdown 编辑器，其余一切（排版、卡片渲染、上传、群发、定时、多账号）收进一条 `publy` 命令。
 
@@ -24,7 +46,7 @@ agent 时代这个假设失效：创作发生在 Obsidian，执行发生在 CLI/
 
 wenyan（文颜）验证了 CLI + server 路线可行（tlai-wechat-publish 技能即构建其上），但产品摊得太开：macOS App、跨平台桌面版、CLI、MCP、Docker 多端并进；主题靠本地 CSS / gist 注册，没有主题广场。多端并进的结果是每一端都是半成品。
 
-Publy 只做两个工件：**CLI（唯一客户端）+ 云服务（唯一服务端）**。自托管 server 与云服务同协议——既是用户的逃生门，也是信任背书。
+当前保留 **CLI + Obsidian 插件两个客户端，以及同协议的自托管/未来托管服务**。不为统一界面再造编辑器；公开托管是否可用以实际运营证据为准。
 
 ### 1.3 为什么「发布服务」能收钱
 
@@ -155,7 +177,7 @@ caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末
 
 ### 4.4 发布
 
-素材接口上传 N 张图 → 图片消息群发（首图为封面）→ 返回发布链接。**幂等**：同 idempotency-key 重试不会重复群发——群发配额（订阅号 1 次/天）极其宝贵。
+当前交付边界是素材上传与创建公众号草稿（首图为封面），返回已确认的草稿结果；不把草稿成功描述成公开发布或群发成功。沿 #7 验证同一请求身份的重试与未知结果恢复，不能只凭超时推断是否已创建草稿。未来公开发送需单独的权限、确认和配额契约。
 
 ## 5. 主题商店
 
@@ -174,7 +196,7 @@ caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末
 
 ### 5.3 商业化（二期）
 
-付费主题上架，70/30 分成；先用免费主题养生态。
+早期候选，当前不排期、不对外承诺分成。当前商业边界以 PRICING 的托管服务设计为准；先验证预览与可靠草稿投递。
 
 ## 6. 服务协议与架构
 
