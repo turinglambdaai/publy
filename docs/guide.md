@@ -90,7 +90,7 @@ publy history
 
 Client configuration is stored under `~/.publy/config.json`; it contains the server API key. `media_dirs` configures local attachment lookup. Keep credentials out of screenshots and logs. Never send AppSecret through an issue or place it in a URL.
 
-Confirm the returned outcome in WeChat’s draft backend. On a timeout, inspect history and the remote draft before retrying. The source has token caching, media deduplication, bounded duplicate handling and queued jobs, but their existence is not a qualified guarantee of exactly-once delivery or crash recovery. Scheduling via `--at` needs a running, recovered server and its actual timezone/queue semantics checked first.
+Confirm the returned outcome in WeChat’s draft backend. On a network failure the outcome is unknown, not failed: query the original request identity with `publy publish-result <key>` (the failed command prints it), then retry the same request — the server reconciles against its idempotency record instead of duplicating. Interrupted scheduled jobs never auto-rerun after a restart; re-admit them with `publy jobs retry <id>`. The source has token caching, media deduplication, bounded duplicate handling and queued jobs, but their existence is not a qualified guarantee of exactly-once delivery or crash recovery. Scheduling via `--at` needs a running, recovered server and its actual timezone/queue semantics checked first.
 
 ## Obsidian
 

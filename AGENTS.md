@@ -14,11 +14,16 @@ Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the se
 
 `racket/publy-ws.rkt` is the live-events WebSocket gateway. It sits NEXT TO
 the fastify server and never inside it: it tails `dataDir/history.jsonl`
-and pushes each event to subscribers of `ws://host:port/events?key=<same
-key as X-API-Key>`. The publishing server itself must stay untouched by
-gateway work. Replay ends with a `{"control":"replay-done"}` marker —
-clients synchronize on it. Tests: `raco test racket` (CI job `racket-ws`;
-the websocket library installs from GitHub until it reaches the catalog).
+and pushes each event to subscribers of `ws://host:port/events?key=<credential>`.
+Two credential forms: a **short-lived signed ticket** from `POST /v1/ws-ticket`
+(preferred — the long-lived key never travels in a URL, #8), or the
+long-lived API key itself (legacy; refused entirely once server.json sets
+`wsRequireTickets: true`). Ticket verification uses the self-contained
+HMAC-SHA256 in `racket/publy-crypto.rkt` (no crypto package dependency).
+The publishing server itself must stay untouched by gateway work. Replay
+ends with a `{"control":"replay-done"}` marker — clients synchronize on
+it. Tests: `raco test racket` (CI job `racket-ws`; the websocket library
+installs from GitHub until it reaches the catalog).
 
 `racket/publy-stats.rkt` is the read-only operational stats companion —
 same posture (next to the server, `users.db` opened read-only,
@@ -38,7 +43,7 @@ over the data plane, no engine dependency.
 ## 产品交付与下一步（2026-10-23）
 
 - 家族[交付标准](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/docs/PRODUCT-STANDARD.md)与[组合策略](https://github.com/turinglambdaai/turinglambdaai.github.io/blob/master/PORTFOLIO.md)是共用政策；本仓具体行为以 `docs/roadmap.md` 为准，不复制五库依赖图。
-- 当前执行入口：[产品审查 issue](https://github.com/turinglambdaai/publy/issues/7)。先验证发布幂等/超时恢复与凭据边界；审计 WebSocket URL 的长期 key。托管套餐按账号与有界发布配额设计，CLI/自托管路径保留。
+- 当前执行入口：[产品审查 issue](https://github.com/turinglambdaai/publy/issues/7)。发布幂等（同请求身份查询/重试）、结果未知/显式失败区分、凭据轮换/撤销、UTC 配额与日志脱敏已在服务端与两个客户端落地（见 [PRICING.md](PRICING.md) Next gate 对照）；运行时验收仍需按 issue 验收标准补实机证据。WebSocket URL 长期 key 已由短时票据机制替代（`wsRequireTickets` 收口）。
 - 开工先检查干净工作树与远端，以 fast-forward-only 更新并记录 SHA；共享文件一次一个写入者，保留其他 checkout 的未提交工作。
 - 每次只完成一个可验收切片，记录 owned files、依赖 pin、命令/平台/产物证据和回滚。已实现、已发布、实机验收分别陈述；不修改 requirements 或复用旧证据来制造通过。
 

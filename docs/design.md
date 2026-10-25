@@ -206,6 +206,10 @@ caption: ...           # 帖子配文（≤1000 字；# 标签写在 caption 末
 GET  /health              # 无鉴权
 GET  /verify              # 鉴权探针，返回账号名列表
 POST /v1/publish          # 发布（JSON，≤30MB）
+GET  /v1/publish-result/:key   # 按幂等键查询结果：confirmed | unknown（超时恢复入口）
+POST /v1/jobs/:id/retry        # 显式重试 interrupted/failed 任务（幂等键随行）
+POST /v1/admin/users/:id/rotate-key  # 用户 key 轮换（旧 key 立即失效）
+POST /v1/ws-ticket             # 换取短时 WS 票据（替代 URL 携带长期 key）
 ```
 
 - 鉴权：`x-api-key` 请求头
@@ -225,9 +229,10 @@ POST /v1/publish          # 发布（JSON，≤30MB）
 ```
 
 - 正文 HTML 中图片引用 `attachment://<name>`，server 上传素材后替换为微信 CDN URL（复用 media_id 语义：正文图用 `add_material` 的 url，封面用 media_id 作 thumb）
-- 响应：`{ "mediaId": "..." }`；错误 `{ "code": "...", "message": "..." }`（400 客户端错 / 401 鉴权 / 502 `WECHAT_<errcode>`）
+- 响应：`{ "mediaId": "...", "account": "...", "title": "...", "requestId": "..." }`——回显本次提交的目标账号、标题与请求身份，客户端结果展示以回显为准、不随当前预览漂移；幂等命中响应带 `"deduped": true`；错误 `{ "code": "...", "message": "..." }`（400 客户端错 / 401 鉴权 / 429 配额 / 502 `WECHAT_<errcode>`）
 - server 配置 `~/.publy/server.json`：`{ port, apiKey, accounts: [{ name, appId, appSecret }], cacheDir }`；token 缓存 600s buffer + 并发单飞
-- 幂等键（`idempotencyKey`）字段已预留，v1.1 实现
+- 幂等键（`idempotencyKey`）已实现：服务端为每个键保留 10 分钟持久记录，重试命中返回原 `mediaId` 不重复建草稿；定时任务准入同键只入队一次；进程崩溃时处于 running 的任务重启后标记为 `interrupted`（结果未知），不自动重跑，等待显式重试（重试沿用原键，命中记录则对账去重）
+- 状态区分契约（2026-10-23 review）：本地预览 / 提交中 / 结果未知 / 草稿已确认 / 已排期 / 去重跳过 / 显式失败——超时不等于失败；显式失败（服务端有应答）与结果未知（网络层中断）在客户端有不同的后续动作（查询 / 原请求重试）
 
 ### 6.2 服务端职责
 
