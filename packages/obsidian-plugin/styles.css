@@ -155,6 +155,17 @@
   color: var(--publy-danger);
   border: 1px solid rgba(229, 72, 77, 0.25);
 }
+/* actionable result strip (outcome-unknown: query / retry-same-request) */
+.publy-result .publy-result-actions {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.publy-result .publy-result-actions .publy-btn {
+  font-size: 12px;
+  padding: 3px 10px;
+}
 @keyframes publy-slide-in {
   from {
     opacity: 0;

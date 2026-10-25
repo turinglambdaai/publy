@@ -177,6 +177,19 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   resultScheduled: { zh: "已排期", en: "Scheduled" },
   resultDeduped: { zh: "10 分钟内已发过，本次跳过（防重复）", en: "Just published — skipped as duplicate" },
   resultFail: { zh: "发布失败", en: "Publish failed" },
+  // #7: outcome-unknown is distinct from explicit failure — a dropped network
+  // connection says nothing about whether the draft was created
+  resultUnknown: { zh: "结果未知 — 连接中断，草稿可能已创建；先查询，不要直接重发", en: "Outcome unknown — connection dropped; the draft may exist. Query first, don't blindly resend" },
+  btnQueryResult: { zh: "查询结果", en: "Query result" },
+  btnRetrySame: { zh: "原请求重试", en: "Retry same request" },
+  queryConfirmed: { zh: "✅ 已确认《{title}》在「{account}」草稿箱（幂等命中，未重复创建）", en: "✅ Confirmed: [{title}] is in [{account}] drafts (idempotent hit, no duplicate)" },
+  queryUnknown: { zh: "服务端没有这次请求的记录（超出幂等窗口或未送达）— 可原样重试或到公众号草稿箱确认", en: "Server has no record of this request (outside the idempotency window or never arrived) — retry the same request or check your WeChat drafts" },
+  queryFail: { zh: "Publy: 查询失败 — {msg}", en: "Publy: query failed — {msg}" },
+  retrying: { zh: "Publy: 原请求重试中…", en: "Publy: retrying the same request…" },
+  retryStillUnknown: { zh: "Publy: 仍未送达 — 请求身份未变，稍后可安全重试", en: "Publy: still unreachable — same request identity, safe to retry later" },
+  uploadingNamed: { zh: "Publy: 投递中 —《{title}》→「{account}」草稿箱", en: "Publy: delivering [{title}] → [{account}] drafts" },
+  needAccount: { zh: "先选定公众号账号——不向未指定的默认账号投递（可在设置或「切换公众号账号」里选）", en: "Pick a WeChat account first — never submit to an unnamed default (Settings or the switch-account command)" },
+  btnPublishNamed: { zh: "投递「{account}」草稿箱", en: "Deliver → [{account}] drafts" },
   emptyOpenHint: { zh: "打开一篇笔记，这里会实时预览它的公众号排版", en: "Open a note — its WeChat-ready typeset shows up here, live" },
 };
 
@@ -251,6 +264,21 @@ interface PublishResponse {
   jobId?: string;
   runAt?: string;
   coverSource?: "cover" | "first-image" | "auto";
+  /** server echo of the submitted identity (#7): results name their own
+   *  destination and request instead of whatever preview is now visible */
+  account?: string;
+  title?: string;
+  requestId?: string;
+  deduped?: boolean;
+}
+
+/** GET /v1/publish-result/:key answer */
+interface PublishResultInfo {
+  status: "confirmed" | "unknown";
+  mediaId?: string;
+  account?: string;
+  title?: string;
+  requestId?: string;
 }
 
 interface HistoryEntry {
@@ -330,22 +358,36 @@ class PublyPreviewView extends ItemView {
     }
   }
 
-  /** colored feedback strip between toolbar and canvas (ok / scheduled / error) */
-  setPublishResult(kind: "ok" | "scheduled" | "error" | "deduped", text: string): void {
+  /** colored feedback strip between toolbar and canvas (ok / scheduled /
+   *  error / deduped / unknown). `actions` render as buttons inside the strip;
+   *  an actionable strip stays until answered instead of auto-fading. */
+  setPublishResult(kind: "ok" | "scheduled" | "error" | "deduped" | "unknown", text: string, actions?: { label: string; onClick: () => void }[]): void {
     this.resultEl?.remove();
     const bar = this.contentEl.createEl("div");
     bar.addClass("publy-result");
-    bar.addClass(kind === "ok" ? "is-ok" : kind === "scheduled" ? "is-scheduled" : kind === "deduped" ? "is-scheduled" : "is-error");
+    bar.addClass(kind === "ok" ? "is-ok" : kind === "scheduled" ? "is-scheduled" : kind === "deduped" ? "is-scheduled" : kind === "unknown" ? "is-scheduled" : "is-error");
     const icon = bar.createEl("span");
     icon.addClass("publy-result-icon");
-    setIcon(icon, kind === "ok" ? "check-circle-2" : kind === "scheduled" ? "clock" : kind === "deduped" ? "copy-x" : "x-circle");
+    setIcon(icon, kind === "ok" ? "check-circle-2" : kind === "scheduled" ? "clock" : kind === "deduped" ? "copy-x" : kind === "unknown" ? "help-circle" : "x-circle");
     bar.createEl("span").setText(text);
+    if (actions?.length) {
+      const row = bar.createEl("span");
+      row.addClass("publy-result-actions");
+      for (const a of actions) {
+        const b = row.createEl("button");
+        b.addClass("publy-btn");
+        b.textContent = a.label;
+        b.addEventListener("click", a.onClick);
+      }
+    }
     this.contentEl.prepend(bar);
     this.resultEl = bar;
-    window.setTimeout(() => {
-      bar.addClass("publy-fade-out");
-      window.setTimeout(() => bar.remove(), 300);
-    }, 6000);
+    if (!actions?.length) {
+      window.setTimeout(() => {
+        bar.addClass("publy-fade-out");
+        window.setTimeout(() => bar.remove(), 300);
+      }, 6000);
+    }
   }
 
   private toolbar(): void {
@@ -411,7 +453,11 @@ class PublyPreviewView extends ItemView {
     publish.addClass("publy-btn-primary");
     setIcon(publish, "send");
     publish.createEl("span").addClass("publy-btn-label");
-    (publish.querySelector(".publy-btn-label") as HTMLElement).textContent = t("btnPublish");
+    // the primary remote action names its destination account before any
+    // submission happens (#7) — no unnamed default accounts
+    const acct = this.plugin.settings.account;
+    (publish.querySelector(".publy-btn-label") as HTMLElement).textContent =
+      acct ? t("btnPublishNamed", { account: acct }) : t("btnPublish");
     publish.addEventListener("click", () => void this.plugin.publishCurrentNote());
     this.publishBtn = publish;
   }
@@ -894,6 +940,11 @@ export default class PublyPlugin extends Plugin {
   private livePreviewPath: string | null = null;
   /** one publish at a time — double-clicks must not create duplicate drafts */
   private publishInFlight = false;
+  /** the last submission whose outcome is unknown (network-level failure).
+   *  Queryable and retryable with the SAME request identity, so a retry can
+   *  never create a second draft (#7). In-memory only — a restart simply
+   *  clears the query affordance; the server-side idempotency record remains. */
+  private lastAttempt: { payload: Record<string, unknown>; key: string; title: string; account: string } | null = null;
 
   async onload(): Promise<void> {
     // WASM PNG renderer (community-plugin safe: no native binaries).
@@ -1406,9 +1457,16 @@ export default class PublyPlugin extends Plugin {
 
   private async doPublishInner(f: TFile, publishAt?: string): Promise<void> {
     if (!this.ensureConfigured()) return;
-    let publishUrl: URL;
+    // never submit to an unnamed default account: the destination must be
+    // part of what the user sees before anything leaves the machine (#7)
+    const submitAccount = this.settings.account;
+    if (!submitAccount) {
+      new Notice(t("needAccount"), 8000);
+      void this.switchAccount();
+      return;
+    }
     try {
-      publishUrl = new URL("/v1/publish", this.settings.server);
+      new URL("/v1/publish", this.settings.server);
     } catch {
       new Notice(t("badServer"));
       return;
@@ -1495,68 +1553,158 @@ export default class PublyPlugin extends Plugin {
       }
     }
 
-    progress.setMessage(t("uploading"));
+    progress.setMessage(t("uploadingNamed", { title, account: submitAccount }));
     this.status(t("uploading"));
     const t0 = Date.now();
+    // the request identity is fixed before sending: a retry of any kind
+    // (timeout recovery, double-click slipping past the lock) carries the
+    // same key and can never create a second draft (#7)
+    const payload: Record<string, unknown> = {
+      account: submitAccount,
+      type,
+      title,
+      html,
+      images: payloadAttachments,
+      cover: coverName,
+      author,
+      ...(coverMode ? { coverMode } : {}),
+      idempotencyKey: "obs-" + crypto
+        .createHash("sha1")
+        .update([f.path, f.stat.mtime, type, title, html.length, publishAt ?? ""].join("|"))
+        .digest("hex"),
+      ...(publishAt ? { publishAt } : {}),
+    };
     try {
-      const res = await requestUrl({
-        url: publishUrl.toString(),
-        method: "POST",
-        headers: { "content-type": "application/json", "x-api-key": this.settings.apiKey },
-        body: JSON.stringify({
-          account: this.settings.account,
-          type,
-          title,
-          html,
-          images: payloadAttachments,
-          cover: coverName,
-          author,
-          ...(coverMode ? { coverMode } : {}),
-          // server dedupes on this within 10 min — a double-click cannot
-          // create a second identical draft even if it slips past the lock
-          idempotencyKey: "obs-" + crypto
-            .createHash("sha1")
-            .update([f.path, f.stat.mtime, type, title, html.length, publishAt ?? ""].join("|"))
-            .digest("hex"),
-          ...(publishAt ? { publishAt } : {}),
-        }),
-      });
-      const body = res.json as PublishResponse;
+      const body = await this.submitPayload(payload);
       progress.hide();
       this.status("");
       view?.setPublishing(false);
-      if (!res.status || res.status >= 400) {
-        const msg = `${body.code ?? res.status}: ${body.message ?? ""}`;
-        view?.setPublishResult("error", t("resultFail") + " — " + msg);
-        new Notice(t("publishFail", { msg }), 8000);
-        return;
-      }
-      if (body.deduped) {
-        view?.setPublishResult("deduped", `${t("resultDeduped")} ·《${title}》`);
-        new Notice(t("deduped", { title }), 6000);
-        return;
-      }
-      if (body.scheduled) {
-        const when = body.runAt ? new Date(body.runAt).toLocaleString("zh-CN") : "";
-        view?.setPublishResult("scheduled", `${t("resultScheduled")} ·《${title}》${when ? " · " + when : ""}`);
-        new Notice(t("scheduledOk", { title, when }), 6000);
-        void this.openHistory();
-        return;
-      }
-      const coverLabel = body.coverSource === "cover" ? t("coverExplicit")
-        : body.coverSource === "auto" ? t("coverAuto")
-        : t("coverFirst");
-      const who = this.settings.account ? ` · ${this.settings.account}` : "";
-      view?.setPublishResult("ok", `${t("resultOk")} ·《${title}》${who} · ${coverLabel} · ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-      new Notice(`${t("publishOk", { title, sec: ((Date.now() - t0) / 1000).toFixed(1) })} · ${coverLabel}`, 6000);
+      this.handlePublishResponse(body, view, t0, title, submitAccount);
     } catch (err) {
       progress.hide();
       this.status("");
       view?.setPublishing(false);
-      view?.setPublishResult("error", t("resultFail") + " — " + (err as Error).message);
+      const httpStatus = (err as { httpStatus?: number }).httpStatus;
+      if (httpStatus) {
+        // the server answered — an explicit, explainable failure (#7)
+        const msg = (err as Error).message;
+        view?.setPublishResult("error", t("resultFail") + " — " + msg);
+        new Notice(t("publishFail", { msg }), 8000);
+        return;
+      }
+      // network-level failure: the server may or may not have delivered the
+      // draft — outcome UNKNOWN, never treated as permission to re-send (#7)
+      const key = String(payload.idempotencyKey);
+      this.lastAttempt = { payload, key, title, account: submitAccount };
+      view?.setPublishResult("unknown", `${t("resultUnknown")} ·《${title}》→「${submitAccount}」`, [
+        { label: t("btnQueryResult"), onClick: () => void this.queryLastAttempt() },
+        { label: t("btnRetrySame"), onClick: () => void this.retryLastAttempt() },
+      ]);
       new Notice(t("netFail", { msg: (err as Error).message }), 8000);
     } finally {
       this.status("");
+    }
+  }
+
+  /** one POST /v1/publish with a fixed request identity. Rejects on
+   *  network-level failure only — HTTP error statuses resolve normally so
+   *  the caller can tell explicit failure from unknown outcome. */
+  private async submitPayload(payload: Record<string, unknown>): Promise<PublishResponse> {
+    const base = new URL(this.settings.server);
+    const res = await requestUrl({
+      url: new URL("/v1/publish", base).toString(),
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": this.settings.apiKey },
+      body: JSON.stringify(payload),
+    });
+    const body = res.json as PublishResponse;
+    if (res.status >= 400) {
+      const msg = `${body.code ?? res.status}: ${body.message ?? ""}`;
+      throw Object.assign(new Error(msg), { httpStatus: res.status });
+    }
+    return body;
+  }
+
+  /** shared result rendering for a server answer: names are taken from the
+   *  server's echo of the submitted identity, falling back to what this
+   *  request actually carried — never from the currently visible preview (#7) */
+  private handlePublishResponse(body: PublishResponse, view: PublyPreviewView | null, t0: number, fallbackTitle: string, fallbackAccount: string): void {
+    const who = body.account ?? fallbackAccount;
+    const named = body.title ?? fallbackTitle;
+    if (body.deduped) {
+      view?.setPublishResult("deduped", `${t("resultDeduped")} ·《${named}》·「${who}」`);
+      new Notice(t("deduped", { title: named }), 6000);
+      return;
+    }
+    if (body.scheduled) {
+      const when = body.runAt ? new Date(body.runAt).toLocaleString("zh-CN") : "";
+      view?.setPublishResult("scheduled", `${t("resultScheduled")} ·《${named}》→「${who}」${when ? " · " + when : ""}`);
+      new Notice(t("scheduledOk", { title: named, when }), 6000);
+      void this.openHistory();
+      return;
+    }
+    const coverLabel = body.coverSource === "cover" ? t("coverExplicit")
+      : body.coverSource === "auto" ? t("coverAuto")
+      : t("coverFirst");
+    view?.setPublishResult("ok", `${t("resultOk")} ·《${named}》·「${who}」 · ${coverLabel} · ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    new Notice(`${t("publishOk", { title: named, sec: ((Date.now() - t0) / 1000).toFixed(1) })} ·「${who}」 · ${coverLabel}`, 6000);
+  }
+
+  /** ask the server whether the lost submission actually landed; never
+   *  re-sends the publish itself (#7: a timeout is not permission to re-issue) */
+  async queryLastAttempt(): Promise<void> {
+    const a = this.lastAttempt;
+    if (!a) return;
+    const view = this.previewView();
+    try {
+      const base = new URL(this.settings.server);
+      const res = await requestUrl({
+        url: new URL(`/v1/publish-result/${encodeURIComponent(a.key)}`, base).toString(),
+        headers: { "x-api-key": this.settings.apiKey },
+      });
+      if (res.status >= 400) {
+        new Notice(t("queryFail", { msg: `HTTP ${res.status}` }), 6000);
+        return;
+      }
+      const info = res.json as PublishResultInfo;
+      if (info.status === "confirmed") {
+        this.lastAttempt = null;
+        view?.setPublishResult("ok", t("queryConfirmed", { title: info.title ?? a.title, account: info.account ?? a.account }));
+        new Notice(t("queryConfirmed", { title: info.title ?? a.title, account: info.account ?? a.account }), 8000);
+      } else {
+        new Notice(t("queryUnknown"), 10000);
+      }
+    } catch (err) {
+      new Notice(t("queryFail", { msg: (err as Error).message }), 6000);
+    }
+  }
+
+  /** re-issue the EXACT lost request: same payload, same idempotency key. If
+   *  the original run actually delivered, the server answers deduped with the
+   *  original media id instead of creating a second draft (#7). */
+  async retryLastAttempt(): Promise<void> {
+    const a = this.lastAttempt;
+    if (!a || this.publishInFlight) return;
+    this.publishInFlight = true;
+    const progress = new Notice(t("retrying"), 0);
+    const view = this.previewView();
+    view?.setPublishing(true);
+    const t0 = Date.now();
+    try {
+      const body = await this.submitPayload(a.payload);
+      this.lastAttempt = null;
+      progress.hide();
+      view?.setPublishing(false);
+      this.handlePublishResponse(body, view, t0, a.title, a.account);
+    } catch (err) {
+      // still unreachable — the request identity is unchanged, so retrying
+      // again later stays safe
+      progress.hide();
+      view?.setPublishing(false);
+      new Notice(t("retryStillUnknown"), 8000);
+    } finally {
+      this.status("");
+      this.publishInFlight = false;
     }
   }
 }
