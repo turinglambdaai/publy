@@ -1584,9 +1584,13 @@ export default class PublyPlugin extends Plugin {
       progress.hide();
       this.status("");
       view?.setPublishing(false);
-      const httpStatus = (err as { httpStatus?: number }).httpStatus;
-      if (httpStatus) {
-        // the server answered — an explicit, explainable failure (#7)
+      // some requestUrl builds throw on HTTP errors instead of returning —
+      // any error that carries a status is the server answering, i.e. an
+      // explicit, explainable failure (#7); only status-less errors are
+      // network-level drops with an unknown outcome
+      const e = err as { httpStatus?: number; status?: number; statusCode?: number };
+      const httpStatus = e.httpStatus ?? e.status ?? e.statusCode;
+      if (typeof httpStatus === "number" && httpStatus >= 400) {
         const msg = (err as Error).message;
         view?.setPublishResult("error", t("resultFail") + " — " + msg);
         new Notice(t("publishFail", { msg }), 8000);
