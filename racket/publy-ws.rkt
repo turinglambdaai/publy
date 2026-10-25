@@ -13,7 +13,15 @@
 ;;                                    rows carrying the user's contact;
 ;;                                    resolved read-only from users.db
 ;;
-;; Client protocol: ws://host:port/events?key=<same key as X-API-Key>.
+;; Credentials travel as ws://host:port/events?key=<credential>. Two
+;; credential forms:
+;;   - short-lived signed ticket (preferred, #8): POST /v1/ws-ticket on the
+;;     server exchanges the header-authenticated key for
+;;     "ws1.<exp36>.<identity>.<hmac-sha256>" — the long-lived key never
+;;     appears in a URL. Verified against server.json's secretKey.
+;;   - the long-lived key itself (legacy): rejected when the server.json
+;;     flag wsRequireTickets is true.
+;;
 ;; A fresh subscriber first receives a replay of the most recent events
 ;; (filtered), then {"control":"replay-done"}, then everything appended
 ;; live as JSON lines.
@@ -29,15 +37,20 @@
          json
          db
          openssl
-         websocket)
+         websocket
+         "publy-crypto.rkt")
 
 (provide (contract-out
           [struct gateway-config ((api-key string?)
                                   (data-dir path-string?)
-                                  (port exact-nonnegative-integer?))]
+                                  (port exact-nonnegative-integer?)
+                                  (secret-key (or/c string? #f))
+                                  (require-tickets? boolean?))]
           [load-config
            (->* () ((or/c path-string? #f) (or/c exact-nonnegative-integer? #f))
                 gateway-config?)]
+          [ticket-identity
+           (-> gateway-config? string? (or/c string? #f))]
           [authenticate
            (-> gateway-config? (or/c string? #f)
                (values (or/c 'admin 'user 'denied) (or/c string? #f)
@@ -54,7 +67,7 @@
 
 ;; ---- configuration ---------------------------------------------------------
 
-(struct gateway-config (api-key data-dir port) #:transparent)
+(struct gateway-config (api-key data-dir port secret-key require-tickets?) #:transparent)
 
 (define (load-config [config-path #f] [port-override #f])
   (define file
@@ -77,35 +90,111 @@
           (and env (string->number env)))
         (and (hash? raw) (hash-ref raw 'wsPort #f))
         (+ (if (number? http-port) http-port 8081) 1)))
-  (gateway-config api-key dir port))
+  (gateway-config api-key dir port
+                  (and (hash? raw) (hash-ref raw 'secretKey #f))
+                  (and (hash? raw) (hash-ref raw 'wsRequireTickets #f))))
+
+;; ---- ticket verification ----------------------------------------------------
+
+;; base36 decode (string->number has no radix 36); input is regex-validated
+;; as [a-z0-9]+ before this is called
+(define (base36->number s)
+  (for/fold ([acc 0]) ([c (in-string s)])
+    (+ (* acc 36)
+       (- (char->integer c)
+          (if (char<=? #\0 c #\9) 48 87)))))
+
+;; matches the fastify signWsTicket format: "ws1.<exp36>.<identity>.<hex mac>"
+;; with mac = HMAC-SHA256(secretKey, "ws-ticket:<exp>:<identity>"); the
+;; identity charset keeps the four-dot split unambiguous
+(define (ticket-identity config credential)
+  (define secret (gateway-config-secret-key config))
+  (define parts (and credential (string-split credential ".")))
+  (cond
+    [(not (and secret parts (= (length parts) 4)
+               (string=? (list-ref parts 0) "ws1")))
+     #f]
+    [(not (regexp-match? #rx"^[a-z0-9]+$" (list-ref parts 1))) #f]
+    [(not (regexp-match? #rx"^[A-Za-z0-9:-]+$" (list-ref parts 2))) #f]
+    [(not (regexp-match? #px"^[0-9a-f]{64}$" (list-ref parts 3))) #f]
+    [else
+     (define exp (list-ref parts 1))
+     (define identity (list-ref parts 2))
+     (define expected
+       (hmac-sha256 (string->bytes/utf-8 secret)
+                    (string->bytes/utf-8 (format "ws-ticket:~a:~a" exp identity))))
+     (define exp-ms (* 1000 (base36->number exp)))
+     (cond
+       [(< exp-ms (current-inexact-milliseconds)) #f]
+       [(not (string=? expected (list-ref parts 3))) #f]
+       [else identity])]))
 
 ;; ---- authentication ---------------------------------------------------------
 
 ;; → (values 'admin #f #f) | (values 'user contact owned-names) | (values 'denied #f #f)
 ;; read-only over the same users.db the server writes; AppSecret columns
 ;; are never selected
-(define (authenticate config key)
+(define (authenticate config credential)
   (cond
-    [(and key (string=? key (gateway-config-api-key config)))
+    [(not credential) (values 'denied #f #f)]
+    ;; ticket path: identity is "admin" or "user:<id>"; the id is resolved
+    ;; through the same users.db snapshot as key auth
+    [(string-prefix? credential "ws1.")
+     (define identity (ticket-identity config credential))
+     (cond
+       [(not identity) (values 'denied #f #f)]
+       [(string=? identity "admin") (values 'admin #f #f)]
+       [(string-prefix? identity "user:")
+        (lookup-user-by-id config (substring identity 5))]
+       [else (values 'denied #f #f)])]
+    ;; legacy long-lived key in the URL — retired via wsRequireTickets
+    [(gateway-config-require-tickets? config) (values 'denied #f #f)]
+    [(string=? credential (gateway-config-api-key config))
      (values 'admin #f #f)]
     [else
-     (define db-file (build-path (gateway-config-data-dir config) "users.db"))
-     (with-handlers ([exn:fail? (λ (_) (values 'denied #f #f))])
-       (define dbc (sqlite3-connect #:database db-file #:mode 'read-only))
-       (define row
-         (query-maybe-row
-          dbc "select id, contact, disabled_at from users where api_key = ?" key))
-       (cond
-         [(not row) (values 'denied #f #f)]
-         [(> (if (sql-null? (vector-ref row 2)) 0 (vector-ref row 2)) 0)
-          (values 'denied #f #f)]
-         [else
-          (define contact (vector-ref row 1))
-          (define accounts
-            (query-list dbc
-                        "select name from accounts where owner_user_id = ?"
-                        (vector-ref row 0)))
-          (values 'user contact accounts)]))]))
+     (lookup-user-by-key config credential)]))
+
+(define (with-user-db config proc)
+  (define db-file (build-path (gateway-config-data-dir config) "users.db"))
+  (with-handlers ([exn:fail? (λ (_) (values 'denied #f #f))])
+    (define dbc (sqlite3-connect #:database db-file #:mode 'read-only))
+    (begin0 (proc dbc) (disconnect dbc))))
+
+(define (lookup-user-by-key config key)
+  (with-user-db config
+    (λ (dbc)
+      (define row
+        (query-maybe-row
+         dbc "select id, contact, disabled_at from users where api_key = ?" key))
+      (cond
+        [(not row) (values 'denied #f #f)]
+        [(> (if (sql-null? (vector-ref row 2)) 0 (vector-ref row 2)) 0)
+         (values 'denied #f #f)]
+        [else
+         (define contact (vector-ref row 1))
+         (define accounts
+           (query-list dbc
+                       "select name from accounts where owner_user_id = ?"
+                       (vector-ref row 0)))
+         (values 'user contact accounts)]))))
+
+(define (lookup-user-by-id config id)
+  (with-user-db config
+    (λ (dbc)
+      (define row
+        (query-maybe-row
+         dbc "select id, contact, disabled_at from users where id = ?" id))
+      (cond
+        [(not row) (values 'denied #f #f)]
+        [(> (if (sql-null? (vector-ref row 2)) 0 (vector-ref row 2)) 0)
+         (values 'denied #f #f)]
+        [else
+         (define contact (vector-ref row 1))
+         (define accounts
+           (query-list dbc
+                       "select name from accounts where owner_user_id = ?"
+                       (vector-ref row 0)))
+         (values 'user contact accounts)]))))
 
 ;; ---- event filtering ---------------------------------------------------------
 
@@ -242,7 +331,13 @@
     (define-values (kind contact accounts) (authenticate (gateway-cfg g) key))
     (cond
       [(eq? kind 'denied)
-       (define body "{\"code\":\"UNAUTHORIZED\"}")
+       ;; legacy key while tickets are required gets its own code so clients
+       ;; know to switch to POST /v1/ws-ticket instead of re-sending the key
+       (define body
+         (if (and (gateway-config-require-tickets? (gateway-cfg g))
+                  (not (and key (string-prefix? key "ws1."))))
+             "{\"code\":\"TICKETS_REQUIRED\"}"
+             "{\"code\":\"UNAUTHORIZED\"}"))
        (with-handlers ([exn:fail? void])
          (fprintf out "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: ~a\r\n\r\n~a"
                   (string-length body) body)

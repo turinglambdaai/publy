@@ -6,13 +6,15 @@
 (require rackunit
          racket/file
          racket/list
+         racket/math
          racket/port
          racket/string
          racket/tcp
          json
          db
          websocket
-         "publy-ws.rkt")
+         "publy-ws.rkt"
+         "publy-crypto.rkt")
 
 (define (string->jsexpr bs)
   (read-json (open-input-string (bytes->string/utf-8 bs))))
@@ -20,6 +22,75 @@
 (define ADMIN-KEY "admin-test-key")
 (define USER-KEY "publy_user_secret_42")
 (define OTHER-KEY "publy_other_999")
+(define WS-SECRET "ws-gateway-test-secret")
+
+;; mirrors the fastify signWsTicket format, against the test secret
+;; (number->string has no radix 36; encode manually)
+(define (base36 n)
+  (let loop ([n n] [acc '()])
+    (if (< n 36)
+        (list->string (cons (string-ref "0123456789abcdefghijklmnopqrstuvwxyz" n) acc))
+        (loop (quotient n 36)
+              (cons (string-ref "0123456789abcdefghijklmnopqrstuvwxyz" (remainder n 36)) acc)))))
+
+(define (sign-ticket exp-ms identity [secret WS-SECRET])
+  (define exp (base36 (exact-floor (/ exp-ms 1000))))
+  (define mac (hmac-sha256 (string->bytes/utf-8 secret)
+                           (string->bytes/utf-8 (format "ws-ticket:~a:~a" exp identity))))
+  (format "ws1.~a.~a.~a" exp identity mac))
+
+;; ---- tickets -----------------------------------------------------------------
+
+(module+ test
+  (define config-t (gateway-config ADMIN-KEY (make-temporary-file "publy-ws-t-~a" 'directory) 0 WS-SECRET #f))
+
+  (check-equal? (ticket-identity config-t (sign-ticket (+ (current-inexact-milliseconds) 60000) "admin")) "admin")
+  (check-equal? (ticket-identity config-t (sign-ticket (+ (current-inexact-milliseconds) 60000) "user:u1")) "user:u1")
+  ;; expired
+  (check-false (ticket-identity config-t (sign-ticket (- (current-inexact-milliseconds) 5000) "admin")))
+  ;; wrong secret
+  (check-false (ticket-identity config-t (sign-ticket (+ (current-inexact-milliseconds) 60000) "admin" "other-secret")))
+  ;; tampered mac / garbage shapes
+  (check-false (ticket-identity config-t "ws1.abc.admin.deadbeef"))
+  (check-false (ticket-identity config-t "not-a-ticket"))
+  (check-false (ticket-identity config-t "ws1.!!!---.admin.ok"))
+  ;; gateway without a secret rejects all tickets
+  (check-false (ticket-identity (gateway-config ADMIN-KEY (make-temporary-file "publy-ws-t2-~a" 'directory) 0 #f #f)
+                                (sign-ticket (+ (current-inexact-milliseconds) 60000) "admin"))))
+
+(module+ test
+  ;; ticket auth end-to-end: a user ticket carries the same visibility as the key
+  (define dir-tk (make-fixture!))
+  (define config-tk (gateway-config ADMIN-KEY dir-tk 0 WS-SECRET #f))
+  (define g-tk (make-gateway config-tk))
+  (define-values (port-tk _supervisor-tk) (serve-gateway! g-tk #:port 0))
+  ;; admin ticket sees everything
+  (define admin-t (connect-events port-tk (sign-ticket (+ (current-inexact-milliseconds) 60000) "admin")))
+  (check-equal? (hash-ref (recv-event admin-t 5 "ticket admin replay") 'event) "published")
+  ;; user ticket for u1 (alice) sees her account + contact rows only
+  (define user-t (connect-events port-tk (sign-ticket (+ (current-inexact-milliseconds) 60000) "user:u1")))
+  (define ut1 (recv-event user-t 5 "ticket user replay"))
+  (check-equal? (hash-ref ut1 'account) "my-account")
+  (check-equal? (hash-ref (recv-event user-t 5 "ticket user replay 2") 'event) "purchase-paid")
+  (check-equal? (hash-ref (recv-event user-t 5 "ticket user replay-done") 'control) "replay-done")
+  ;; unknown user id in a valid ticket → denied
+  (check-exn exn:fail:websocket?
+             (λ () (connect-events port-tk (sign-ticket (+ (current-inexact-milliseconds) 60000) "user:ghost"))))
+  ;; expired ticket → denied
+  (check-exn exn:fail:websocket?
+             (λ () (connect-events port-tk (sign-ticket (- (current-inexact-milliseconds) 5000) "admin")))))
+
+(module+ test
+  ;; wsRequireTickets retires the legacy key-in-URL path
+  (define dir3 (make-fixture!))
+  (define config3 (gateway-config ADMIN-KEY dir3 0 WS-SECRET #t))
+  (define g3 (make-gateway config3))
+  (define-values (port3 _supervisor3) (serve-gateway! g3 #:port 0))
+  ;; even the admin key is refused now
+  (check-exn exn:fail:websocket? (λ () (connect-events port3 ADMIN-KEY)))
+  ;; a valid ticket still works
+  (define admin-t3 (connect-events port3 (sign-ticket (+ (current-inexact-milliseconds) 60000) "admin")))
+  (check-equal? (hash-ref (recv-event admin-t3 5 "tickets-only admin replay") 'event) "published"))
 
 ;; ---- fixture: data dir with users.db + history.jsonl ------------------------
 
@@ -97,14 +168,13 @@
 (module+ test
   ;; ---- auth + replay + live tail -------------------------------------------
   (define dir (make-fixture!))
-  (define config (gateway-config ADMIN-KEY dir 0))
+  (define config (gateway-config ADMIN-KEY dir 0 #f #f))
   (define g (make-gateway config))
   (define-values (port _supervisor) (serve-gateway! g #:port 0))
 
   ;; unknown key is rejected at the HTTP layer
   (check-exn exn:fail:websocket?
-             (λ () (connect-events port "publy_nope")))
-  ;; wrong path too
+             (λ () (connect-events port "publy_nope")))  ;; wrong path too
   (check-exn exn:fail:websocket?
              (λ () (ws-connect (format "ws://127.0.0.1:~a/other?key=~a" port ADMIN-KEY))))
 
@@ -184,7 +254,7 @@
   (define dbc (sqlite3-connect #:database (build-path dir2 "users.db")))
   (query-exec dbc "update users set disabled_at = 1 where api_key = ?" USER-KEY)
   (disconnect dbc)
-  (define config2 (gateway-config ADMIN-KEY dir2 0))
+  (define config2 (gateway-config ADMIN-KEY dir2 0 #f #f))
   (define g2 (make-gateway config2))
   (define-values (port2 _) (serve-gateway! g2 #:port 0))
   (check-exn exn:fail:websocket? (λ () (connect-events port2 USER-KEY))))
