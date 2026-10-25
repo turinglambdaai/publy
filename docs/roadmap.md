@@ -1,5 +1,11 @@
 # Publy Roadmap
 
+## Current execution boundary / 当前执行边界 — 2026-10-23
+
+Read [the current product/interaction decision](design.md#current-scope-and-interaction-decision--当前范围与交互决定), [pricing policy](../PRICING.md) and [issue #7](https://github.com/turinglambdaai/publy/issues/7) before implementation. First qualify local preview/copy and explicit delivery to a selected account's drafts, including unknown outcomes, retries and source/account identity. Hosted readiness belongs to [pilot #8](https://github.com/turinglambdaai/publy/issues/8). Public hosting is not on sale. Historical checkmarks below describe earlier work, not current merchant approval, live availability or runtime acceptance; old quotas, payment onboarding assumptions and theme-marketplace expansion are superseded by current policy. No new public-send capability is authorized by this roadmap.
+
+开工先读上述当前交互范围、PRICING 和 #7：优先验证本地预览/复制、选定账号的明确草稿投递，以及未知结果、重试和内容/账号身份。托管准备由 #8 负责，公开托管未开售。下方勾选记录是历史，不是当前商户获批、线上可用或运行验收证明；旧配额、支付准入假设与主题市场扩张服从当前政策。本路线不授权新增公开群发能力。
+
 ## M0 — 设计定稿与仓库骨架 ✅
 
 - [x] 产品设计 / 商业模式 / 路线图文档
@@ -14,7 +20,7 @@
 - [x] `publy config set` / `publy account add|list` / `publy theme ls`
 - [x] `@publy/core` 微信客户端：token 缓存（单飞 + 600s buffer）、add_material、draft/add（文章 + newspic 图片消息两种草稿）
 - [x] `publy-server` 协议 v1（/health /verify /v1/publish，base64 附件 + attachment:// 引用替换）——本地冒烟通过（含微信 API 真实调用错误路径）
-- [x] 部署 server 到用户服务器（47.101.152.163，systemd 托管，AppSecret 不出服务器）——✅ 2026-09-29；同日 wenyan 卸载，server 迁至 **8081**（外网可直连；公司网络内走 SSH 隧道 18081）
+- [x] 2026-09-29 记录过个人服务器部署；历史地址/端口不作为公开配置约定或当前可用性证明。当前访问、TLS、固定出口与凭据边界以 #8 的受控试点和实际 runbook 验证为准。
 - [x] cards 模式发布实测：`mode: cards` 自动推断 image_post（tlai-wechat-card 产出无需 type 字段）——4 卡 newspic 草稿全链路通过
 
 **验收**：✅ 真实公众号全流程发布 1 篇文章（渲染 → 服务器 → 草稿箱，6.5s，幂等命中与审计日志实测通过）+ 1 篇 cards 图片消息。
