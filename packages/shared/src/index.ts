@@ -35,10 +35,12 @@ export interface PublishRequest {
   idempotencyKey?: string;
 }
 
+export type JobStatus = "pending" | "running" | "done" | "failed" | "cancelled" | "interrupted";
+
 export interface JobInfo {
   id: string;
   runAt: string;
-  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  status: JobStatus;
   attempts: number;
   account: string;
   type: string;
@@ -51,6 +53,24 @@ export interface PublishResponse {
   mediaId: string;
   /** which cover the draft ended up with: explicit cover, first body image, or generated title card */
   coverSource?: "cover" | "first-image" | "auto";
+  /** echo of the account this request named — results must not drift to a
+   *  different account the caller switched to while the request ran */
+  account?: string;
+  /** echo of the submitted title */
+  title?: string;
+  /** echo of the idempotency key recorded for this submission */
+  requestId?: string;
+  /** true when the server returned an existing idempotency record instead of publishing again */
+  deduped?: boolean;
+}
+
+/** answer for GET /v1/publish-result/:key — "unknown" is an answer, not an error */
+export interface PublishResultInfo {
+  status: "confirmed" | "unknown";
+  mediaId?: string;
+  account?: string;
+  title?: string;
+  requestId?: string;
 }
 
 export interface ErrorResponse {

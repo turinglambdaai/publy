@@ -103,7 +103,7 @@ test("purchase page and manual order completion issue a key", async () => {
   const created = await app.inject({
     method: "POST",
     url: "/purchase",
-    payload: { contact: "buyer@test", plan: "pro", months: 1 },
+    payload: { contact: "buyer@test", plan: "studio", months: 1 },
   });
   const body = created.json();
   assert.ok(body.orderId);
@@ -124,18 +124,18 @@ test("purchase page and manual order completion issue a key", async () => {
   assert.equal(order.json().status, "paid");
   assert.match(order.json().apiKey, /^publy_/);
 
-  // buyer's pro quota is the pro limit
+  // buyer's studio quota is the studio limit
   const buyer = order.json().apiKey;
   const q = (await app.inject({ method: "GET", url: "/v1/quota", headers: H(buyer) })).json();
-  assert.equal(q.plan, "pro");
-  assert.equal(q.limit, 5000);
+  assert.equal(q.plan, "studio");
+  assert.equal(q.limit, 150);
 
   // extending an existing contact keeps the same key
   const again = await app.inject({
     method: "POST",
     url: "/v1/admin/users",
     headers: H("admin-key"),
-    payload: { contact: "buyer@test", plan: "pro", months: 1 },
+    payload: { contact: "buyer@test", plan: "studio", months: 1 },
   });
   assert.equal(again.json().extended, true);
   assert.equal(again.json().apiKey, buyer);

@@ -1,0 +1,292 @@
+// Tests: #7/#8 readiness slice — idempotency records with named identity,
+// publish-result queries, idempotent job admission, crash reconciliation and
+// explicit retry, credential rotation, WS tickets, secret redaction, quota
+// exhaustion. All via fastify inject; no real WeChat calls.
+
+import { test, before, after } from "node:test";
+import assert from "node:assert/strict";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { buildApp, signWsTicket, verifyWsTicket, redactSecrets, type ServerConfig } from "./index.js";
+import type { Store } from "./store.js";
+
+const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-ready-test-"));
+
+const config: ServerConfig = {
+  port: 0,
+  apiKey: "admin-key",
+  dataDir,
+  secretKey: crypto.randomBytes(32).toString("hex"),
+  jobPollMs: 40,
+  accounts: [{ name: "TestAcct", appId: "wx_dummy", appSecret: "dummy" }],
+};
+
+const app = buildApp(config);
+const H = (key: string) => ({ "x-api-key": key, "content-type": "application/json" });
+/** headers for payload-less POSTs (json content-type + empty body is a 400) */
+const HP = (key: string) => ({ "x-api-key": key });
+
+let userKey = "";
+let userId = "";
+
+before(async () => {
+  await app.ready();
+  const created = await app.inject({
+    method: "POST",
+    url: "/v1/admin/users",
+    headers: H("admin-key"),
+    payload: { contact: "ready@test", plan: "personal", months: 1 },
+  });
+  userKey = created.json().apiKey;
+  await app.inject({
+    method: "POST",
+    url: "/v1/admin/accounts",
+    headers: H("admin-key"),
+    payload: { name: "UserAcct", appId: "wx_user", appSecret: "s2", ownerContact: "ready@test" },
+  });
+  const users = (await app.inject({ method: "GET", url: "/v1/admin/users", headers: H("admin-key") })).json().users;
+  userId = users.find((u: { contact: string }) => u.contact === "ready@test").id;
+});
+
+after(async () => {
+  await app.close();
+  fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
+// --- redaction ----------------------------------------------------------------
+
+test("redactSecrets scrubs token/secret/key query values", () => {
+  const tokenUrl = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx123&secret=supersecret";
+  assert.ok(!redactSecrets(tokenUrl).includes("supersecret"));
+  assert.ok(redactSecrets(tokenUrl).includes("secret=[redacted]"));
+  const pub = "https://api.weixin.qq.com/cgi-bin/draft/add?access_token=ABCDEF";
+  assert.ok(!redactSecrets(pub).includes("ABCDEF"));
+  assert.ok(redactSecrets("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx123").includes("appid=wx123"));
+  assert.equal(redactSecrets("no urls here"), "no urls here");
+});
+
+test("audit log never stores credential-looking query values", async () => {
+  const history = fs.readFileSync(path.join(dataDir, "history.jsonl"), "utf-8");
+  assert.ok(!/secret=[A-Za-z0-9]{6,}/.test(history));
+});
+
+// --- WS tickets -----------------------------------------------------------------
+
+test("ws ticket round trip verifies and expires", () => {
+  const key = config.secretKey!;
+  const { ticket } = signWsTicket(key, "admin");
+  assert.equal(verifyWsTicket(key, ticket), "admin");
+  assert.equal(verifyWsTicket(key, "ws1.abc.admin.deadbeef"), null, "tampered mac rejected");
+  assert.equal(verifyWsTicket("another-key", ticket), null, "wrong key rejected");
+  const expired = signWsTicket(key, "admin", Date.now() - 121_000);
+  assert.equal(verifyWsTicket(key, expired.ticket), null, "expired ticket rejected");
+  assert.equal(verifyWsTicket(key, "legacy-plain-key"), null, "non-ticket values rejected");
+});
+
+test("POST /v1/ws-ticket issues a ticket bound to the caller", async () => {
+  const admin = await app.inject({ method: "POST", url: "/v1/ws-ticket", headers: HP("admin-key") });
+  assert.equal(admin.statusCode, 200);
+  assert.equal(verifyWsTicket(config.secretKey!, admin.json().ticket), "admin");
+
+  const user = await app.inject({ method: "POST", url: "/v1/ws-ticket", headers: HP(userKey) });
+  assert.equal(user.statusCode, 200);
+  assert.equal(verifyWsTicket(config.secretKey!, user.json().ticket), `user:${userId}`);
+
+  const denied = await app.inject({ method: "POST", url: "/v1/ws-ticket" });
+  assert.equal(denied.statusCode, 401);
+});
+
+// --- publish-result query (the lost-response reconciliation path) ----------------
+
+test("publish-result returns confirmed for a fresh record, unknown otherwise", async () => {
+  const seam = (app as unknown as { idempotency: { records: Record<string, unknown>; save: () => void } }).idempotency;
+  seam.records["key-mine"] = { mediaId: "MEDIA1", at: Date.now(), account: "UserAcct", title: "my note", type: "article", userId };
+  seam.records["key-admin"] = { mediaId: "MEDIA2", at: Date.now(), account: "TestAcct", title: "admin note", type: "article", userId: null };
+  seam.save();
+
+  const mine = await app.inject({ method: "GET", url: "/v1/publish-result/key-mine", headers: H(userKey) });
+  assert.equal(mine.json().status, "confirmed");
+  assert.equal(mine.json().mediaId, "MEDIA1");
+  assert.equal(mine.json().account, "UserAcct");
+  assert.equal(mine.json().title, "my note");
+
+  // another user's record is invisible — "unknown", not an error
+  const foreign = await app.inject({ method: "GET", url: "/v1/publish-result/key-admin", headers: H(userKey) });
+  assert.equal(foreign.json().status, "unknown");
+  // admin sees it
+  const admin = await app.inject({ method: "GET", url: "/v1/publish-result/key-admin", headers: H("admin-key") });
+  assert.equal(admin.json().status, "confirmed");
+
+  // unknown keys answer unknown with 200
+  const missing = await app.inject({ method: "GET", url: "/v1/publish-result/never-seen", headers: H(userKey) });
+  assert.equal(missing.statusCode, 200);
+  assert.equal(missing.json().status, "unknown");
+
+  // expired records answer unknown
+  seam.records["key-old"] = { mediaId: "MEDIA3", at: Date.now() - 11 * 60 * 1000, account: "UserAcct", title: "t", type: "article", userId };
+  seam.save();
+  const old = await app.inject({ method: "GET", url: "/v1/publish-result/key-old", headers: H(userKey) });
+  assert.equal(old.json().status, "unknown");
+});
+
+// --- idempotent job admission -----------------------------------------------------
+
+test("scheduling twice with the same idempotency key enqueues one job", async () => {
+  const runAt = new Date(Date.now() + 3600_000).toISOString();
+  const payload = { account: "TestAcct", type: "article", title: "sched", html: "<p>x</p>", publishAt: runAt, idempotencyKey: "job-key-1" };
+  const first = await app.inject({ method: "POST", url: "/v1/publish", headers: H("admin-key"), payload });
+  assert.equal(first.json().scheduled, true);
+  const second = await app.inject({ method: "POST", url: "/v1/publish", headers: H("admin-key"), payload });
+  assert.equal(second.json().scheduled, true);
+  assert.equal(second.json().deduped, true);
+  assert.equal(second.json().jobId, first.json().jobId);
+
+  const list = await app.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") });
+  const same = list.json().jobs.filter((j: { title: string }) => j.title === "sched");
+  assert.equal(same.length, 1);
+});
+
+// --- crash reconciliation + explicit retry ----------------------------------------
+
+const reconciliationDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-recon-test-"));
+
+test("jobs left running by a crash boot as interrupted and never auto-run", async () => {
+  const runAt = Date.now() - 1000; // already due — the scheduler must still not run it
+  // account "Ghost" resolves to nothing: if the scheduler ever picked the
+  // retried job up, it fails offline (ACCOUNT_NOT_FOUND) instead of making a
+  // real WeChat call from CI
+  const job = {
+    id: "recon-1",
+    runAt,
+    body: { account: "Ghost", type: "article", title: "lost in crash", html: "<p>x</p>" },
+    userId: null,
+    status: "running",
+    attempts: 1,
+    nextAttemptAt: runAt,
+  };
+  fs.writeFileSync(path.join(reconciliationDir, "jobs.json"), JSON.stringify({ "recon-1": job }));
+
+  const app2 = buildApp({ ...config, dataDir: reconciliationDir, jobPollMs: 40 });
+  await app2.ready();
+  try {
+    const list = await app2.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") });
+    const j = list.json().jobs.find((x: { id: string }) => x.id === "recon-1");
+    assert.equal(j.status, "interrupted");
+    assert.match(j.error, /outcome unknown/);
+
+    // a due interrupted job is not executed by the scheduler
+    await new Promise((r) => setTimeout(r, 150));
+    const still = (await app2.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") })).json().jobs.find((x: { id: string }) => x.id === "recon-1");
+    assert.equal(still.status, "interrupted");
+
+    // explicit retry re-admits; the offline failure path (unknown account)
+    // lands it back in pending with a backed-off next attempt, so the owner
+    // can still cancel before any real fire
+    const retry = await app2.inject({ method: "POST", url: "/v1/jobs/recon-1/retry", headers: HP("admin-key") });
+    assert.equal(retry.json().ok, true);
+    assert.equal(retry.json().job.status, "pending");
+    await new Promise((r) => setTimeout(r, 150));
+    const retried = (await app2.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") })).json().jobs.find((x: { id: string }) => x.id === "recon-1");
+    assert.equal(retried.status, "pending");
+    assert.equal(retried.attempts, 1);
+    const cancel = await app2.inject({ method: "DELETE", url: "/v1/jobs/recon-1", headers: HP("admin-key") });
+    assert.equal(cancel.json().ok, true);
+
+    // retry refuses terminal states
+    const again = await app2.inject({ method: "POST", url: "/v1/jobs/recon-1/retry", headers: HP("admin-key") });
+    assert.equal(again.statusCode, 400);
+    assert.equal(again.json().code, "NOT_RETRYABLE");
+  } finally {
+    await app2.close();
+  }
+});
+
+// --- job runner reconciles against the idempotency record ---------------------------
+
+const runnerDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-runner-test-"));
+
+test("a due job with a fresh idempotency record dedupes instead of re-publishing", async () => {
+  // simulate: the draft was already delivered (crash lost the status save),
+  // but the idempotency record survived — the retry must NOT create a second
+  const idem = {
+    "job-key-2": { mediaId: "ALREADY_THERE", at: Date.now(), account: "TestAcct", title: "after crash", type: "article", userId: null },
+  };
+  fs.writeFileSync(path.join(runnerDir, "idempotency.json"), JSON.stringify(idem));
+  const job = {
+    id: "runner-1",
+    runAt: Date.now() - 1000,
+    body: { account: "TestAcct", type: "article", title: "after crash", html: "<p>x</p>", idempotencyKey: "job-key-2" },
+    userId: null,
+    status: "pending",
+    attempts: 0,
+    nextAttemptAt: Date.now() - 1000,
+    idempotencyKey: "job-key-2",
+  };
+  fs.writeFileSync(path.join(runnerDir, "jobs.json"), JSON.stringify({ "runner-1": job }));
+
+  const app3 = buildApp({ ...config, dataDir: runnerDir, jobPollMs: 40 });
+  await app3.ready();
+  try {
+    let j: { status: string; mediaId?: string } | undefined;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      const list = await app3.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") });
+      j = list.json().jobs.find((x: { id: string }) => x.id === "runner-1");
+      if (j?.status === "done") break;
+    }
+    assert.equal(j?.status, "done");
+    assert.equal(j?.mediaId, "ALREADY_THERE", "the recorded mediaId is returned, no second draft");
+  } finally {
+    await app3.close();
+  }
+});
+
+// --- credential rotation ------------------------------------------------------------
+
+test("rotate-key invalidates the old key and keeps the user intact", async () => {
+  const before = await app.inject({ method: "GET", url: "/v1/quota", headers: H(userKey) });
+  assert.equal(before.statusCode, 200);
+
+  const rotated = await app.inject({ method: "POST", url: `/v1/admin/users/${userId}/rotate-key`, headers: HP("admin-key") });
+  assert.equal(rotated.json().ok, true);
+  const newKey: string = rotated.json().apiKey;
+  assert.notEqual(newKey, userKey);
+
+  const oldAfter = await app.inject({ method: "GET", url: "/v1/quota", headers: H(userKey) });
+  assert.equal(oldAfter.statusCode, 401, "old key is dead");
+  const newAfter = await app.inject({ method: "GET", url: "/v1/quota", headers: H(newKey) });
+  assert.equal(newAfter.statusCode, 200);
+  assert.equal(newAfter.json().plan, "personal");
+  userKey = newKey; // keep later tests working
+});
+
+// --- quota exhaustion stops admission ------------------------------------------------
+
+test("quota exhaustion returns QUOTA_EXCEEDED before any publish", async () => {
+  const store = (app as unknown as { store: Store }).store;
+  for (let i = 0; i < 30; i++) store.incrementUsage(userId);
+  const res = await app.inject({
+    method: "POST",
+    url: "/v1/publish",
+    headers: H(userKey),
+    payload: { account: "UserAcct", type: "article", title: "over quota" },
+  });
+  assert.equal(res.statusCode, 429);
+  assert.equal(res.json().code, "QUOTA_EXCEEDED");
+  const q = (await app.inject({ method: "GET", url: "/v1/quota", headers: H(userKey) })).json();
+  assert.equal(q.used, 30);
+  assert.equal(q.limit, 30);
+});
+
+// --- new plans / prices ----------------------------------------------------------------
+
+test("purchase accepts personal and studio plans at PRICING 2026-10-v2 targets", async () => {
+  const personal = await app.inject({ method: "POST", url: "/purchase", payload: { contact: "p@test", plan: "personal", months: 1 } });
+  assert.equal(personal.statusCode, 200);
+  const pro = await app.inject({ method: "POST", url: "/purchase", payload: { contact: "p@test", plan: "pro", months: 1 } });
+  assert.equal(pro.statusCode, 400);
+  const badMonths = await app.inject({ method: "POST", url: "/purchase", payload: { contact: "p@test", plan: "personal", months: 6 } });
+  assert.equal(badMonths.statusCode, 400);
+});

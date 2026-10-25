@@ -14,9 +14,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import Fastify from "fastify";
-import type { JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
+import type { FastifyError } from "fastify";
+import type { JobInfo, JobStatus, PublishRequest, PublishResponse, PublishResultInfo } from "@publy/shared";
 import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
-import { Store, PLAN_LIMITS, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
+import { Store, PLAN_LIMITS, PRICES, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
 import { createProvider } from "./payments.js";
 import { purchasePage } from "./pages.js";
 import { adminPage } from "./admin-page.js";
@@ -41,6 +42,8 @@ export interface ServerConfig {
   publicIp?: string;
   /** master key (hex) for AppSecret encryption at rest; auto-generated on first boot */
   secretKey?: string;
+  /** scheduler poll interval; tests shorten it to exercise the job runner */
+  jobPollMs?: number;
   payments?: {
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
@@ -52,6 +55,46 @@ export interface ServerConfig {
 }
 
 const DEFAULT_CONFIG_PATH = path.join(os.homedir(), ".publy", "server.json");
+
+/** Scrub credential-bearing query strings from any text before it reaches the
+ *  audit log, an error response or a webhook: WeChat endpoints and the WS
+ *  gateway legitimately carry tokens/secrets in URLs, and undici/fetch error
+ *  messages can embed the full URL. Issue #7: AppSecret never enters logs. */
+export function redactSecrets(text: string): string {
+  return text.replace(/([?&](?:[^&\s"']*?(?:secret|token|key)[^&\s"']*)=)[^&\s"']+/gi, "$1[redacted]");
+}
+
+// --- WebSocket short-lived tickets ------------------------------------------
+// The events gateway authenticates via ws://host/events?key=…, which puts a
+// long-lived API key in URLs (proxy/access logs). Clients should instead take
+// a signed ticket from POST /v1/ws-ticket (sent in the x-api-key header, so
+// the long-lived key never travels in a URL) and connect with
+// ?key=ws1.<exp>.<identity>.<mac>. Tickets expire in 2 minutes; the gateway
+// verifies the HMAC against the same secretKey. Issue #8 credential rule.
+
+const WS_TICKET_TTL_MS = 120_000;
+
+/** identity is opaque to the gateway except for the "admin"/"user:" prefix */
+export function signWsTicket(secretKey: string, identity: string, now = Date.now()): { ticket: string; expiresAt: number } {
+  const expiresAt = now + WS_TICKET_TTL_MS;
+  const exp = Math.floor(expiresAt / 1000).toString(36);
+  const mac = crypto.createHmac("sha256", secretKey).update(`ws-ticket:${exp}:${identity}`).digest("hex");
+  return { ticket: `ws1.${exp}.${identity}.${mac}`, expiresAt };
+}
+
+/** returns the identity for a valid, unexpired ticket; null otherwise */
+export function verifyWsTicket(secretKey: string, ticket: string): string | null {
+  const parts = ticket.split(".");
+  if (parts.length !== 4 || parts[0] !== "ws1") return null;
+  const [, exp, identity, mac] = parts;
+  if (!/^[a-z0-9]+$/.test(exp) || !/^[A-Za-z0-9:-]+$/.test(identity)) return null;
+  const expected = crypto.createHmac("sha256", secretKey).update(`ws-ticket:${exp}:${identity}`).digest("hex");
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  if (parseInt(exp, 36) * 1000 < Date.now()) return null;
+  return identity;
+}
 
 export function loadServerConfig(configPath?: string): ServerConfig {
   const file = configPath ?? process.env.PUBLY_SERVER_CONFIG ?? DEFAULT_CONFIG_PATH;
@@ -105,9 +148,12 @@ interface StoredJob {
   body: PublishRequest;
   /** set when scheduled by a user key; quota applies at execution */
   userId: string | null;
-  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  status: JobStatus;
   attempts: number;
   nextAttemptAt: number;
+  /** admission idempotency: same key never enqueues two jobs, and a retry of
+   *  an interrupted run reconciles against the same record before re-sending */
+  idempotencyKey?: string;
   result?: PublishResponse;
   error?: string;
 }
@@ -134,6 +180,14 @@ export function buildApp(config: ServerConfig) {
   const dataDir = config.dataDir ?? path.join(os.homedir(), ".publy", "server-data");
   fs.mkdirSync(dataDir, { recursive: true });
 
+  // every unhandled error leaves this server redacted: fetch/undici messages
+  // can embed full URLs with tokens/secrets (#7 — secrets stay out of logs)
+  app.setErrorHandler((err: FastifyError, _req, reply) => {
+    const status = typeof err.statusCode === "number" && err.statusCode >= 400 ? err.statusCode : 500;
+    const code = typeof err.code === "string" && !err.code.startsWith("FST_ERR_") ? err.code : status >= 500 ? "INTERNAL" : "BAD_REQUEST";
+    reply.code(status).send({ code, message: redactSecrets(err.message) });
+  });
+
   const store = new Store(dataDir);
   if (config.secretKey) { store.setSecretKey(config.secretKey); store.migrateSecrets(); }
   app.addHook("onClose", async () => store.close());
@@ -157,7 +211,7 @@ export function buildApp(config: ServerConfig) {
   }
 
   function planLimit(user: UserRow): number {
-    return store.isProActive(user) ? PLAN_LIMITS.pro.monthlyPublishes : PLAN_LIMITS.free.monthlyPublishes;
+    return store.planAllowance(user).monthlyPublishes;
   }
 
   // webhook: fire-and-forget POST, never blocks the response
@@ -174,6 +228,28 @@ export function buildApp(config: ServerConfig) {
     });
   };
 
+  // --- audit -----------------------------------------------------------------
+
+  const historyFile = path.join(dataDir, "history.jsonl");
+  const audit = (entry: Record<string, unknown>) => {
+    // single choke point: error-ish fields are scrubbed before touching disk
+    const clean: Record<string, unknown> = { ts: new Date().toISOString() };
+    for (const [k, v] of Object.entries(entry)) clean[k] = typeof v === "string" ? redactSecrets(v) : v;
+    fs.appendFileSync(historyFile, JSON.stringify(clean) + "\n");
+  };
+  const readHistory = (limit: number) => {
+    try {
+      return fs
+        .readFileSync(historyFile, "utf-8")
+        .trim()
+        .split("\n")
+        .slice(-limit)
+        .map((l) => JSON.parse(l));
+    } catch {
+      return [];
+    }
+  };
+
   // --- scheduled jobs --------------------------------------------------------
 
   const jobsFile = path.join(dataDir, "jobs.json");
@@ -183,6 +259,19 @@ export function buildApp(config: ServerConfig) {
   } catch {
     /* first run */
   }
+  // crash-mid-run reconciliation (#8): a job found "running" at boot has an
+  // unknown draft outcome — the process must not silently re-issue a second
+  // publish. Surface it as interrupted; retry is an explicit endpoint that
+  // re-checks idempotency before sending.
+  let reconciled = 0;
+  for (const job of Object.values(jobs)) {
+    if (job.status === "running") {
+      job.status = "interrupted";
+      job.error = "interrupted by restart — draft outcome unknown; retry explicitly (idempotency-checked)";
+      reconciled += 1;
+    }
+  }
+  if (reconciled > 0) audit({ event: "jobs-reconciled", interrupted: reconciled });
   const saveJobs = () => fs.writeFileSync(jobsFile, JSON.stringify(jobs, null, 2), { mode: 0o600 });
 
   async function runJob(job: StoredJob): Promise<void> {
@@ -200,9 +289,29 @@ export function buildApp(config: ServerConfig) {
         const used = store.getUsage(user);
         if (used >= limit) throw new PublishError("QUOTA_EXCEEDED", `monthly limit ${limit} reached`);
       }
+      // idempotency reconciliation before sending: a previous lost run (crash
+      // after draft/add, before the status save) may already have delivered
+      // this job's draft — a fresh hit means done, never a second draft
+      if (job.idempotencyKey) {
+        const hit = idempotency[job.idempotencyKey];
+        if (hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS) {
+          job.status = "done";
+          job.result = { mediaId: hit.mediaId, deduped: true, account: body.account, title: body.title, requestId: job.idempotencyKey };
+          job.error = undefined;
+          audit({ event: "scheduled-deduped", account: body.account, title: body.title, jobId: job.id, key: job.idempotencyKey, mediaId: hit.mediaId });
+          notifyWebhook(body.account, "publish", { title: body.title, mediaId: hit.mediaId, jobId: job.id, scheduled: true, deduped: true });
+          saveJobs();
+          return;
+        }
+      }
       const result = await publishToWechat(body, cred, tokens, materials);
       job.status = "done";
       job.result = result;
+      job.error = undefined;
+      if (job.idempotencyKey) {
+        idempotency[job.idempotencyKey] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: job.userId };
+        saveIdempotency();
+      }
       if (!caller.admin) store.incrementUsage(caller.user.id);
       audit({ event: "scheduled-published", account: body.account, type: body.type, title: body.title, mediaId: result.mediaId, jobId: job.id });
       notifyWebhook(body.account, "publish", { title: body.title, mediaId: result.mediaId, jobId: job.id, scheduled: true });
@@ -227,28 +336,40 @@ export function buildApp(config: ServerConfig) {
         if (job.status === "pending" && job.nextAttemptAt <= Date.now()) void runJob(job);
       }
     },
-    30_000,
+    config.jobPollMs ?? 30_000,
   );
   scheduler.unref();
 
-  // --- audit -----------------------------------------------------------------
+  // --- idempotency ------------------------------------------------------------
 
-  const historyFile = path.join(dataDir, "history.jsonl");
-  const audit = (entry: Record<string, unknown>) => {
-    fs.appendFileSync(historyFile, JSON.stringify({ ts: new Date().toISOString(), ...entry }) + "\n");
+  interface IdempotencyRecord {
+    mediaId: string;
+    at: number;
+    account: string;
+    title: string;
+    type: string;
+    /** owning user (null = admin) — records are not visible across callers */
+    userId: string | null;
+  }
+
+  const idempotencyFile = path.join(dataDir, "idempotency.json");
+  let idempotency: Record<string, IdempotencyRecord> = {};
+  try {
+    idempotency = JSON.parse(fs.readFileSync(idempotencyFile, "utf-8"));
+  } catch {
+    /* first run */
+  }
+  const saveIdempotency = () => fs.writeFileSync(idempotencyFile, JSON.stringify(idempotency), { mode: 0o600 });
+
+  const idempotencyFresh = (key: string): IdempotencyRecord | null => {
+    const hit = idempotency[key];
+    return hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS ? hit : null;
   };
-  const readHistory = (limit: number) => {
-    try {
-      return fs
-        .readFileSync(historyFile, "utf-8")
-        .trim()
-        .split("\n")
-        .slice(-limit)
-        .map((l) => JSON.parse(l));
-    } catch {
-      return [];
-    }
-  };
+
+  // test seams: multiuser/readiness tests drive quota and idempotency state
+  // directly instead of making real WeChat calls
+  app.decorate("store", store);
+  app.decorate("idempotency", { records: idempotency, save: saveIdempotency });
 
   // --- auth ------------------------------------------------------------------
 
@@ -303,11 +424,14 @@ export function buildApp(config: ServerConfig) {
     }
     const { contact, plan, months } = req.body ?? {};
     if (!contact || !/^\S{1,64}$/.test(contact)) return reply.code(400).send({ code: "BAD_REQUEST", message: "contact required" });
-    if (plan !== "pro" || ![1, 12].includes(Number(months))) {
-      return reply.code(400).send({ code: "BAD_REQUEST", message: "plan must be pro with months 1 or 12" });
+    if (plan !== "personal" && plan !== "studio") {
+      return reply.code(400).send({ code: "BAD_REQUEST", message: "plan must be personal or studio" });
     }
-    const amountFen = months === 12 ? 39000 : 3900;
-    const order = store.createOrder(contact, "pro", Number(months), amountFen, payments.provider.name);
+    const price = PRICES[plan as Exclude<Plan, "free">].find((p) => p.months === Number(months));
+    if (!price) {
+      return reply.code(400).send({ code: "BAD_REQUEST", message: "months must be 1 or 12" });
+    }
+    const order = store.createOrder(contact, plan as Plan, Number(months), price.fen, payments.provider.name);
     try {
       const payment = await payments.provider.createPayment(
         order,
@@ -398,7 +522,7 @@ export function buildApp(config: ServerConfig) {
     bindAttempts.set(user.id, attempts);
 
     // plan account limit
-    const limit = PLAN_LIMITS[store.isProActive(user) ? "pro" : "free"].accounts;
+    const limit = store.planAllowance(user).accounts;
     if (store.countAccountsOwnedBy(user.id) >= limit) {
       return reply.code(400).send({ code: "ACCOUNT_LIMIT", message: `plan limit is ${limit} account(s) — upgrade to bind more` });
     }
@@ -450,10 +574,13 @@ export function buildApp(config: ServerConfig) {
 
     const key = body.idempotencyKey;
     if (key) {
-      const hit = idempotency[key];
-      if (hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS) {
+      const hit = idempotencyFresh(key);
+      if (hit && (caller.admin || hit.userId === caller.user.id)) {
+        // re-delivery of a request whose draft already landed — the response
+        // names the original destination so a caller that lost the first
+        // response can reconcile instead of sending a second publish (#7)
         audit({ event: "deduped", key, account: body.account, title: body.title });
-        return { mediaId: hit.mediaId, deduped: true };
+        return { mediaId: hit.mediaId, deduped: true, account: hit.account || body.account, title: hit.title || body.title, requestId: key };
       }
     }
 
@@ -462,8 +589,19 @@ export function buildApp(config: ServerConfig) {
       if (Number.isNaN(runAt) || runAt < Date.now() - 60_000) {
         return reply.code(400).send({ code: "BAD_REQUEST", message: `invalid publishAt "${body.publishAt}"` });
       }
+      // idempotent job admission: a retry of the same request identity must
+      // not enqueue a second job for the same draft (#8)
+      if (key) {
+        const twin = Object.values(jobs).find(
+          (j) => j.idempotencyKey === key && (j.status === "pending" || j.status === "running" || j.status === "interrupted") && (caller.admin ? j.userId === null : j.userId === caller.user.id),
+        );
+        if (twin) {
+          audit({ event: "deduped", key, account: body.account, title: body.title, jobId: twin.id, admission: true });
+          return { jobId: twin.id, runAt: new Date(twin.runAt).toISOString(), scheduled: true, deduped: true };
+        }
+      }
       const id = crypto.randomUUID();
-      jobs[id] = { id, runAt, body, userId: caller.admin ? null : caller.user.id, status: "pending", attempts: 0, nextAttemptAt: runAt };
+      jobs[id] = { id, runAt, body, userId: caller.admin ? null : caller.user.id, status: "pending", attempts: 0, nextAttemptAt: runAt, idempotencyKey: key };
       saveJobs();
       audit({ event: "scheduled", account: body.account, type: body.type, title: body.title, runAt: new Date(runAt).toISOString(), jobId: id });
       return { jobId: id, runAt: new Date(runAt).toISOString(), scheduled: true };
@@ -477,13 +615,15 @@ export function buildApp(config: ServerConfig) {
       }
       const result: PublishResponse = await publishToWechat(body, cred, tokens, materials);
       if (key) {
-        idempotency[key] = { mediaId: result.mediaId, at: Date.now() };
+        idempotency[key] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: caller.admin ? null : caller.user.id };
         saveIdempotency();
       }
       if (!caller.admin) store.incrementUsage(caller.user.id);
       audit({ event: "published", account: body.account, type: body.type, title: body.title, mediaId: result.mediaId, key, user: caller.admin ? "admin" : caller.user.contact });
       notifyWebhook(body.account, "publish", { title: body.title, mediaId: result.mediaId });
-      return result;
+      // echo the submitted identity: results name their own destination and
+      // request so clients cannot attach them to the wrong preview (#7)
+      return { ...result, account: body.account, title: body.title, requestId: key };
     } catch (err) {
       audit({ event: "failed", account: body.account, type: body.type, title: body.title, error: (err as Error).message });
       notifyWebhook(body.account, "failed", { title: body.title, error: (err as Error).message });
@@ -495,6 +635,20 @@ export function buildApp(config: ServerConfig) {
       }
       throw err;
     }
+  });
+
+  // query a submission by its idempotency key: did my publish land? A caller
+  // that lost the response (timeout, dropped connection) reconciles here
+  // instead of issuing a second publish. "unknown" is an answer — the key may
+  // have expired or never reached this server — not an error (#7).
+  app.get<{ Params: { key: string } }>("/v1/publish-result/:key", async (req): Promise<PublishResultInfo> => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    const key = (req.params as { key: string }).key;
+    const hit = idempotencyFresh(key);
+    if (!hit || (!caller.admin && hit.userId !== caller.user.id)) {
+      return { status: "unknown" };
+    }
+    return { status: "confirmed", mediaId: hit.mediaId, account: hit.account, title: hit.title, requestId: key };
   });
 
   // accounts visible to the caller: names only — secrets and appIds never
@@ -554,6 +708,27 @@ export function buildApp(config: ServerConfig) {
     return { ok: true };
   });
 
+  // explicit retry of an interrupted/failed job: the scheduler never auto-reruns
+  // interrupted work (#8), but the owner may re-admit it. The original
+  // idempotency key rides along, so if the lost run actually created the draft
+  // the retry dedupes against it instead of making a second draft.
+  app.post<{ Params: { id: string } }>("/v1/jobs/:id/retry", async (req, reply) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    const job = jobs[(req.params as { id: string }).id];
+    if (!job) return reply.code(404).send({ code: "NOT_FOUND", message: "no such job" });
+    if (!caller.admin && job.userId !== caller.user.id) return reply.code(403).send({ code: "NOT_OWNED", message: "job belongs to another user" });
+    if (job.status !== "interrupted" && job.status !== "failed") {
+      return reply.code(400).send({ code: "NOT_RETRYABLE", message: `job is ${job.status}` });
+    }
+    job.status = "pending";
+    job.attempts = 0;
+    job.nextAttemptAt = Date.now();
+    job.error = undefined;
+    saveJobs();
+    audit({ event: "job-retried", jobId: job.id, account: job.body.account, title: job.body.title });
+    return { ok: true, job: jobInfo(job) };
+  });
+
   // --- admin routes ----------------------------------------------------------
 
   function requireAdmin(req: unknown): boolean {
@@ -581,10 +756,13 @@ export function buildApp(config: ServerConfig) {
     if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
     const { contact, plan, months } = req.body ?? {};
     if (!contact) return reply.code(400).send({ code: "BAD_REQUEST", message: "contact required" });
+    if (plan !== undefined && plan !== "free" && plan !== "personal" && plan !== "studio") {
+      return reply.code(400).send({ code: "BAD_REQUEST", message: "plan must be free, personal or studio" });
+    }
     const existing = store.findUserByContact(contact);
     if (existing) {
-      if (plan === "pro") store.extendPro(existing.id, Number(months) || 1);
-      return { ok: true, extended: true, apiKey: existing.apiKey, expiresAt: store.findUserById(existing.id)?.expiresAt };
+      if (plan === "personal" || plan === "studio") store.extendPlan(existing.id, plan, Number(months) || 1);
+      return { ok: true, extended: plan === "personal" || plan === "studio", apiKey: existing.apiKey, expiresAt: store.findUserById(existing.id)?.expiresAt };
     }
     const user = store.createUser(contact, (plan as Plan) ?? "free", Number(months) || 1);
     audit({ event: "admin-created", contact, plan });
@@ -600,6 +778,17 @@ export function buildApp(config: ServerConfig) {
     return { ok: true };
   });
 
+  // credential rotation (#7): issue a fresh key; the old one stops working
+  // immediately while plan, usage and bound accounts are preserved
+  app.post<{ Params: { id: string } }>("/v1/admin/users/:id/rotate-key", async (req, reply) => {
+    if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
+    const user = store.findUserById((req.params as { id: string }).id);
+    if (!user) return reply.code(404).send({ code: "NOT_FOUND", message: "no such user" });
+    const apiKey = store.rotateApiKey(user.id);
+    audit({ event: "key-rotated", contact: user.contact });
+    return { ok: true, apiKey };
+  });
+
   app.post<{ Body: { name?: string; appId?: string; appSecret?: string; ownerContact?: string } }>("/v1/admin/accounts", async (req, reply) => {
     if (!requireAdmin(req)) return reply.code(403).send({ code: "FORBIDDEN", message: "admin only" });
     const { name, appId, appSecret, ownerContact } = req.body ?? {};
@@ -609,7 +798,7 @@ export function buildApp(config: ServerConfig) {
     const owner = ownerContact ? store.findUserByContact(ownerContact) : null;
     if (ownerContact && !owner) return reply.code(400).send({ code: "BAD_REQUEST", message: `unknown owner contact "${ownerContact}"` });
     if (owner) {
-      const limit = PLAN_LIMITS[store.isProActive(owner) ? "pro" : "free"].accounts;
+      const limit = store.planAllowance(owner).accounts;
       if (store.countAccountsOwnedBy(owner.id) >= limit) {
         return reply.code(400).send({ code: "ACCOUNT_LIMIT", message: `plan limit is ${limit} account(s)` });
       }
@@ -694,16 +883,19 @@ export function buildApp(config: ServerConfig) {
     return { accounts: all };
   });
 
-  // --- idempotency ------------------------------------------------------------
+  // --- websocket tickets --------------------------------------------------------
 
-  const idempotencyFile = path.join(dataDir, "idempotency.json");
-  let idempotency: Record<string, { mediaId: string; at: number }> = {};
-  try {
-    idempotency = JSON.parse(fs.readFileSync(idempotencyFile, "utf-8"));
-  } catch {
-    /* first run */
-  }
-  const saveIdempotency = () => fs.writeFileSync(idempotencyFile, JSON.stringify(idempotency), { mode: 0o600 });
+  // the long-lived key is exchanged over an authenticated header here and the
+  // short-lived signed ticket goes into the gateway URL instead (#8)
+  app.post("/v1/ws-ticket", async (req, reply) => {
+    const caller = (req as unknown as { caller: Caller }).caller;
+    if (!config.secretKey) {
+      return reply.code(501).send({ code: "NO_TICKET_KEY", message: "set secretKey in server.json to enable WS tickets" });
+    }
+    const identity = caller.admin ? "admin" : `user:${caller.user.id}`;
+    const { ticket, expiresAt } = signWsTicket(config.secretKey, identity);
+    return { ticket, expiresAt: new Date(expiresAt).toISOString(), identity };
+  });
 
   return app;
 }

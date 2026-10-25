@@ -223,8 +223,8 @@ export function createProvider(
     let user = store.findUserByContact(order.contact);
     if (!user) {
       user = store.createUser(order.contact, order.plan, order.months);
-    } else if (order.plan === "pro") {
-      store.extendPro(user.id, order.months);
+    } else if (order.plan !== "free") {
+      store.extendPlan(user.id, order.plan, order.months);
     }
     store.markOrderPaid(order.id, user.id);
     onPaid(order);

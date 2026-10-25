@@ -63,7 +63,7 @@ test("admin accounts lists config and db accounts with owner resolved", async ()
   await app.inject({
     method: "POST", url: "/v1/admin/users",
     headers: { "x-api-key": "test-key", "content-type": "application/json" },
-    payload: { contact: "owner@example.com", plan: "pro", months: 1 },
+    payload: { contact: "owner@example.com", plan: "personal", months: 1 },
   });
   await app.inject({
     method: "POST", url: "/v1/admin/accounts",

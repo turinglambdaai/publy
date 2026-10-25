@@ -122,15 +122,25 @@ export function purchasePage(publicIp = "你的服务器公网 IP"): string {
   <div class="card">
     <h3>选择套餐</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
-      <div class="plan" data-plan="pro" data-months="1">
-        <div style="font-size:12px;color:var(--text-2)">Pro · 月付</div>
-        <div style="font-size:26px;font-weight:700;margin:6px 0">¥39</div>
-        <div style="font-size:11px;color:var(--text-3)">5000 次发布/月 · 3 账号</div>
+      <div class="plan" data-plan="personal" data-months="1">
+        <div style="font-size:12px;color:var(--text-2)">个人 Personal · 月付</div>
+        <div style="font-size:26px;font-weight:700;margin:6px 0">¥29</div>
+        <div style="font-size:11px;color:var(--text-3)">1 账号 · 30 次发布/月</div>
       </div>
-      <div class="plan" data-plan="pro" data-months="12">
-        <div style="font-size:12px;color:var(--text-2)">Pro · 年付</div>
-        <div style="font-size:26px;font-weight:700;margin:6px 0">¥390</div>
-        <div style="font-size:11px;color:var(--text-3)">同月付 · 折合 ¥32.5/月</div>
+      <div class="plan" data-plan="personal" data-months="12">
+        <div style="font-size:12px;color:var(--text-2)">个人 Personal · 年付</div>
+        <div style="font-size:26px;font-weight:700;margin:6px 0">¥290</div>
+        <div style="font-size:11px;color:var(--text-3)">同月付 · 折合 ¥24.2/月</div>
+      </div>
+      <div class="plan" data-plan="studio" data-months="1">
+        <div style="font-size:12px;color:var(--text-2)">工作室 Studio · 月付</div>
+        <div style="font-size:26px;font-weight:700;margin:6px 0">¥79</div>
+        <div style="font-size:11px;color:var(--text-3)">3 账号 · 150 次发布/月</div>
+      </div>
+      <div class="plan" data-plan="studio" data-months="12">
+        <div style="font-size:12px;color:var(--text-2)">工作室 Studio · 年付</div>
+        <div style="font-size:26px;font-weight:700;margin:6px 0">¥790</div>
+        <div style="font-size:11px;color:var(--text-3)">同月付 · 折合 ¥65.8/月</div>
       </div>
     </div>
     <label style="margin-top:18px">联系方式（订单关联与找回）</label>
@@ -174,26 +184,27 @@ export function purchasePage(publicIp = "你的服务器公网 IP"): string {
   </div>
 
   <div style="text-align:center;margin-top:28px;font-size:12px;color:var(--text-3);line-height:2">
-    免费档：1 账号 · 30 次/月，联系管理员开通。<br>
-    仅走微信公众号官方 API · AppSecret 加密存储永不下发 · 开源 AGPL<br>
+    CLI / 自托管全功能免费 · 公开托管开售前，本页仅用于内部与试点结算<br>
+    仅走微信公众号官方 API · AppSecret 加密存储永不下发<br>
     <a href="https://github.com/turinglambdaai/publy">GitHub</a> · <a href="https://themes.publy.jrtx.site">主题画廊</a> · <a href="https://publy.jrtx.site">publy.jrtx.site</a>
   </div>
 </div>
 <script>
 var plan = null, months = 0, userKey = '';
+var PRICE = { 'personal': { 1: 29, 12: 290 }, 'studio': { 1: 79, 12: 790 } };
 document.querySelectorAll('.plan').forEach(function (el) {
   el.onclick = function () {
     document.querySelectorAll('.plan').forEach(function (p) { p.classList.remove('sel'); });
     el.classList.add('sel');
     plan = el.dataset.plan; months = +el.dataset.months;
     var b = document.getElementById('buy'); b.disabled = false;
-    b.textContent = '支付 ¥' + (months === 12 ? '390' : '39');
+    b.textContent = '支付 ¥' + PRICE[plan][months];
   };
 });
 document.querySelectorAll('.plan')[0].classList.add('sel');
-plan = 'pro'; months = 1;
+plan = 'personal'; months = 1;
 document.getElementById('buy').disabled = false;
-document.getElementById('buy').textContent = '支付 ¥39';
+document.getElementById('buy').textContent = '支付 ¥29';
 
 function show(id, html) { var el = document.getElementById(id); el.style.display = 'block'; el.innerHTML = html; }
 function pollKey(orderId, btn, interval) {
@@ -221,7 +232,7 @@ document.getElementById('buy').onclick = async function () {
     var d = await r.json();
     if (d.qrDataUrl) {
       var remark = String(d.orderId).slice(-6).toUpperCase();
-      show('msg', '请用支付宝扫码支付 ¥' + (months === 12 ? '390' : '39') + '，备注编号 ' + remark + '。管理员确认后本页自动开通。\\n\\n<img src="' + d.qrDataUrl + '" style="width:260px;background:#fff;padding:10px;border-radius:10px">');
+      show('msg', '请用支付宝扫码支付 ¥' + PRICE[plan][months] + '，备注编号 ' + remark + '。管理员确认后本页自动开通。\\n\\n<img src="' + d.qrDataUrl + '" style="width:260px;background:#fff;padding:10px;border-radius:10px">');
       pollKey(d.orderId, b, 3000);
     } else if (d.payUrl) {
       show('msg', '订单已创建，<a href="' + d.payUrl + '" target="_blank">点击完成支付</a>。支付完成后本页自动显示 key。');

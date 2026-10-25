@@ -213,7 +213,7 @@ document.querySelectorAll('.tab').forEach(function (t) {
 async function loadOverview() {
   var d = await (await api('/v1/admin/overview')).json();
   var cards = [
-    ['用户', d.users.total, d.users.pro + ' 个 Pro 生效' + (d.users.disabled ? ' · ' + d.users.disabled + ' 停用' : '')],
+    ['用户', d.users.total, d.users.pro + ' 个付费套餐生效' + (d.users.disabled ? ' · ' + d.users.disabled + ' 停用' : '')],
     ['本月发布', d.publishes.monthTotal, '全部用户合计'],
     ['待确认订单', d.orders.pending, d.orders.paid + ' 笔已支付 · 收入 ¥' + (d.orders.revenueFen / 100).toFixed(0)],
     ['公众号账号', d.accounts.total, 'AppSecret 加密存储'],
@@ -246,13 +246,14 @@ function renderUsers() {
     var bar = '<div class="bar"><div class="bar-in' + (pct >= 90 ? ' hot' : '') + '" style="width:' + pct + '%"></div></div>'
       + '<span class="dim">' + u.used + ' / ' + u.limit + '</span>';
     return '<tr><td><b>' + esc(u.contact) + '</b><div class="dim">' + relTime(u.createdAt) + ' 创建</div></td>'
-      + '<td>' + (u.plan === 'pro' ? '<span class="badge badge-green">Pro</span>' : '<span class="badge badge-gray">Free</span>') + '</td>'
+      + '<td>' + (u.plan === 'free' ? '<span class="badge badge-gray">Free</span>' : '<span class="badge badge-green">' + (u.plan === 'studio' ? 'Studio' : 'Personal') + '</span>') + '</td>'
       + '<td>' + bar + '</td><td>' + exp + '</td>'
       + '<td>' + (u.disabled ? '<span class="badge badge-gray">已停用</span>' : '<span class="badge badge-green">正常</span>') + '</td>'
       + '<td><span class="key" data-k="' + esc(u.apiKey) + '" title="点击复制完整 key">' + esc(u.apiKey.slice(0, 10)) + '…' + esc(u.apiKey.slice(-4)) + '</span></td>'
       + '<td class="td-actions">'
       + '<button class="btn btn-ghost btn-sm" data-copy="' + esc(u.apiKey) + '">复制key</button> '
       + '<button class="btn btn-ghost btn-sm" data-ext="' + u.id + '">延期</button> '
+      + '<button class="btn btn-ghost btn-sm" data-rot="' + u.id + '">换key</button> '
       + (u.disabled
         ? '<button class="btn btn-sm" data-dis="' + u.id + '">启用</button>'
         : '<button class="btn btn-sm btn-danger-solid" data-dis="' + u.id + '">停用</button>')
@@ -284,6 +285,21 @@ function renderUsers() {
       openExtend(target);
     };
   });
+  tb.querySelectorAll('[data-rot]').forEach(function (b) {
+    b.onclick = function () {
+      var target = usersCache.find(function (u) { return u.id === b.dataset.rot; });
+      confirmBox('为「' + target.contact + '」换发新 key？旧 key 立即失效（已配置的客户端需更新）。', async function () {
+        var r = await api('/v1/admin/users/' + b.dataset.rot + '/rotate-key', { method: 'POST' });
+        var d = await r.json();
+        if (d.ok) {
+          copyText(d.apiKey, '新 key 已生成并复制');
+          loadUsers();
+        } else {
+          toast('换 key 失败：' + (d.message || d.code || r.status), 'err');
+        }
+      });
+    };
+  });
 }
 document.getElementById('u-search').addEventListener('input', renderUsers);
 
@@ -295,7 +311,7 @@ function openModal(html) {
 function openExtend(target) {
   openModal('<h3>开通 / 延期</h3>'
     + '<label>联系方式（已存在自动延期）</label><input id="m-contact" value="' + esc(target ? target.contact : '') + '">'
-    + '<label>套餐</label><select id="m-plan"><option value="pro">Pro</option><option value="free">Free</option></select>'
+    + '<label>套餐</label><select id="m-plan"><option value="personal">Personal</option><option value="studio">Studio</option><option value="free">Free（评估）</option></select>'
     + '<label>月数</label><input id="m-months" value="1">'
     + '<div class="msg" id="m-out"></div>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">'
@@ -342,7 +358,7 @@ async function loadOrders() {
   }).join('');
   tb.querySelectorAll('[data-pay]').forEach(function (b) {
     b.onclick = function () {
-      confirmBox('确认已收到「' + b.dataset.c + '」的款项并开通 Pro？', async function () {
+      confirmBox('确认已收到「' + b.dataset.c + '」的款项并开通所购套餐？', async function () {
         await api('/v1/admin/orders/' + b.dataset.pay + '/complete', { method: 'POST' });
         toast('已开通', 'ok');
         loadOrders();
