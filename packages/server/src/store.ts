@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-export type Plan = "free" | "pro";
+export type Plan = "free" | "personal" | "studio";
 
 export interface UserRow {
   id: string;
@@ -46,18 +46,19 @@ export interface OrderRow {
   paidAt: number;
 }
 
+/** Plan allowances mirror PRICING.md `2026-10-v2`: Personal = 1 account /
+ *  30 successful jobs per month, Studio = 3 accounts / 150 jobs. `free` is
+ *  the operator-issued evaluation tier, not a published offer. */
 export const PLAN_LIMITS: Record<Plan, { monthlyPublishes: number; accounts: number }> = {
   free: { monthlyPublishes: 30, accounts: 1 },
-  pro: { monthlyPublishes: 5000, accounts: 3 },
+  personal: { monthlyPublishes: 30, accounts: 1 },
+  studio: { monthlyPublishes: 150, accounts: 3 },
 };
 
-/** current calendar-month key in Asia/Shanghai */
+/** quota period key — PRICING `2026-10-v2`: quotas follow the UTC payment
+ *  billing cycle, no rollover between periods */
 export function monthKey(now = Date.now()): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-  }).format(now); // YYYY-MM
+  return new Date(now).toISOString().slice(0, 7); // UTC YYYY-MM
 }
 
 function newId(): string {
@@ -132,7 +133,7 @@ export class Store {
 
   createUser(contact: string, plan: Plan, months: number): UserRow {
     const now = Date.now();
-    const expiresAt = plan === "pro" ? now + months * 30 * 24 * 3600 * 1000 : 0;
+    const expiresAt = plan === "free" ? 0 : now + months * 30 * 24 * 3600 * 1000;
     const stmt = this.db.prepare(
       "INSERT INTO users (id, contact, api_key, plan, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
     );
@@ -170,11 +171,19 @@ export class Store {
     return (this.db.prepare("SELECT * FROM users ORDER BY created_at DESC").all() as Record<string, unknown>[]).map((r) => this.toUser(r));
   }
 
-  /** pro expiry extension: adds months from the later of now / current expiry */
-  extendPro(userId: string, months: number): void {
+  /** paid expiry extension: adds months from the later of now / current expiry */
+  extendPlan(userId: string, plan: Exclude<Plan, "free">, months: number): void {
     const u = this.findUserById(userId)!;
     const base = Math.max(u.expiresAt, Date.now());
-    this.db.prepare("UPDATE users SET plan = 'pro', expires_at = ? WHERE id = ?").run(base + months * 30 * 24 * 3600 * 1000, userId);
+    this.db.prepare("UPDATE users SET plan = ?, expires_at = ? WHERE id = ?").run(plan, base + months * 30 * 24 * 3600 * 1000, userId);
+  }
+
+  /** credential rotation: the old key stops working immediately; the user
+   *  keeps plan, usage and bound accounts */
+  rotateApiKey(userId: string): string {
+    const apiKey = newApiKey();
+    this.db.prepare("UPDATE users SET api_key = ? WHERE id = ?").run(apiKey, userId);
+    return apiKey;
   }
 
   setDisabled(userId: string, disabled: boolean): void {
@@ -195,9 +204,14 @@ export class Store {
     this.db.prepare("UPDATE users SET publish_count = ?, month_key = ? WHERE id = ?").run(used + 1, mk, userId);
   }
 
-  /** true when plan is pro and not expired */
+  /** true when a paid plan is active (expiry is respected; `free` never counts) */
   isProActive(user: UserRow): boolean {
-    return user.plan === "pro" && (user.expiresAt === 0 || user.expiresAt > Date.now());
+    return user.plan !== "free" && (user.expiresAt === 0 || user.expiresAt > Date.now());
+  }
+
+  /** the allowance currently in force for this user */
+  planAllowance(user: UserRow): { monthlyPublishes: number; accounts: number } {
+    return this.isProActive(user) ? PLAN_LIMITS[user.plan] : PLAN_LIMITS.free;
   }
 
   // --- accounts ------------------------------------------------------------
@@ -328,10 +342,17 @@ export class Store {
   }
 }
 
-/** Price table in fen (¥ * 100). Pro is sold per month. */
+/** Price table in fen (¥ * 100), mirroring PRICING.md `2026-10-v2` CNY
+ *  targets: Personal ¥29/month or ¥290/year, Studio ¥79/month or ¥790/year.
+ *  Providers settle CNY only; the USD column in PRICING is an independent
+ *  regional target, not a separate checkout. */
 export const PRICES: Record<Exclude<Plan, "free">, { months: number; fen: number }[]> = {
-  pro: [
-    { months: 1, fen: 3900 },
-    { months: 12, fen: 39000 },
+  personal: [
+    { months: 1, fen: 2900 },
+    { months: 12, fen: 29000 },
+  ],
+  studio: [
+    { months: 1, fen: 7900 },
+    { months: 12, fen: 79000 },
   ],
 };

@@ -24,6 +24,8 @@ See the [README](../README.md) for source installation and execution; release as
 
 Keep source Markdown and media locally. Back up server configuration, databases, job history and encryption material together using restricted, encrypted storage. Restore and test on an isolated server; do not replay an unknown-outcome job before checking remote draft/history state.
 
+When a delivery loses its connection, the outcome is "unknown", not "failed": query the original request identity first (`publy publish-result <key>`, or the query action in the plugin) and only then retry the same request — the server reconciles against its idempotency record instead of creating a duplicate draft. Interrupted scheduled jobs never auto-rerun after a restart; retry them explicitly with `publy jobs retry <id>`.
+
 ## Network, keys and privacy
 
 Rendering can run locally. Delivery sends content/media and account credentials or derived tokens through your chosen server to official WeChat APIs. Server logs, retry history and storage must be reviewed; “nothing is stored” is not a valid blanket promise. Never share API keys in URLs or screenshots.

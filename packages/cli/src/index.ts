@@ -428,12 +428,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     }
   }
   if (!result) {
-    // surface the underlying cause (ECONNREFUSED vs TLS handshake vs timeout
-    // behave differently) instead of swallowing it into one generic message
+    // network-level failure: the server may or may not have delivered the
+    // draft — outcome unknown, never treated as permission to re-send (#7).
+    // Surface the underlying cause and the request identity so an agent can
+    // reconcile with `publy publish-result <key>` instead of re-publishing.
     const cause = (netErr as Error | null)?.cause as { code?: string; message?: string } | undefined;
     const detail = cause?.code ?? cause?.message ?? (netErr as Error | null)?.message ?? "";
     console.error(`publy: cannot reach server ${server}${detail ? ` (${detail})` : ""}`);
     console.error(`publy: check --server / config server, or run \`publy tunnel\` when a tunnel is configured (e.g. TLS failures on the public domain)`);
+    console.error(`publy: outcome UNKNOWN — the draft may already exist. Query before retrying: publy publish-result ${idempotencyKey}`);
     process.exit(5);
   }
   const { res, body } = result;
@@ -443,7 +446,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, warnings }));
+    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, requestId: body.requestId ?? idempotencyKey, warnings }));
   } else if (body.jobId) {
     console.log(`已创建定时任务 ${body.jobId}，将在 ${body.runAt} 自动发布到 ${accountName}（publy jobs 查看状态）`);
   } else {
@@ -502,6 +505,41 @@ export function createProgram(): Command {
   common(publishCmd);
   publishCmd.action(async (file: string, opts) => cmdPublish(file, opts));
 
+  // reconcile a lost publish by its idempotency key (#7): answers whether the
+  // draft landed without ever re-sending the publish itself
+  program
+    .command("publish-result")
+    .description("query whether a publish with the given idempotency key landed (timeout recovery)")
+    .argument("<key>")
+    .option("--server <url>", "publy server base url")
+    .option("--api-key <key>", "server api key")
+    .option("--json", "machine-readable output")
+    .action(async (key: string, opts: Record<string, any>) => {
+      const config = loadConfig();
+      const server = opts.server ?? config.server;
+      const apiKey = opts.apiKey ?? config.api_key;
+      if (!server || !apiKey) {
+        console.error("publy: server/api_key not configured.");
+        process.exit(5);
+      }
+      const res = await fetch(new URL(`/v1/publish-result/${encodeURIComponent(key)}`, server).toString(), {
+        headers: { "x-api-key": apiKey },
+      });
+      const body = (await res.json()) as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
+      if (!res.ok) {
+        console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
+        process.exit(5);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify(body));
+      } else if (body.status === "confirmed") {
+        console.log(`已确认：《${body.title ?? "?"}》在 ${body.account ?? "?"} 草稿箱，Media ID: ${body.mediaId}`);
+      } else {
+        console.log("结果未知：服务端没有这次请求的记录（超出幂等窗口或未送达）。可用原幂等键重试，或到公众号草稿箱确认。");
+        process.exit(4);
+      }
+    });
+
   program
     .command("tunnel")
     .description("bring up the configured SSH tunnel (config.tunnel) and verify it")
@@ -546,6 +584,27 @@ export function createProgram(): Command {
       const body = (await res.json()) as { ok?: boolean } & { code?: string; message?: string };
       console.log(res.ok && body.ok ? "cancelled" : `failed: ${body.code ?? res.status} ${body.message ?? ""}`);
       process.exit(res.ok && body.ok ? 0 : 5);
+    });
+  // interrupted jobs never auto-rerun after a crash (#8); the owner retries
+  // explicitly — the original idempotency key rides along, so a lost run that
+  // actually delivered reconciles instead of duplicating
+  jobsCmd
+    .command("retry")
+    .argument("<id>")
+    .description("re-admit an interrupted/failed job (idempotency-checked)")
+    .action(async (id: string) => {
+      const config = loadConfig();
+      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}/retry`, config.server!).toString(), {
+        method: "POST",
+        headers: { "x-api-key": config.api_key! },
+      });
+      const body = (await res.json()) as { ok?: boolean; job?: JobInfo } & { code?: string; message?: string };
+      if (res.ok && body.ok) {
+        console.log(`job ${body.job?.id.slice(0, 8)} re-admitted (${body.job?.status})`);
+      } else {
+        console.error(`failed: ${body.code ?? res.status} ${body.message ?? ""}`);
+        process.exit(5);
+      }
     });
 
   program

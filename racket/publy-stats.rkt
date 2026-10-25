@@ -219,26 +219,31 @@
                 'paid-at (vector-ref row 4)))
       (disconnect dbc))))
 
-;; plan limits mirror store.ts PLAN_LIMITS
+;; plan limits mirror store.ts PLAN_LIMITS (PRICING 2026-10-v2)
 (define plan-monthly-limit
-  (λ (plan) (if (equal? plan "pro") 5000 30)))
+  (λ (plan)
+    (cond [(equal? plan "personal") 30]
+          [(equal? plan "studio") 150]
+          [else 30])))
+
+;; any paid plan with unexpired entitlement
+(define (paid-active? r now-ms)
+  (and (not (equal? (hash-ref r 'plan) "free"))
+       (let ([exp (hash-ref r 'expires-at 0)])
+         (or (zero? exp) (> exp now-ms)))))
 
 (define (user-stats rows now-ms)
   (hasheq 'total (length rows)
           'active (count (λ (r) (zero? (hash-ref r 'disabled-at 0))) rows)
           'disabled (count (λ (r) (> (hash-ref r 'disabled-at 0) 0)) rows)
           'proActive
-          (count (λ (r)
-                   (and (equal? (hash-ref r 'plan) "pro")
-                        (let ([exp (hash-ref r 'expires-at 0)])
-                          (or (zero? exp) (> exp now-ms)))))
-                 rows)
+          (count (λ (r) (paid-active? r now-ms)) rows)
           'newLast7d
           (count (λ (r) (>= (hash-ref r 'created-at 0) (- now-ms 604800000))) rows)
           'proExpiring14d
           (count (λ (r)
                    (define exp (hash-ref r 'expires-at 0))
-                   (and (equal? (hash-ref r 'plan) "pro")
+                   (and (not (equal? (hash-ref r 'plan) "free"))
                         (> exp now-ms)
                         (<= exp (+ now-ms 1209600000))))
                  rows)))
@@ -502,7 +507,7 @@
     (define rows
       (list (hasheq 'contact "a@x" 'plan "pro" 'publish-count 0 'month-key ""
                     'disabled-at 0 'expires-at 0 'created-at (- NOW-MS 86400000))
-            (hasheq 'contact "b@x" 'plan "pro" 'publish-count 4000 'month-key "2026-10"
+            (hasheq 'contact "b@x" 'plan "studio" 'publish-count 135 'month-key "2026-10"
                     'disabled-at 0 'expires-at (+ NOW-MS 864000000) 'created-at (- NOW-MS 2592000000))
             (hasheq 'contact "c@x" 'plan "free" 'publish-count 27 'month-key "2026-10"
                     'disabled-at 0 'expires-at 0 'created-at 0)
@@ -520,22 +525,22 @@
     (define rows
       (list (hasheq 'contact "near@x" 'plan "free" 'publish-count 27 'month-key "2026-10")
             (hasheq 'contact "low@x" 'plan "free" 'publish-count 5 'month-key "2026-10")
-            (hasheq 'contact "pro-near@x" 'plan "pro" 'publish-count 4800 'month-key "2026-10")
+            (hasheq 'contact "pro-near@x" 'plan "studio" 'publish-count 144 'month-key "2026-10")
             ;; heavy but last month's counter — must not flag
             (hasheq 'contact "stale@x" 'plan "free" 'publish-count 29 'month-key "2026-09")))
     (define near (near-limit-users rows "2026-10"))
     (check-equal? (length near) 2)
     (check-equal? (hash-ref (car near) 'contact) "pro-near@x")
-    (check-equal? (hash-ref (car near) 'limit) 5000)
+    (check-equal? (hash-ref (car near) 'limit) 150)
     (check-equal? (hash-ref (cadr near) 'contact) "near@x"))
 
   (test-case "revenue sums paid orders per Shanghai month"
     (define orders
-      (list (hasheq 'plan "pro" 'months 1 'amount-fen 3900 'status "paid" 'paid-at 1792363200000)
-            (hasheq 'plan "pro" 'months 12 'amount-fen 39000 'status "paid" 'paid-at 1785561600000)
-            (hasheq 'plan "pro" 'months 1 'amount-fen 3900 'status "pending" 'paid-at 0)))
+      (list (hasheq 'plan "studio" 'months 1 'amount-fen 7900 'status "paid" 'paid-at 1792363200000)
+            (hasheq 'plan "studio" 'months 12 'amount-fen 79000 'status "paid" 'paid-at 1785561600000)
+            (hasheq 'plan "studio" 'months 1 'amount-fen 7900 'status "pending" 'paid-at 0)))
     (define by-month (revenue-by-month orders))
-    (check-equal? by-month (list (cons "2026-08" 39000) (cons "2026-10" 3900))))
+    (check-equal? by-month (list (cons "2026-08" 79000) (cons "2026-10" 7900))))
 
   ;; ---- end-to-end against a fixture data dir --------------------------------
 
@@ -546,7 +551,7 @@
     (query-exec dbc "create table users (id text primary key, contact text not null unique, api_key text not null unique, plan text not null default 'free', expires_at integer not null default 0, publish_count integer not null default 0, month_key text not null default '', disabled_at integer not null default 0, created_at integer not null)")
     (query-exec dbc "create table accounts (name text primary key, app_id text not null, app_secret text not null, owner_user_id text)")
     (query-exec dbc "create table orders (id text primary key, contact text not null, plan text not null, months integer not null, amount_fen integer not null, provider text not null, status text not null default 'pending', user_id text, created_at integer not null, paid_at integer not null default 0)")
-    (query-exec dbc "insert into users (id, contact, api_key, plan, publish_count, month_key, created_at) values ('u1', 'heavy@x', 'publy_k1', 'pro', 4500, ?, 1792276800000)" cur-mk)
+    (query-exec dbc "insert into users (id, contact, api_key, plan, publish_count, month_key, created_at) values ('u1', 'heavy@x', 'publy_k1', 'studio', 140, ?, 1792276800000)" cur-mk)
     (query-exec dbc "insert into users (id, contact, api_key, plan, publish_count, month_key, created_at) values ('u2', 'light@x', 'publy_k2', 'free', 2, ?, 1792276800000)" cur-mk)
     (query-exec dbc "insert into accounts (name, app_id, app_secret, owner_user_id) values ('main', 'wx111', 'enc1:never-selected', 'u1')")
     (query-exec dbc "insert into accounts (name, app_id, app_secret, owner_user_id) values ('shared', 'wx222', 'enc1:never-selected', null)")

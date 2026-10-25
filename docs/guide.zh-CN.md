@@ -214,6 +214,13 @@ cd /opt/publy && git pull && pnpm install --frozen-lockfile && pnpm -r build && 
 publy history            # 服务器审计日志（谁、何时、发了什么、mediaId）
 publy jobs list          # 定时任务
 publy jobs cancel <id>   # 取消未执行的定时任务
+publy jobs retry <id>    # 显式重试中断/失败的任务（幂等对账，不会重复建草稿）
+```
+
+超时恢复：发布命令网络中断时退出码 5，并打印本次的幂等键。先查再重试，不要直接重发：
+
+```bash
+publy publish-result <幂等键>   # confirmed = 草稿已建；unknown = 可原样重试
 ```
 
 ## 故障排查
@@ -226,6 +233,7 @@ publy jobs cancel <id>   # 取消未执行的定时任务
 | 退出码 5 + `WECHAT_40001` | AppSecret 不对或被重置，改服务器端 server.json |
 | 退出码 5 + `WECHAT_45166` | 图片消息内容超微信长度限制，精简 |
 | 连接拒绝 | 服务端 `systemctl status publy-server`，检查安全组/防火墙端口放行 |
+| 退出码 5 + outcome UNKNOWN | 网络中断，草稿可能已建：先 `publy publish-result <键>` 查询，再决定原样重试 |
 | 卡片出现乱码方块 | 生僻字/emoji 超出内置 GB2312 子集：`--font-file` 指定全量字体（首次自动下载） |
 
 ## 设计边界（为什么没有这些）
