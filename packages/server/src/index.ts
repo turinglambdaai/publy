@@ -412,8 +412,8 @@ export function buildApp(config: ServerConfig) {
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
   const legacyCheckoutEnabled = config.payments?.enableLegacyCheckout === true;
   // Historical checkout is not Commerce/Permit-authorized public billing.
-  if (legacyCheckoutEnabled && !config.payments?.provider) {
-    throw new Error("legacy checkout requires payments.provider, for isolated owner testing only");
+  if (legacyCheckoutEnabled && config.payments?.provider !== "manual") {
+    throw new Error("legacy checkout is restricted to manual synthetic testing; online providers require Commerce/Permit");
   }
   const checkoutClosed = (reply: FastifyReply) =>
     reply.code(503).send({ code: "CHECKOUT_NOT_AVAILABLE", message: "Public hosted subscriptions are not open" });
