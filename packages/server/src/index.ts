@@ -422,7 +422,8 @@ export function buildApp(config: ServerConfig) {
     : reply.type("text/html").send('<!doctype html><html lang="en"><meta charset="utf-8"><title>Publy</title><body><main><h1>Publy</h1><p>Local preview, CLI and self-hosted publishing are available. Public hosted subscriptions are not open.</p><a href="https://github.com/turlamai/publy">Source and documentation</a></main></body></html>'));
   app.get("/admin", async (_req, reply) => reply.type("text/html").send(adminPage()));
 
-  const payments = createProvider(config.payments, store, (order) => {
+  // The disabled path must never initialize a configured external gateway.
+  const payments = createProvider(legacyCheckoutEnabled ? config.payments : { provider: "manual" }, store, (order) => {
     audit({ event: "purchase-paid", contact: order.contact, plan: order.plan, months: order.months, orderId: order.id });
   });
   console.log(`[payments] provider: ${payments.provider.name}`);
