@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl, Modal, setIcon } from "obsidian";
+import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, requestUrl, Modal, setIcon, sanitizeHTMLToDom } from "obsidian";
 import {
   renderMarkdown,
   renderCards,
@@ -510,7 +510,9 @@ class PublyPreviewView extends ItemView {
       hr.addClass("publy-hairline");
     }
     const body = page.createEl("div");
-    body.innerHTML = html;
+    // Raw HTML in Markdown notes is untrusted, even when our renderer generated the wrapper.
+    // Obsidian's sanitizer strips active markup before it reaches the privileged plugin DOM.
+    body.replaceChildren(sanitizeHTMLToDom(html));
   }
   setCards(cards: { base64: string }[], caption: string): void {
     this.beginCards(cards.length);
