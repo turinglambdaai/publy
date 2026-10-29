@@ -23,6 +23,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Verify no-npm distribution policy
+        run: node scripts/check-distribution-policy.mjs
       - uses: Bogdanp/setup-racket@v1.2
         with:
           architecture: x64
