@@ -14,7 +14,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import Fastify from "fastify";
-import type { FastifyError } from "fastify";
+import type { FastifyError, FastifyReply } from "fastify";
 import type { JobInfo, JobStatus, PublishRequest, PublishResponse, PublishResultInfo } from "@publy/shared";
 import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
 import { Store, PLAN_LIMITS, PRICES, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
@@ -415,7 +415,7 @@ export function buildApp(config: ServerConfig) {
   if (legacyCheckoutEnabled && !config.payments?.provider) {
     throw new Error("legacy checkout requires payments.provider, for isolated owner testing only");
   }
-  const checkoutClosed = (reply: { code: (status: number) => { send: (body: unknown) => unknown } }) =>
+  const checkoutClosed = (reply: FastifyReply) =>
     reply.code(503).send({ code: "CHECKOUT_NOT_AVAILABLE", message: "Public hosted subscriptions are not open" });
   app.get("/", async (_req, reply) => legacyCheckoutEnabled
     ? reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）"))
