@@ -60,7 +60,7 @@ construct a parallel runbook file.
 
 | Thing | Location | In git? |
 | --- | --- | --- |
-| Code (server, CLI, plugin, gateway) | this repo → `github.com/turinglambdaai/publy` | ✅ |
+| Code (server, CLI, plugin, gateway) | this repo → `github.com/turlamai/publy` | ✅ |
 | Operator config (apiKey, accounts, secretKey) | `~/.publy/server.json` on the server | ❌ back it up |
 | **Users, API keys, orders** | `~/.publy/server-data/users.db` (SQLite) | ❌ back it up |
 | Audit trail (the event gateway reads this) | `~/.publy/server-data/history.jsonl` | ❌ back it up |
@@ -84,7 +84,7 @@ Contains config + database + audit trail in one file. Copy it off the box
 
 ```bash
 # 1. node 22+ and the code
-git clone https://github.com/turinglambdaai/publy && cd publy && pnpm -r build
+git clone https://github.com/turlamai/publy && cd publy && pnpm -r build
 # 2. drop in the data
 tar -xzf publy-backup-YYYY-MM-DD.tar.gz -C ~
 # 3. start server + event gateway (ports default 8081 / 8082)

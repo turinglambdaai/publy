@@ -11,7 +11,7 @@ Public hosted registration and payment are **not open**. Start with local render
 Use Node.js 22+ and pnpm, as declared by the repository:
 
 ```sh
-git clone https://github.com/turinglambdaai/publy.git
+git clone https://github.com/turlamai/publy.git
 cd publy
 pnpm install --frozen-lockfile
 pnpm -r build
