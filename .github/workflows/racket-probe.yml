@@ -1,0 +1,55 @@
+name: Racket standalone distribution prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "racket/publy-cli-prototype.rkt"
+      - "racket/publy-cli-prototype-test.rkt"
+      - ".github/workflows/racket-probe.yml"
+  pull_request:
+    paths:
+      - "racket/publy-cli-prototype.rkt"
+      - "racket/publy-cli-prototype-test.rkt"
+      - ".github/workflows/racket-probe.yml"
+
+jobs:
+  standalone:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Bogdanp/setup-racket@v1.2
+        with:
+          architecture: x64
+          distribution: full
+          variant: CS
+          version: stable
+      - name: Test synthetic config handling
+        run: raco test racket/publy-cli-prototype-test.rkt
+      - name: Build and smoke standalone native distribution
+        shell: bash
+        run: |
+          raco exe -o publy-racket-probe racket/publy-cli-prototype.rkt
+          exe=publy-racket-probe
+          if [[ "$RUNNER_OS" == "Windows" ]]; then exe=publy-racket-probe.exe; fi
+          raco distribute dist/publy-racket-probe "$exe"
+          executable=dist/publy-racket-probe/bin/publy-racket-probe
+          if [[ "$RUNNER_OS" == "Windows" ]]; then executable=dist/publy-racket-probe/publy-racket-probe.exe; fi
+          "$executable" --json version
+          set +e
+          "$executable" --json --config __missing_config__.json doctor
+          status=$?
+          set -e
+          test "$status" -eq 3
+      - name: Upload temporary platform artifact (not a product release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: publy-racket-probe-${{ runner.os }}-x64
+          path: dist/publy-racket-probe/
+          if-no-files-found: error
+          retention-days: 14
