@@ -35,6 +35,7 @@ if (fs.existsSync(path.join(distDir, "fonts"))) {
 const calls = [];
 
 class Component {
+  replaceChildren(...children) { this.children = children; }
   empty() { this.children = []; }
   createEl() { return { children: [], style: {} }; }
   appendChild() {}
@@ -125,7 +126,7 @@ class Modal {
   onClose() {}
 }
 class TFile { path = ""; }
-const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, requestUrl: async () => ({ json: {}, status: 200 }) };
+const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, sanitizeHTMLToDom: (html) => ({ html }), requestUrl: async () => ({ json: {}, status: 200 }) };
 
 // intercept module loading for obsidian/electron
 const origLoad = Module._load;
