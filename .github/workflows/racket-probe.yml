@@ -39,6 +39,7 @@ jobs:
           raco exe -o publy-racket-probe racket/publy-cli-prototype.rkt
           exe=publy-racket-probe
           if [[ "$RUNNER_OS" == "Windows" ]]; then exe=publy-racket-probe.exe; fi
+          mkdir -p dist
           raco distribute dist/publy-racket-probe "$exe"
           executable=dist/publy-racket-probe/bin/publy-racket-probe
           if [[ "$RUNNER_OS" == "Windows" ]]; then executable=dist/publy-racket-probe/publy-racket-probe.exe; fi
