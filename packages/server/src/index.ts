@@ -429,6 +429,7 @@ export function buildApp(config: ServerConfig) {
   const pollThrottle = new Map<string, number>();
 
   app.post<{ Body: { contact?: string; plan?: string; months?: number } }>("/purchase", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const ip = req.ip ?? "unknown";
     if (rateLimited(ip)) {
       return reply.code(429).send({ code: "RATE_LIMITED", message: "too many requests, try later" });
@@ -457,6 +458,7 @@ export function buildApp(config: ServerConfig) {
   });
 
   app.get<{ Params: { id: string } }>("/order/:id", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const order = store.findOrder((req.params as { id: string }).id);
     if (!order) return reply.code(404).send({ code: "NOT_FOUND", message: "no such order" });
     if (order.status !== "paid") {
@@ -479,7 +481,8 @@ export function buildApp(config: ServerConfig) {
     return { orderId: fresh.id, status: "paid", apiKey: user?.apiKey, plan: user?.plan, expiresAt: user?.expiresAt };
   });
 
-  app.get<{ Querystring: { contact?: string } }>("/lookup", async (req) => {
+  app.get<{ Querystring: { contact?: string } }>("/lookup", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const contact = (req.query as { contact?: string }).contact ?? "";
     const user = store.findUserByContact(contact);
     if (!user) return { keys: [] };
@@ -487,6 +490,7 @@ export function buildApp(config: ServerConfig) {
   });
 
   app.post<{ Body: Record<string, unknown> }>("/pay/xunhupay/notify", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const orderId = payments.provider.verifyNotify(req.body);
     if (!orderId) return reply.code(400).send({ code: "BAD_SIGNATURE" });
     const done = payments.completeOrder(orderId);
