@@ -1,56 +1,48 @@
-# Obsidian 社区目录提审材料
+# Publy — Obsidian Community Directory 发布与审核（当前流程）
 
-目标：把 Publy 插件提交到 [obsidianmd/obsidian-releases](https://github.com/obsidianmd/obsidian-releases) 的社区插件目录。本文档是提交所需材料的唯一权威草稿。
+> 当前状态（2026-10-30）：官方公开 `community-plugins.json` 未列出 `publy`。这只能说明**尚未公开上架**，不能从公开 API 推断“没提交／审核中／被拒”。开发者后台的私有审核结果需要登录后查看。本文件是发布检查表，不是通过审核的证明。
 
-## 1. community-plugins.json 条目
+[English user guide](USER-GUIDE.md) · [中文使用指南](USER-GUIDE.zh-CN.md)
 
-在 `community-plugins.json`（按字母序）中添加：
+## 1. 当前发布阻塞
 
-```json
-"publy": "turinglambdaai/publy"
-```
+- [#12](https://github.com/turlamai/publy/issues/12)：标准社区安装只获取 Release 的 `main.js`、`manifest.json`、`styles.css`。当前插件卡片/WASM/字体依赖 ZIP 中的 `node_modules/` 和 `fonts/`；**ZIP 侧载通过不等于社区目录安装通过**。必须先完成只用三个文件的干净库实机验收。
+- [#13](https://github.com/turlamai/publy/issues/13)：`MarkdownIt({html:true})` → `innerHTML` 的原生 HTML 预览需要安全边界和回归测试。
+- [#14](https://github.com/turlamai/publy/issues/14)：仓库主线源码现为 `0.8.7`，但最后一个公开插件 Release 为 `0.8.3`。统一的根/子目录清单只表示源码元数据一致；**还需要从已审查 SHA 创建相同版本的 Release** 才能提审。
+- [#15](https://github.com/turlamai/publy/issues/15)：需要增补真实 Obsidian 桌面安装/交互测试；现有 Node stub 不是原生测试。
 
-## 2. PR 描述草稿
+不要为了让扫描“变绿”而删除卡片/安全功能，或把已经存在的旧 Release 资产冒充新版本。公开托管尚未开卖（[定价与权益](../PRICING.md)、[运行门禁](https://github.com/turlamai/publy/issues/8)）。
 
-**标题**：Add Publy: agent-era publishing pipeline for WeChat Official Accounts
+## 2. 官方当前入口（不要再提交旧式目录 PR）
 
-**Link to plugin**：https://github.com/turinglambdaai/publy（plugin source 在 `packages/obsidian-plugin/`，release 资产由 CI 校验后的 dist 打包）
+- 开发者目录：<https://community.obsidian.md/>
+- 官方[提交指南](https://docs.obsidian.md/Plugins/Releasing/Submit%20your%20plugin)
+- 官方[插件要求](https://docs.obsidian.md/community-directory/submission-requirements-for-plugins)
+- 官方[开发者政策](https://docs.obsidian.md/community-directory/developer-policies)
+- 官方[检查／重新审核](https://docs.obsidian.md/community-directory/manage-entry)
+- 官方[常见问题与付费分类](https://docs.obsidian.md/community-directory/faq)
+- 只读公开[插件目录镜像](https://github.com/obsidianmd/obsidian-releases/blob/master/community-plugins.json)
 
-**功能概述（给审核者）**：
+旧的 Fork + PR 更新 `community-plugins.json` 流程已废弃。初次登记应使用社区目录中的开发者账户和插件提交入口，连接 GitHub 仓库 `https://github.com/turlamai/publy`；后续版本通过 GitHub Release 更新。
 
-Publy 把 Obsidian 笔记发布为微信公众号内容。插件提供：
+## 3. 发布前的机器可验证门禁
 
-- **应用内预览面板**：当前笔记的公众号排版实时渲染（约 0.9s 防抖），带手机宽（390px）/桌面宽切换与 10 套主题快切；图片消息（卡片组）以真实尺寸拼版预览
-- **一键发布**：通过自托管或托管的 Publy 服务把排版 HTML 与图片经微信公众号**官方 API** 送入草稿箱（无模拟登录、无第三方中间商）；幂等键防重复、审计可查
-- **零配置路径**：不配置服务也能用——本地渲染预览 + 复制带样式富文本，粘贴进公众号编辑器
-- **封面选择器**：正文图 / 本机图片（HTML 文件选择器）/ 自动标题卡（真实渲染预览），按笔记记忆
-- **定时发布 / 发布历史时间线 / 多账号切换 / webhook 通知**
+1. `pnpm install --frozen-lockfile && pnpm -r build && pnpm -r test`；执行 `node scripts/check-plugin-metadata.mjs` 和 `node scripts/verify-plugin.mjs`。后者只是模拟 Obsidian API 的 Node smoke。
+2. 确认仓库根 `manifest.json` 与 `packages/obsidian-plugin/manifest.json` 完全一致；根/子 `versions.json` 一致，`packages/obsidian-plugin/package.json` 版本匹配。当前源码的 `0.8.7` **不是**已发布版本。
+3. 从审核通过的确切 commit SHA 构建；以相同版本号创建 Git tag 和 GitHub Release，上传构建产物 `main.js`、`manifest.json`、`styles.css`。确保 Release assets 实际与本次构建内容一致，并记录校验和；不要使用旧 Release 附件。
+4. **重要**：在干净的真实 Obsidian 桌面库中，仅复制社区安装会取得的三个文件，禁止额外字体、模块或 ZIP；重启后验证离线预览、富文本复制、图片卡片、数学公式、加载/卸载、更新和错误提示，覆盖实际支持的操作系统。当前这一步尚未通过（#12）。
+5. 审查无动态广告、客户端遥测、自更新/自装依赖、不透明混淆；根目录 `README.md` 和 `LICENSE` 可访问；`isDesktopOnly: true` 与 Node/Electron 使用相符；命令 ID 不自带插件 ID 前缀；无样例模板遗留。
+6. 用户可见文档明确披露：本地预览无需账户；草稿投递需要用户自己的服务端、网络、公众号/API 权限与 key；可能涉及库外文件；默认商业托管当前不可购买。真实付款开通前按实际功能选择目录的 `Optional payment`（若通过可选付费托管扩展能力），不能把付费服务包装成永久免费。根据后台官方分类解释确认最终标签。
+7. 预备插件图标、简短描述、截图及非敏感的测试说明；不要把 AppSecret、API key、实际用户文章和日志交给审核。
 
-**全新安装测试**：
+## 4. 有权登录的开发者最后操作
 
-1. BRAT 安装 `turinglambdaai/publy`，或手动复制 release 中的 `main.js`、`manifest.json`、`styles.css` 到 `.obsidian/plugins/publy/`
-2. 启用插件——预览、富文本复制、卡片渲染全部离线可用（无需任何配置）
-3. 配置 server + API key 后（设置页有「测试连接」），`发布当前笔记` 送入草稿箱
+1. 登录 <https://community.obsidian.md/>，检查 **Your entries** 是否已有 `publy`。若存在，打开扫描报告，逐项记录 Manifest、Releases、Source code、Build verification 的 Error/Warning；若不存在，按官方入口提交插件，不再打开 `obsidian-releases` PR。
+2. 先用 **Review branch / Run preview scan** 验证源分支；阻塞项修完并发布 GitHub Release 后，使用 **Request review** 或 **Check for new releases**。
+3. 看到后台报告全部满足要求仍不等于公开上架。必须在[公开目录](https://community.obsidian.md/plugins)和 Obsidian 应用内搜索到 Publy，并从头安装/更新验证，才能在 #14 留存公开链接、版本、日期、截图和通过结论。
 
-**审核规则自查**：
+## 5. 如需给审核者提供的准确概述
 
-- ❌ `electron.remote`：未使用（本机图片选择用 `<input type="file">`，内容寻址存储，不保留文件路径）——0.8.1 起生效
-- ❌ `eval` / 动态代码注入：未使用
-- ✅ 网络：仅 `requestUrl` 到用户在设置中明确配置的服务器；字体与渲染引擎随包分发，**无任何 CDN 依赖**
-- ✅ DOM：渲染产物写入预览面板（内容来自用户笔记经 markdown-it 渲染），无第三方注入面；样式全部 `publy-` 前缀
-- ✅ 遥测：无任何数据收集
-- ✅ `isDesktopOnly: true`（wasm PNG 渲染 + 本地字体子集）
+> Publy previews Markdown articles and image-post cards for WeChat Official Accounts. Local preview and rich-text copy do not require a hosted account. Optional delivery uses the user's configured Publy server and official WeChat APIs to create **drafts**, not to automatically mass-send or publicly post articles. The Obsidian plugin is desktop-only; hosted commercial subscriptions are not yet offered.
 
-**License**：AGPL-3.0（仓库根 LICENSE）。
-
-## 3. 提交流程
-
-1. Fork `obsidianmd/obsidian-releases`，在 `community-plugins.json` 按字母序插入上面的条目
-2. 开 PR，标题 `Add Publy: agent-era publishing pipeline for WeChat Official Accounts`，描述用第 2 节内容（附预览面板与封面选择器截图/短视频，发布前补录）
-3. 用 GitHub 账号在 PR 里回复审核机器人 checklist 确认
-4. 等待人工审核（通常 2-8 周）；常见追问是 innerHTML 的内容来源（见上，答复「渲染用户自己的笔记，无第三方内容」）
-
-## 4. 已知非阻塞项
-
-- `data.json` 明文保存 API key（password 输入框采集）——社区同类插件（GitHub/Notion 发布类）惯例，审核不阻塞；后续可选 device 加密
-- `body.innerHTML = html`——自产渲染内容，PR 描述已预答
+不要声称官方目录已通过、付费已经开放，或特定安全测试已完成。
