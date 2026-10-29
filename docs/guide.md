@@ -18,7 +18,7 @@ pnpm -r build
 node packages/cli/dist/index.js --help
 ```
 
-The commands below use `publy` for that CLI entry. If a published package is available for the version you selected, `npm i -g @turinglambdaai/publy` provides the command; inspect its version rather than assuming a website badge identifies the installed release.
+The commands below use `publy` as shorthand for the source-built CLI entry. **Publy no longer distributes new CLI versions via the npm Registry.** The standalone installer is not available yet; see the [no-npm distribution plan](distribution.md). Until it passes platform acceptance, this is a developer source-build workflow and requires Node.js/pnpm on the build machine, not a recommended end-user install.
 
 ## Preview before delivery
 
