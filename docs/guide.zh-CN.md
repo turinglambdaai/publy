@@ -36,7 +36,7 @@ npm i -g @turinglambdaai/publy
 或从源码（开发期）：
 
 ```bash
-git clone https://github.com/turinglambdaai/publy.git && cd publy
+git clone https://github.com/turlamai/publy.git && cd publy
 pnpm install --frozen-lockfile && pnpm -r build
 # 把 publy 命令指向 packages/cli/dist/index.js（全局 bin 或 alias）
 ```
@@ -191,7 +191,7 @@ publy theme preview claude      # 本地渲染样例文章，浏览器即看
 ## 自托管服务器
 
 ```bash
-git clone https://github.com/turinglambdaai/publy.git /opt/publy && cd /opt/publy
+git clone https://github.com/turlamai/publy.git /opt/publy && cd /opt/publy
 pnpm install --frozen-lockfile && pnpm -r build
 # 写 /root/.publy/server.json（见上），然后 systemd 托管：
 # ExecStart=node /opt/publy/packages/server/dist/index.js
