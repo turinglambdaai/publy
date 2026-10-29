@@ -178,6 +178,12 @@ function jobInfo(j: StoredJob): JobInfo {
 type Caller = { admin: true } | { admin: false; user: UserRow };
 
 export function buildApp(config: ServerConfig) {
+  // Validate policy before opening SQLite or any other resources. A rejected
+  // configuration must not leave a locked database (especially on Windows).
+  const legacyCheckoutEnabled = config.payments?.enableLegacyCheckout === true;
+  if (legacyCheckoutEnabled && config.payments?.provider !== "manual") {
+    throw new Error("legacy checkout is restricted to manual synthetic testing; online providers require Commerce/Permit");
+  }
   const app = Fastify({ bodyLimit: 30 * 1024 * 1024 });
   const dataDir = config.dataDir ?? path.join(os.homedir(), ".publy", "server-data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -410,11 +416,7 @@ export function buildApp(config: ServerConfig) {
   }
 
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
-  const legacyCheckoutEnabled = config.payments?.enableLegacyCheckout === true;
   // Historical checkout is not Commerce/Permit-authorized public billing.
-  if (legacyCheckoutEnabled && config.payments?.provider !== "manual") {
-    throw new Error("legacy checkout is restricted to manual synthetic testing; online providers require Commerce/Permit");
-  }
   const checkoutClosed = (reply: FastifyReply) =>
     reply.code(503).send({ code: "CHECKOUT_NOT_AVAILABLE", message: "Public hosted subscriptions are not open" });
   app.get("/", async (_req, reply) => legacyCheckoutEnabled
