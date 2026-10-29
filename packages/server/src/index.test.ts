@@ -46,6 +46,17 @@ test("hosted checkout endpoints are closed without an explicit legacy test opt-i
   const overview = await app.inject({ method: "GET", url: "/v1/admin/overview", headers: { "x-api-key": "test-key" } });
   assert.equal(overview.json().orders.pending, 0);
 });
+test("legacy online checkout cannot be re-enabled without Commerce", () => {
+  const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-legacy-closed-"));
+  try {
+    assert.throws(
+      () => buildApp({ ...config, dataDir: isolatedDir, payments: { enableLegacyCheckout: true, provider: "alipay" } }),
+      /Commerce\/Permit/,
+    );
+  } finally {
+    fs.rmSync(isolatedDir, { recursive: true, force: true });
+  }
+});
 test("health is reachable without auth", async () => {
   const res = await app.inject({ method: "GET", url: "/health" });
   assert.equal(res.statusCode, 200);
