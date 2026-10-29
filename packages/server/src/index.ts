@@ -410,7 +410,16 @@ export function buildApp(config: ServerConfig) {
   }
 
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
-  app.get("/", async (_req, reply) => reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）")));
+  const legacyCheckoutEnabled = config.payments?.enableLegacyCheckout === true;
+  // Historical checkout is not Commerce/Permit-authorized public billing.
+  if (legacyCheckoutEnabled && !config.payments?.provider) {
+    throw new Error("legacy checkout requires payments.provider, for isolated owner testing only");
+  }
+  const checkoutClosed = (reply: { code: (status: number) => { send: (body: unknown) => unknown } }) =>
+    reply.code(503).send({ code: "CHECKOUT_NOT_AVAILABLE", message: "Public hosted subscriptions are not open" });
+  app.get("/", async (_req, reply) => legacyCheckoutEnabled
+    ? reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）"))
+    : reply.type("text/html").send('<!doctype html><html lang="en"><meta charset="utf-8"><title>Publy</title><body><main><h1>Publy</h1><p>Local preview, CLI and self-hosted publishing are available. Public hosted subscriptions are not open.</p><a href="https://github.com/turlamai/publy">Source and documentation</a></main></body></html>'));
   app.get("/admin", async (_req, reply) => reply.type("text/html").send(adminPage()));
 
   const payments = createProvider(config.payments, store, (order) => {
