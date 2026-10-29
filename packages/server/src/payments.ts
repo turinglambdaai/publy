@@ -212,8 +212,8 @@ export function createProvider(
   } else if (cfg?.provider === "xunhupay" && XunhuPay.available(cfg.xunhupay)) {
     provider = new XunhuPay(cfg.xunhupay!.appId!, cfg.xunhupay!.secret!);
   } else if (cfg?.provider === "alipay" || cfg?.provider === "xunhupay") {
-    // requested but credentials incomplete → stay manual and say so loudly at boot
-    console.error(`[payments] provider "${cfg.provider}" selected but credentials missing — falling back to manual`);
+    // Misconfigured payment credentials must not silently fall back to manual billing.
+    throw new Error(`[payments] provider "${cfg.provider}" selected but credentials are incomplete`);
   }
 
   /** shared fulfillment: mark paid + issue/extend the user (idempotent) */
