@@ -45,6 +45,8 @@ export interface ServerConfig {
   /** scheduler poll interval; tests shorten it to exercise the job runner */
   jobPollMs?: number;
   payments?: {
+    /** Old checkout is off by default. This opt-in permits only isolated tests. */
+    enableLegacyCheckout?: boolean;
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
     xunhupay?: { appId?: string; secret?: string };
