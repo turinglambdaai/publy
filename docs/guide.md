@@ -22,9 +22,9 @@ The commands below use `publy` as shorthand for the source-built CLI entry. **Pu
 
 ## Check any saved Markdown before delivery
 
-Works on original files from Typora, Obsidian, VS Code, Zettlr, MarkText and
-other compatible Markdown editors; a proprietary editor plugin is not
-required. In the development CLI:
+Use the original file from Typora or an Obsidian vault. Both use the same
+Markdown parser and asset preflight; no additional editor integrations are
+planned. In the development CLI:
 
 ```sh
 publy check "/path/to/article.md"
