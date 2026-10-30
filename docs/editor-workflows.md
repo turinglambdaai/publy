@@ -66,6 +66,14 @@ It does not call a server or submit a draft. Preview and CLI/source builds
 are currently developer capabilities, **not** a shipped clean-install user
 experience. See [distribution](distribution.md).
 
+**Draft safety in the developer CLI:** unresolved local images, covers,
+SVG/math conversion failures and remote/data images that cannot be uploaded
+all block `publish` with exit code 4 **before** any draft request. Use
+`check` for a private local problem report and `preview` for a prominent
+on-page warning banner. Save external images into the original note's
+media folder. A browser *opening* a preview may still load remote image
+links; `check` itself does not fetch them.
+
 ## Commercial-grade universal workflow (target, not already shipped)
 
 1. **Open:** Open-with, drag a local file, or select it in a small cross-platform
