@@ -196,6 +196,30 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
   if (!ok) process.exitCode = inputError ? 2 : renderError ? 3 : 4;
 }
 
+/** Prevent render/preview output from overwriting an author's Typora note.
+ * Explicit HTML replacement requires --force, and source files stay immutable.
+ */
+function allowHtmlOutput(sourceFile: string, out: string, force: boolean): boolean {
+  if (!/\.html?$/i.test(out)) {
+    console.error("publy: output must end in .html; your Markdown source will not be overwritten.");
+    process.exitCode = 2;
+    return false;
+  }
+  if (fs.existsSync(out)) {
+    if (fs.realpathSync(out) === fs.realpathSync(path.resolve(sourceFile))) {
+      console.error("publy: output resolves to the source document; the original file cannot be overwritten.");
+      process.exitCode = 2;
+      return false;
+    }
+    if (!force) {
+      console.error("publy: HTML output already exists; choose a different path or pass --force to replace it.");
+      process.exitCode = 2;
+      return false;
+    }
+  }
+  return true;
+}
+
 async function cmdRender(file: string, opts: Record<string, any>): Promise<void> {
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
@@ -209,8 +233,11 @@ async function cmdRender(file: string, opts: Record<string, any>): Promise<void>
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
   if (opts.out) {
-    fs.writeFileSync(opts.out, result.html);
-    console.error(`rendered → ${opts.out}`);
+    const out = path.resolve(opts.out);
+    if (!allowHtmlOutput(file, out, opts.force === true)) return;
+    fs.writeFileSync(out, result.html, { flag: opts.force ? "w" : "wx", mode: 0o600 });
+    if (process.platform !== "win32") fs.chmodSync(out, 0o600);
+    console.error(`rendered → ${out}`);
   } else {
     process.stdout.write(result.html);
   }
@@ -243,27 +270,10 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     footer: opts.footer,
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
-  const sourcePath = path.resolve(file);
-  if (opts.out && !/\.html?$/i.test(String(opts.out))) {
-    console.error("publy: preview output must be an .html file; the Markdown source is never overwritten.");
-    process.exitCode = 2;
-    return;
-  }
   const out = opts.out
     ? path.resolve(opts.out)
     : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
-  if (fs.existsSync(out)) {
-    if (fs.realpathSync(out) === fs.realpathSync(sourcePath)) {
-      console.error("publy: preview output resolves to the original document; source must stay unchanged.");
-      process.exitCode = 2;
-      return;
-    }
-    if (!opts.force) {
-      console.error("publy: preview file already exists; choose a different --out path or pass --force to replace an existing HTML preview.");
-      process.exitCode = 2;
-      return;
-    }
-  }
+  if (!allowHtmlOutput(file, out, opts.force === true)) return;
   const preview = inlineLocalPreviewImages(result.html, result.attachments);
   const warnings = result.warnings.filter(blockingMediaWarning);
   // The preview is intentionally allowed to show incomplete sources: that is
@@ -645,7 +655,7 @@ export function createProgram(): Command {
   common(checkCmd);
   checkCmd.action(async (file: string, opts) => cmdCheck(file, opts));
 
-  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout");
+  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout").option("--force", "explicitly replace an existing .html file");
   common(renderCmd);
   renderCmd.action(async (file: string, opts) => cmdRender(file, opts));
 
