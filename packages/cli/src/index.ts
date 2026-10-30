@@ -51,11 +51,25 @@ export function loadConfig(): CliConfig {
 }
 
 function saveConfig(config: CliConfig): void {
-  // API keys may be stored here. The default umask is not a safe guarantee,
-  // and an existing config may already be readable by other local users.
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
-  if (process.platform !== "win32") fs.chmodSync(CONFIG_PATH, 0o600);
+  // Config may contain API keys. Write a fresh private file and atomically
+  // replace the old path: chmod-after-write leaves a credential exposure
+  // window when the existing file is group/world-readable. Rename also
+  // replaces a symlink rather than following it into another file.
+  const dir = path.dirname(CONFIG_PATH);
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmp = path.join(dir, `.publy-config-${crypto.randomBytes(12).toString("hex")}.tmp`);
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2) + "\n", {
+      mode: 0o600,
+      flag: "wx",
+    });
+    fs.renameSync(tmp, CONFIG_PATH);
+  } finally {
+    // On failure, leave the previous config intact and remove the temp file.
+    try { fs.unlinkSync(tmp); } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+  }
 }
 
 function resolveMediaDirs(explicit: string[], config: CliConfig): string[] {
