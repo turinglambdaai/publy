@@ -124,6 +124,17 @@ wenyan（文颜）验证了 CLI + server 路线可行（tlai-wechat-publish 技�
 
 ## 3. CLI 契约（agent-first）
 
+**2026-10-30 新增开发版命令：** `publy check <file> [--json]`，
+离线检查原始 Markdown 的图片、封面、卡片结构和渲染准备情况，不配置服务器
+也能使用，不修改源文件、不创建草稿。标准 Markdown 按源文档目录优先解析
+嵌套资源；Typora 的本地 `typora-root-url` 也适用。退出码
+0=检查通过、2=文件或格式输入错误、3=无法解析/渲染、
+4=图片/封面/卡片预检问题；JSON 中明确标识 `submitted:false`
+和 `networkUsed:false`。这是源码构建 CLI 的新增能力，不表示已有普通用户
+安装包；生产安装验收仍由 #25 负责。
+
+
+
 设计原则：一切命令非交互可完成；`--json` 输出机器可读结果；退出码稳定；破坏性操作显式确认。
 
 ```bash
