@@ -14,6 +14,10 @@ on:
       - "racket/publy-cli-prototype-test.rkt"
       - ".github/workflows/racket-probe.yml"
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   standalone:
     strategy:
