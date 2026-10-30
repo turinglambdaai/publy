@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /** Resolve a referenced file name against media dirs and the source dir. */
 export function resolveAsset(name: string, searchDirs: string[]): string | null {
@@ -61,7 +62,15 @@ export function preprocessObsidian(
       return `![${alt}](${name})`;
     }
     assets.push(resolved);
-    return `![${alt}](${resolved.split(path.sep).join("/")})`;
+    // Raw filesystem paths are not valid Markdown image destinations when
+    // they contain spaces, parentheses, '#', '?' or percent signs. A file URL
+    // preserves the exact filename and is decoded by resolveEditorAsset.
+    // MarkdownIt permits file:/// for local images; the renderer replaces
+    // these URLs with attachment:// refs before producing the final HTML.
+    const fileUrl = pathToFileURL(resolved).href.replace(/\\(/g, "%28").replace(/\\)/g, "%29");
+    const safeAlt = alt.replace(/[\\\\[\\]]/g, "\\\\    assets.push(resolved);
+    return `![${alt}](${resolved.split(path.sep).join("/")})`;");
+    return `![${safeAlt}](${fileUrl})`;
   });
 
   out = out.replace(linkPattern, (_m, target: string, alias?: string) => {
