@@ -347,6 +347,40 @@ test("quota exhaustion returns QUOTA_EXCEEDED before any publish", async () => {
   const q = (await app.inject({ method: "GET", url: "/v1/quota", headers: H(userKey) })).json();
   assert.equal(q.used, 30);
   assert.equal(q.limit, 30);
+
+  // Once the monthly quota is exhausted, a legitimate retry still needs to
+  // retrieve the previously confirmed draft. A new draft must stay blocked.
+  const seam = (app as unknown as {
+    idempotency: { records: Record<string, unknown>; save: () => void };
+  }).idempotency;
+  const original = { account: "UserAcct", type: "article" as const, title: "paid-for draft", html: "<p>completed</p>" };
+  seam.records["quota-confirmed-key"] = {
+    mediaId: "ALREADY-DELIVERED", at: Date.now(), account: original.account,
+    title: original.title, type: original.type, userId,
+    requestFingerprint: draftIdempotencyKey(original),
+  };
+  seam.save();
+  const retry = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, idempotencyKey: "quota-confirmed-key" },
+  });
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.json().deduped, true);
+  assert.equal(retry.json().mediaId, "ALREADY-DELIVERED");
+
+  const conflict = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, html: "<p>modified!</p>", idempotencyKey: "quota-confirmed-key" },
+  });
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(conflict.json().code, "IDEMPOTENCY_CONFLICT");
+
+  const newDraft = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, idempotencyKey: "quota-new-key" },
+  });
+  assert.equal(newDraft.statusCode, 429);
+  assert.equal(newDraft.json().code, "QUOTA_EXCEEDED");
 });
 
 // --- new plans / prices ----------------------------------------------------------------
