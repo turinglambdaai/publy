@@ -14,10 +14,10 @@ CLI and Obsidian workflows; this is not a Rivet/Glaze desktop application. Publi
 
 See the [README](../README.md) for source installation and execution; release assets do not constitute a deployed service.
 
-## Write in Typora, VS Code or any Markdown editor
+## Write in Typora or Obsidian
 
-Publy does not require Obsidian. Choose the **original Markdown file** from
-Typora, VS Code, Zettlr, MarkText or another file-based editor. In the current
+For Typora, choose the **original Markdown file**. For Obsidian, use the
+plugin or the same underlying Markdown. No other editor integrations are planned. In the current
 developer CLI, run `publy check "/path/to/your-note.md" --json` to inspect
 images, covers and card structure **locally**, then `publy preview` before
 considering delivery. Neither command sends a draft. Typora's local
