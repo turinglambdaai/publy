@@ -969,20 +969,13 @@ export function createProgram(): Command {
     .option("--json", "machine-readable output")
     .action(async (key: string, opts: Record<string, any>) => {
       const config = loadConfig();
-      const server = opts.server ?? config.server;
-      const apiKey = opts.apiKey ?? config.api_key;
-      if (!server || !apiKey) {
-        console.error("publy: server/api_key not configured.");
-        process.exit(5);
-      }
-      const res = await fetch(new URL(`/v1/publish-result/${encodeURIComponent(key)}`, server).toString(), {
-        headers: { "x-api-key": apiKey },
-      });
-      const body = (await res.json()) as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
-        process.exit(5);
-      }
+      const requestConfig = {
+        ...config, server: opts.server ?? config.server,
+        api_key: opts.apiKey ?? config.api_key,
+      };
+      const reply = await readServerJson(requestConfig, `/v1/publish-result/${encodeURIComponent(key)}`);
+      if (!reply.ok) { reportReadFailure(opts, "publish-result", reply.code); return; }
+      const body = reply.body as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
       if (opts.json) {
         console.log(JSON.stringify({ schemaVersion: 1, ok: body.status === "confirmed", kind: "publish-result", ...body }));
         if (body.status !== "confirmed") process.exitCode = 4;
