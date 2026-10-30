@@ -6,7 +6,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { exec, execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
@@ -50,13 +50,18 @@ function resolveMediaDirs(explicit: string[], config: CliConfig): string[] {
 }
 
 function openInBrowser(file: string): void {
-  const cmd =
-    process.platform === "win32"
-      ? `start "" "${file}"`
-      : process.platform === "darwin"
-        ? `open "${file}"`
-        : `xdg-open "${file}"`;
-  exec(cmd, () => {});
+  // A user-controlled file path must never be interpolated into shell code.
+  // The program+argv invocation works with spaces, Unicode and characters
+  // such as &, quotes or apostrophes in Typora filenames.
+  const command = process.platform === "win32"
+    ? "rundll32.exe"
+    : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32"
+    ? ["url.dll,FileProtocolHandler", file]
+    : [file];
+  const child = spawn(command, args, { detached: true, stdio: "ignore", shell: false });
+  child.on("error", () => console.error("publy: cannot open browser automatically; open the preview file manually."));
+  child.unref();
 }
 
 function isPortListening(port: number): Promise<boolean> {
@@ -238,7 +243,27 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     footer: opts.footer,
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
-  const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const sourcePath = path.resolve(file);
+  if (opts.out && !/\\.html?$/i.test(String(opts.out))) {
+    console.error("publy: preview output must be an .html file; the Markdown source is never overwritten.");
+    process.exitCode = 2;
+    return;
+  }
+  const out = opts.out
+    ? path.resolve(opts.out)
+    : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
+  if (fs.existsSync(out)) {
+    if (fs.realpathSync(out) === fs.realpathSync(sourcePath)) {
+      console.error("publy: preview output resolves to the original document; source must stay unchanged.");
+      process.exitCode = 2;
+      return;
+    }
+    if (!opts.force) {
+      console.error("publy: preview file already exists; choose a different --out path or pass --force to replace an existing HTML preview.");
+      process.exitCode = 2;
+      return;
+    }
+  }
   const preview = inlineLocalPreviewImages(result.html, result.attachments);
   const warnings = result.warnings.filter(blockingMediaWarning);
   // The preview is intentionally allowed to show incomplete sources: that is
@@ -252,7 +277,11 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   fs.writeFileSync(
     out,
     `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><main style="max-width:578px;width:100%;padding:14px 8px;box-sizing:border-box">${localHeader}${warningPanel}${preview}</main></body></html>`,
+    { flag: opts.force ? "w" : "wx", mode: 0o600 },
   );
+  // Existing HTML files may have previously had permissive access rights.
+  // Keep the copied local note and image bytes private on Unix.
+  if (process.platform !== "win32") fs.chmodSync(out, 0o600);
   console.error(`preview → ${out}`);
   if (opts.open !== false) openInBrowser(out);
 }
@@ -623,7 +652,8 @@ export function createProgram(): Command {
   const previewCmd = program.command("preview").description("Render a self-contained local preview with images")
     .argument("<file>")
     .option("-o, --out <path>", "write the local preview to a chosen HTML file")
-    .option("--no-open", "do not open a browser after writing the preview");
+    .option("--no-open", "do not open a browser after writing the preview")
+    .option("--force", "explicitly replace an existing .html preview output");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
 
