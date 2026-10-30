@@ -6,7 +6,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { exec, execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
@@ -50,13 +50,18 @@ function resolveMediaDirs(explicit: string[], config: CliConfig): string[] {
 }
 
 function openInBrowser(file: string): void {
-  const cmd =
-    process.platform === "win32"
-      ? `start "" "${file}"`
-      : process.platform === "darwin"
-        ? `open "${file}"`
-        : `xdg-open "${file}"`;
-  exec(cmd, () => {});
+  // A user-controlled file path must never be interpolated into shell code.
+  // The program+argv invocation works with spaces, Unicode and characters
+  // such as &, quotes or apostrophes in Typora filenames.
+  const command = process.platform === "win32"
+    ? "rundll32.exe"
+    : process.platform === "darwin" ? "open" : "xdg-open";
+  const args = process.platform === "win32"
+    ? ["url.dll,FileProtocolHandler", file]
+    : [file];
+  const child = spawn(command, args, { detached: true, stdio: "ignore", shell: false });
+  child.on("error", () => console.error("publy: cannot open browser automatically; open the preview file manually."));
+  child.unref();
 }
 
 function isPortListening(port: number): Promise<boolean> {
@@ -191,6 +196,30 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
   if (!ok) process.exitCode = inputError ? 2 : renderError ? 3 : 4;
 }
 
+/** Prevent render/preview output from overwriting an author's Typora note.
+ * Explicit HTML replacement requires --force, and source files stay immutable.
+ */
+function allowHtmlOutput(sourceFile: string, out: string, force: boolean): boolean {
+  if (!/\.html?$/i.test(out)) {
+    console.error("publy: output must end in .html; your Markdown source will not be overwritten.");
+    process.exitCode = 2;
+    return false;
+  }
+  if (fs.existsSync(out)) {
+    if (fs.realpathSync(out) === fs.realpathSync(path.resolve(sourceFile))) {
+      console.error("publy: output resolves to the source document; the original file cannot be overwritten.");
+      process.exitCode = 2;
+      return false;
+    }
+    if (!force) {
+      console.error("publy: HTML output already exists; choose a different path or pass --force to replace it.");
+      process.exitCode = 2;
+      return false;
+    }
+  }
+  return true;
+}
+
 async function cmdRender(file: string, opts: Record<string, any>): Promise<void> {
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
@@ -204,8 +233,11 @@ async function cmdRender(file: string, opts: Record<string, any>): Promise<void>
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
   if (opts.out) {
-    fs.writeFileSync(opts.out, result.html);
-    console.error(`rendered → ${opts.out}`);
+    const out = path.resolve(opts.out);
+    if (!allowHtmlOutput(file, out, opts.force === true)) return;
+    fs.writeFileSync(out, result.html, { flag: opts.force ? "w" : "wx", mode: 0o600 });
+    if (process.platform !== "win32") fs.chmodSync(out, 0o600);
+    console.error(`rendered → ${out}`);
   } else {
     process.stdout.write(result.html);
   }
@@ -238,7 +270,10 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     footer: opts.footer,
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
-  const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const out = opts.out
+    ? path.resolve(opts.out)
+    : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
+  if (!allowHtmlOutput(file, out, opts.force === true)) return;
   const preview = inlineLocalPreviewImages(result.html, result.attachments);
   const warnings = result.warnings.filter(blockingMediaWarning);
   // The preview is intentionally allowed to show incomplete sources: that is
@@ -252,7 +287,11 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   fs.writeFileSync(
     out,
     `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><main style="max-width:578px;width:100%;padding:14px 8px;box-sizing:border-box">${localHeader}${warningPanel}${preview}</main></body></html>`,
+    { flag: opts.force ? "w" : "wx", mode: 0o600 },
   );
+  // Existing HTML files may have previously had permissive access rights.
+  // Keep the copied local note and image bytes private on Unix.
+  if (process.platform !== "win32") fs.chmodSync(out, 0o600);
   console.error(`preview → ${out}`);
   if (opts.open !== false) openInBrowser(out);
 }
@@ -616,14 +655,15 @@ export function createProgram(): Command {
   common(checkCmd);
   checkCmd.action(async (file: string, opts) => cmdCheck(file, opts));
 
-  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout");
+  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout").option("--force", "explicitly replace an existing .html file");
   common(renderCmd);
   renderCmd.action(async (file: string, opts) => cmdRender(file, opts));
 
   const previewCmd = program.command("preview").description("Render a self-contained local preview with images")
     .argument("<file>")
     .option("-o, --out <path>", "write the local preview to a chosen HTML file")
-    .option("--no-open", "do not open a browser after writing the preview");
+    .option("--no-open", "do not open a browser after writing the preview")
+    .option("--force", "explicitly replace an existing .html preview output");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
 

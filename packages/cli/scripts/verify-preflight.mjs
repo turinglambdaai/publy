@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const entrypoint = path.resolve(here, "..", "dist", "index.js");
@@ -66,6 +66,110 @@ try {
   const embeddedBytes = Buffer.from(encoded, "base64");
   assert.deepEqual(embeddedBytes, tinyPng, "preview must embed the exact PNG bytes without mutation");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preview must not alter source");
+
+
+  // Typora can persist Chinese names with legacy %u escapes and local image
+  // roots. No Typora plugin/process or vault copying is needed.
+  const typoraRoot = path.join(project, "Typora project");
+  const typoraMedia = path.join(typoraRoot, "blog", "assets");
+  fs.mkdirSync(typoraMedia, { recursive: true });
+  const typoraPhoto = path.join(typoraMedia, "封面 图片.png");
+  fs.writeFileSync(typoraPhoto, tinyPng);
+  const typoraFile = path.join(project, "这是 Typora 原稿.md");
+  const typoraSource = [
+    "---",
+    "title: 这是 Typora 的原稿",
+    "typora-root-url: " + JSON.stringify(typoraRoot.split(path.sep).join("/")),
+    "typora-copy-images-to: assets/pasted",
+    "cover: /blog/assets/%u5C01%u9762%20%u56FE%u7247.png",
+    "---",
+    "",
+    "![正文图](/blog/assets/%u5C01%u9762%20%u56FE%u7247.png)",
+  ].join("\n");
+  fs.writeFileSync(typoraFile, typoraSource);
+  const typoraCheck = run(typoraFile);
+  assert.equal(typoraCheck.code, 0);
+  assert.equal(typoraCheck.report.ok, true);
+  assert.equal(typoraCheck.report.attachmentCount, 1);
+  assert.equal(typoraCheck.report.title, "这是 Typora 的原稿");
+  const typoraPreviewPath = path.join(dir, "Typora 预览.html");
+  const typoraPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", typoraFile, "--no-open", "--out", typoraPreviewPath],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
+  assert.equal(typoraPreview.status, 0, typoraPreview.stderr);
+  assert.ok(fs.readFileSync(typoraPreviewPath, "utf8").includes("data:image/png;base64,"));
+  assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource, "Typora source must remain exactly unchanged");
+
+  // Typora can also save absolute file:/// image links, including Chinese
+  // paths. They must resolve to the exact same local bytes, without exporting
+  // a clickable file:// link into the WeChat HTML.
+  const fileUriArticle = path.join(project, "Typora file URI.md");
+  const localFileUrl = pathToFileURL(typoraPhoto).href;
+  const fileUriRaw = "---\ncover: " + JSON.stringify(localFileUrl) +
+    "\n---\n\n![absolute](" + localFileUrl + ")";
+  fs.writeFileSync(fileUriArticle, fileUriRaw);
+  const fileUriCheck = run(fileUriArticle);
+  assert.equal(fileUriCheck.code, 0);
+  assert.equal(fileUriCheck.report.attachmentCount, 1);
+  const fileUriOut = path.join(dir, "file-uri-review.html");
+  const fileUriPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", fileUriArticle, "--no-open", "--out", fileUriOut],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(fileUriPreview.status, 0, fileUriPreview.stderr);
+  const fileUriHtml = fs.readFileSync(fileUriOut, "utf8");
+  assert.ok(fileUriHtml.includes("data:image/png;base64,"));
+  assert.ok(!fileUriHtml.includes("file:///"));
+  assert.equal(fs.readFileSync(fileUriArticle, "utf8"), fileUriRaw);
+
+  // Customer-specified output must never clobber existing HTML or the .md.
+  const overwriteRefused = spawnSync(process.execPath,
+    [entrypoint, "preview", typoraFile, "--no-open", "--out", typoraPreviewPath],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(overwriteRefused.status, 2, overwriteRefused.stderr);
+  assert.match(overwriteRefused.stderr, /already exists/);
+  const overwriteAllowed = spawnSync(process.execPath,
+    [entrypoint, "preview", typoraFile, "--no-open", "--force", "--out", typoraPreviewPath],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(overwriteAllowed.status, 0, overwriteAllowed.stderr);
+  const sourceAsOutput = spawnSync(process.execPath,
+    [entrypoint, "preview", typoraFile, "--no-open", "--out", typoraFile, "--force"],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(sourceAsOutput.status, 2);
+  assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(typoraPreviewPath).mode & 0o077, 0, "local image preview is private");
+  }
+
+  // The raw HTML export path must uphold the same "never alter the
+  // original Typora file" guarantee as the HTML preview.
+  const renderOut = path.join(dir, "rendered.html");
+  const renderWith = (...args) => spawnSync(process.execPath,
+    [entrypoint, "render", typoraFile, "--out", ...args],
+    { encoding: "utf8", timeout: 25000 });
+  const firstRender = renderWith(renderOut);
+  assert.equal(firstRender.status, 0, firstRender.stderr);
+  assert.ok(fs.readFileSync(renderOut, "utf8").includes("attachment://"));
+  assert.equal(renderWith(renderOut).status, 2, "existing exported HTML needs explicit confirmation");
+  assert.equal(renderWith(renderOut, "--force").status, 0);
+  assert.equal(renderWith(typoraFile, "--force").status, 2, "raw rendering cannot overwrite .md");
+  assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource);
+
+  // Default previews are generated into isolated random temp folders, not a
+  // guessable shared timestamp path. --no-open is safe for automated review.
+  const ephemeral = spawnSync(process.execPath, [entrypoint, "preview", typoraFile, "--no-open"],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(ephemeral.status, 0, ephemeral.stderr);
+  const previewLine = ephemeral.stderr.split("\n").find((line) => line.startsWith("preview → "));
+  assert.ok(previewLine, "preview path should be reported");
+  const tempPreview = previewLine.slice("preview → ".length).trim();
+  assert.ok(fs.existsSync(tempPreview));
+  assert.ok(path.basename(tempPreview) === "index.html");
+  assert.ok(path.basename(path.dirname(tempPreview)).startsWith("publy-preview-"));
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(tempPreview).mode & 0o077, 0);
+    assert.equal(fs.statSync(path.dirname(tempPreview)).mode & 0o077, 0);
+  }
+  fs.rmSync(path.dirname(tempPreview), { recursive: true, force: true });
 
   const missingPath = path.join(project, "broken.md");
   fs.writeFileSync(missingPath, "# Broken\n\n![photo](missing/other.jpg)");

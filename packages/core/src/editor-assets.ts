@@ -29,13 +29,32 @@ function existingFile(candidate: string): string | null {
  * root takes precedence over OS-absolute paths. We do not download remote
  * assets or silently replace missing nested paths with same-name files.
  */
-export function resolveEditorAsset(reference: string, opts: EditorAssetOptions): string | null {
-  let source: string;
+/**
+ * Typora's optional "Auto escape image URL when insert" setting historically
+ * emits %uXXXX for Unicode filename characters, including Chinese names.
+ * Markdown HTML parsing may also normalize that to %25uXXXX. Decode one URL
+ * layer and one legacy %u layer without repeatedly unescaping %252F into "/".
+ *
+ * A literal '%' is valid in a filename. If a path is not valid URI-encoded
+ * UTF-8, prefer its exact spelling to destructive or lossy replacement.
+ */
+export function decodeTyporaImagePath(reference: string): string {
+  const legacyUnicode = (value: string): string => value.replace(
+    /%u([0-9a-f]{4})/gi,
+    (_match, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)),
+  );
+  const first = legacyUnicode(reference.trim());
+  let decoded: string;
   try {
-    source = decodeURIComponent(reference.trim());
+    decoded = decodeURIComponent(first);
   } catch {
-    return null;
+    decoded = first;
   }
+  return legacyUnicode(decoded);
+}
+
+export function resolveEditorAsset(reference: string, opts: EditorAssetOptions): string | null {
+  const source = decodeTyporaImagePath(reference);
   if (!source || /^(?:https?:|data:|attachment:)/i.test(source)) return null;
 
   if (/^file:\/\//i.test(source)) {
@@ -59,10 +78,13 @@ export function resolveEditorAsset(reference: string, opts: EditorAssetOptions):
       const target = path.resolve(rootDir, relative);
       // Treat this as a rooted namespace, not arbitrary path traversal.
       if (target.startsWith(rootDir + path.sep) || target === rootDir) {
-        const file = existingFile(target);
-        if (file) return file;
+        return existingFile(target);
       }
     }
+    // A document declares this root for slash-prefixed Typora images.
+    // Missing files or invalid/remote roots MUST NOT fall back to an
+    // unrelated OS-absolute file with the same pathname.
+    return null;
   }
 
   if (path.isAbsolute(source)) return existingFile(source);

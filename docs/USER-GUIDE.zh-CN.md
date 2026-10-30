@@ -23,7 +23,7 @@ Typora 可直接把 `.md` 原文件交给 Publy；Obsidian 可以使用已有插
 支持 Typora 的本地 `typora-root-url` 和嵌套图片目录，缺图会明确报告，
 也不会改动原文件。**但普通用户的一键安装包尚未通过验收。**
 
-[跨编辑器工作流与商业级体验标准](editor-workflows.zh-CN.md)
+[Typora 专属使用指南](typora.zh-CN.md) · [跨编辑器工作流与商业级体验标准](editor-workflows.zh-CN.md)
 · [English](editor-workflows.md)
 
 ## 第一次使用

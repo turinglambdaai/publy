@@ -15,7 +15,7 @@
 
 状态：本地渲染与投递组件已存在；公开托管开通与商业运营尚未开放。
 
-**一个文件、两种重点写作入口：** [跨编辑器使用与商业级验收](docs/editor-workflows.zh-CN.md) · [English](docs/editor-workflows.md)。普通 Markdown 仍由共用引擎读取，但不开发其他编辑器插件；还需真实干净电脑验收。
+**一个文件、两种重点写作入口：** [Typora 使用指南](docs/typora.zh-CN.md) · [跨编辑器使用与商业级验收](docs/editor-workflows.zh-CN.md) · [English](docs/editor-workflows.md)。普通 Markdown 仍由共用引擎读取，但不开发其他编辑器插件；还需真实干净电脑验收。
 
 ## 开始使用
 
