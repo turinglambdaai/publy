@@ -48,6 +48,34 @@ try {
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
 
+  // Config may contain a server API key. New files must be private, and
+  // updating a pre-existing permissive file must tighten its permissions.
+  const credentialConfig = path.join(dir, "credential-permissions.json");
+  fs.writeFileSync(credentialConfig, "{}", { mode: 0o666 });
+  if (process.platform !== "win32") fs.chmodSync(credentialConfig, 0o644);
+  const setKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", "synthetic-private-key"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: credentialConfig },
+    });
+  assert.equal(setKey.status, 0, setKey.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(credentialConfig, "utf8")).api_key, "synthetic-private-key");
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(credentialConfig).mode & 0o777, 0o600,
+      "config updates must remove group/other read access");
+  }
+  const newCredentialConfig = path.join(dir, "private-config", "config.json");
+  const createKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", "synthetic-private-key"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: newCredentialConfig },
+    });
+  assert.equal(createKey.status, 0, createKey.stderr);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(newCredentialConfig).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(path.dirname(newCredentialConfig)).mode & 0o777, 0o700);
+  }
+
   // Agent contract discovery is offline and truthful: don't claim JSON
   // support for operations that still only offer human-oriented output.
   const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
