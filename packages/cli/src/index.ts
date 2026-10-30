@@ -1123,7 +1123,11 @@ export function createProgram(): Command {
       const reply = await requestServerJson(config, `/v1/jobs/${encodeURIComponent(id)}/retry`, "POST");
       if (!reply.ok) { reportJobMutationFailure(opts, "job-retry", id, reply.code); return; }
       const body = reply.body as { ok?: boolean; job?: JobInfo };
-      if (body.ok !== true || !body.job?.id) {
+      if (body.ok !== true) {
+        reportJobMutationFailure(opts, "job-retry", id, "SERVER_REJECTED");
+        return;
+      }
+      if (!body.job?.id) {
         reportJobMutationFailure(opts, "job-retry", id, "INVALID_SERVER_RESPONSE");
         return;
       }
