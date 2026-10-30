@@ -117,8 +117,20 @@ try {
   // merely reporting networkUsed:false while silently fetching a registry.
   const fetchSentinel = path.join(dir, "theme-fetch-was-called");
   const preload = path.join(dir, "reject-theme-fetch.cjs");
-  fs.writeFileSync(preload,
-    'globalThis.fetch = () => { require("node:fs").writeFileSync(process.env.PUBLY_THEME_FETCH_SENTINEL, "called"); throw new Error("unexpected theme registry fetch"); };');
+  // Satori uses fetch for non-network resources during module initialization.
+  // Preserve those operations, but fail if the CLI attempts any HTTP(S) request.
+  fs.writeFileSync(preload, [
+    'const originalFetch = globalThis.fetch;',
+    'globalThis.fetch = (...args) => {',
+    '  const input = args[0];',
+    '  const target = typeof input === "string" ? input : (input?.url ?? String(input));',
+    '  if (/^https?:\\/\\//i.test(target)) {',
+    '    require("node:fs").writeFileSync(process.env.PUBLY_THEME_FETCH_SENTINEL, "called");',
+    '    throw new Error("unexpected HTTP(S) request during offline theme listing");',
+    '  }',
+    '  return originalFetch(...args);',
+    '};',
+  ].join("\\n"));
   for (const json of [false, true]) {
     fs.rmSync(fetchSentinel, { force: true });
     const listed = spawnSync(process.execPath,
