@@ -14,10 +14,10 @@ CLI、默认主题、Obsidian 和自托管按现行许可证保持免费。公�
 
 源码安装与运行命令见 [README](../README.zh-CN.md)；发布附件不等于完整部署服务。
 
-## 从 Typora、VS Code 或任意 Markdown 编辑器使用
+## 从 Typora 或 Obsidian 使用
 
-Publy 不要求安装 Obsidian。Typora、VS Code、Zettlr、MarkText 等保存出的
-`.md` 原文件可直接交给 Publy，不需要复制整个笔记库。当前开发版可以运行
+Typora 可直接把 `.md` 原文件交给 Publy；Obsidian 可以使用已有插件
+或原始 Markdown，不需要复制整个笔记库。不再开发其他编辑器专用适配。当前开发版可以运行
 `publy check "D:/Notes/article.md" --json` 做**离线**图片、封面和卡片结构
 预检查，再运行 `publy preview` 预览；这两项都不会投递草稿。
 支持 Typora 的本地 `typora-root-url` 和嵌套图片目录，缺图会明确报告，
