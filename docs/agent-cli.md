@@ -18,6 +18,8 @@ No cross-platform publishing, automatic mass-send, or public posting.
 publy capabilities --json
 publy check "/path/to/article.md" --json
 publy preview "/path/to/article.md" --json --out "/tmp/publy-review.html"
+publy render "/path/to/article.md" --json
+publy theme ls --json
 publy account list --json
 publy quota --json
 publy jobs list --json
@@ -28,12 +30,12 @@ publy history --json
 side effects and returns a **versioned** manifest. Each command declares
 `json` support and whether it reads, writes local output, may access the
 network or performs a draft-creating/mutating action. **Do not guess** that
-every command supports `--json`: `render`, `config set`, `theme` and some legacy commands are still human-oriented.
+every command supports `--json`: `config set`, `theme preview` and some legacy commands are still human-oriented.
 `jobs cancel --json` and `jobs retry --json` now return structured results,
 but are **mutating operations requiring explicit user approval**. If their
 network outcome is uncertain, they return `status:"unknown"` with the original
 job ID; query `jobs list --json` before deciding what to do next.
-Their `json:false` entry is deliberate, not hidden implementation detail.
+Those remaining commands' `json:false` entry is deliberate, not hidden implementation detail.
 
 ## Structured local review
 
@@ -55,6 +57,20 @@ if a font is unavailable it **fails without fetching fonts**. A preview with
 blocking problems may still be written for human review, but exits with 4
 and has `ok:false` in JSON mode. Neither `check` nor `preview` creates
 a WeChat draft.
+
+## Raw HTML export and bundled theme discovery
+
+`render --json` creates a permission-limited local HTML file and returns
+`kind:"html-render"`, `output`, `attachmentCount`, `problems`, and
+`containsAttachmentReferences`. Unlike `preview`, this is **raw WeChat
+render HTML**: `attachment://` placeholders still require the Publy media
+submission workflow; it is not automatically paste-ready. The source never
+changes, an existing output requires explicit `--force`, and the command
+never uploads or publishes anything.
+
+`theme ls --json` returns only bundled article/card theme names with
+`source:"bundled"` and `networkUsed:false`. Legacy human-readable
+`theme ls` may attempt registry lookup, but the Agent JSON command does not.
 
 ## Network submission and reconciliation
 
