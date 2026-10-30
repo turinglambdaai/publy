@@ -989,7 +989,7 @@ const AGENT_USAGE: Record<string, string> = {
   "account list": "publy account list --json",
   "account add": "publy account add <name> [--app-id <id>]",
   "config set": "publy config set <key> <value>",
-  "theme ls": "publy theme ls",
+  "theme ls": "publy theme ls --json",
   "theme preview": "publy theme preview <name>",
   tunnel: "publy tunnel",
 };
@@ -1011,7 +1011,7 @@ const AGENT_COMMANDS = [
   { name: "account list", json: true, network: false, effect: "read-local-config" },
   { name: "account add", json: false, network: false, effect: "write-local-config" },
   { name: "config set", json: false, network: false, effect: "write-local-config" },
-  { name: "theme ls", json: false, network: "registry-may-be-fetched", effect: "read" },
+  { name: "theme ls", json: true, network: "registry-may-be-fetched", jsonNetwork: false, effect: "read" },
   { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
   { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
 ] as const;
@@ -1302,21 +1302,35 @@ export function createProgram(): Command {
   });
 
   const themeCmd = program.command("theme").description("Manage themes");
-  themeCmd.command("ls").description("list built-in themes and registry entries").action(async () => {    const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
-    console.log("Article themes (built-in):", BUILTIN_THEMES.join(", "));
-    console.log("Card themes (built-in):", Object.keys(BUILTIN_CARD_THEMES).join(", "));
-    try {
-      const res = await fetch("https://raw.githubusercontent.com/turinglambdaai/publy-themes/main/index.json");
-      if (res.ok) {
-        const registry = (await res.json()) as { themes: { id: string; kind: string; source: string }[] };
-        const external = registry.themes.filter((t) => t.source !== "builtin");
-        if (external.length) console.log("Registry:", external.map((t) => `${t.id} (${t.kind})`).join(", "));
-        else console.log("Registry: no external themes yet");
+  themeCmd.command("ls")
+    .description("list built-in themes; human output may also include registry entries")
+    .option("--json", "offline JSON list of bundled themes only; never fetch a registry")
+    .action(async (opts: { json?: boolean }) => {
+      const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
+      const articleThemes = [...BUILTIN_THEMES];
+      const cardThemes = Object.keys(BUILTIN_CARD_THEMES);
+      if (opts.json) {
+        console.log(JSON.stringify({
+          schemaVersion: 1, kind: "themes", ok: true,
+          articleThemes, cardThemes,
+          source: "bundled", networkUsed: false, submitted: false,
+        }));
+        return;
       }
-    } catch {
-      /* offline: built-ins only */
-    }
-  });
+      console.log("Article themes (built-in):", articleThemes.join(", "));
+      console.log("Card themes (built-in):", cardThemes.join(", "));
+      try {
+        const res = await fetch("https://raw.githubusercontent.com/turinglambdaai/publy-themes/main/index.json");
+        if (res.ok) {
+          const registry = (await res.json()) as { themes: { id: string; kind: string; source: string }[] };
+          const external = registry.themes.filter((t) => t.source !== "builtin");
+          if (external.length) console.log("Registry:", external.map((t) => `${t.id} (${t.kind})`).join(", "));
+          else console.log("Registry: no external themes yet");
+        }
+      } catch {
+        /* offline: built-ins only */
+      }
+    });
 
   themeCmd
     .command("preview")
