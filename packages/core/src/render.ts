@@ -323,12 +323,15 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 3c. footnote section
   if (footnoteEnabled && notes.length > 0) {
     const items = notes
-      .map((note) => `<p><sup>[${note.n}]</sup> ${escapeText(note.label)}：${note.href}</p>`)
+      // href came from untrusted Markdown/HTML. Escaping is required again
+      // because Cheerio decodes entities when reading the href attribute.
+      .map((note) => `<p><sup>[${note.n}]</sup> ${escapeText(note.label)}：${escapeText(note.href)}</p>`)
       .join("");
     $.root().append(`<div class="publy-footnotes"><p><strong>引用链接</strong></p>${items}</div>`);
   }
   if (opts.footer) {
-    $.root().append(`<hr/><p>${opts.footer}</p>`);
+    // Footer is documented as plain text, not a trusted HTML fragment.
+    $.root().append(`<hr/><p>${escapeText(opts.footer)}</p>`);
   }
 
   const inner = $.html();
