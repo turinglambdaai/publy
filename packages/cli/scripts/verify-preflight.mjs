@@ -67,6 +67,17 @@ try {
   assert.equal(cards.report.type, "image_post");
   assert.equal(cards.report.cardCount, 3);
 
+  // Do not leak private YAML values or parser internals into an agent JSON
+  // preflight response; malformed sources are safely recoverable errors.
+  const secret = "synthetic-secret-marker-do-not-print";
+  const corrupt = path.join(project, "malformed.md");
+  fs.writeFileSync(corrupt, "---\nprivate_key: " + secret + "\nunsupported: [broken\n---\n# hi");
+  const malformed = run(corrupt);
+  assert.equal(malformed.code, 3);
+  assert.equal(malformed.report.ok, false);
+  assert.ok(malformed.report.problems.some((p) => p.includes("Cannot inspect")));
+  assert.ok(!JSON.stringify(malformed.report).includes(secret));
+
   const wrong = path.join(project, "not-markdown.txt");
   fs.writeFileSync(wrong, "plain text");
   assert.equal(run(wrong).code, 2);
