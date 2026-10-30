@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /** Resolve a referenced file name against media dirs and the source dir. */
 export function resolveAsset(name: string, searchDirs: string[]): string | null {
@@ -61,7 +62,11 @@ export function preprocessObsidian(
       return `![${alt}](${name})`;
     }
     assets.push(resolved);
-    return `![${alt}](${resolved.split(path.sep).join("/")})`;
+    // Markdown destinations cannot contain raw spaces, parentheses or URL delimiters.
+    // A local file URL preserves the exact path until the attachment pass.
+    const fileUrl = pathToFileURL(resolved).href.replace(/\(/g, "%28").replace(/\)/g, "%29");
+    const safeAlt = alt.replace(/[\\[\]]/g, "\\$&");
+    return `![${safeAlt}](${fileUrl})`;
   });
 
   out = out.replace(linkPattern, (_m, target: string, alias?: string) => {

@@ -48,6 +48,56 @@ try {
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
 
+  // Config may contain a server API key. New files must be private, and
+  // updating a pre-existing permissive file must tighten its permissions.
+  const credentialConfig = path.join(dir, "credential-permissions.json");
+  fs.writeFileSync(credentialConfig, "{}", { mode: 0o666 });
+  if (process.platform !== "win32") fs.chmodSync(credentialConfig, 0o644);
+  const setKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", "synthetic-private-key"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: credentialConfig },
+    });
+  assert.equal(setKey.status, 0, setKey.stderr);
+  assert.equal(JSON.parse(fs.readFileSync(credentialConfig, "utf8")).api_key, "synthetic-private-key");
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(credentialConfig).mode & 0o777, 0o600,
+      "config updates must remove group/other read access");
+  }
+  const newCredentialConfig = path.join(dir, "private-config", "config.json");
+  const createKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", "synthetic-private-key"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: newCredentialConfig },
+    });
+  assert.equal(createKey.status, 0, createKey.stderr);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(newCredentialConfig).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(path.dirname(newCredentialConfig)).mode & 0o777, 0o700);
+  }
+
+  // A symlink at the config path must be replaced, not followed: an old
+  // symlink should never cause a credential write into an unrelated file.
+  if (process.platform !== "win32") {
+    const target = path.join(dir, "unrelated-target.json");
+    const link = path.join(dir, "symlink-config.json");
+    fs.writeFileSync(target, "{}\n");
+    fs.symlinkSync(target, link);
+    const throughLink = spawnSync(process.execPath,
+      [entrypoint, "config", "set", "api_key", "symlink-safe-secret"], {
+        encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: link },
+      });
+    assert.equal(throughLink.status, 0, throughLink.stderr);
+    assert.equal(fs.readFileSync(target, "utf8"), "{}\n",
+      "config update must not overwrite a symlink target");
+    assert.equal(fs.lstatSync(link).isSymbolicLink(), false);
+    assert.equal(fs.statSync(link).mode & 0o777, 0o600);
+    assert.equal(JSON.parse(fs.readFileSync(link, "utf8")).api_key, "symlink-safe-secret");
+    assert.deepEqual(fs.readdirSync(dir).filter((name) => name.startsWith(".publy-config-")), [],
+      "temporary credential files must be cleaned up after atomic rename");
+  }
+
   // Structured config writes must not expose secrets, even in error paths.
   const jsonConfig = path.join(dir, "json-config.json");
   const jsonSecret = "agent-config-secret-must-stay-private";

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { renderMarkdown, captionToHtml, stripMarkdown } from "./render.js";
+import * as cheerio from "cheerio";
 import { cropCoverTo235 as crop } from "./crop.js";
 
 const SAMPLE = `---
@@ -133,6 +134,25 @@ test("renderMarkdown removes active raw HTML and unsafe URL attributes", () => {
   assert.match(result.html, /https:\/\/example\.test\/safe/);
 });
 
+test("decoded footnote href cannot create active markup", () => {
+  // HTML entity decoding makes the href contain literal '<img ...>' after
+  // parsing. Re-inserting that URL without escaping would create an element.
+  const source = '<a href="https://example.test/?q=&lt;img src=x onerror=evil()&gt;">safe label</a>';
+  const result = renderMarkdown(source, { theme: "claude" });
+  const $ = cheerio.load(result.html);
+  assert.equal($("img, script, iframe, [onerror]").length, 0);
+  assert.equal($(".publy-footnotes").length, 1);
+  assert.match($(".publy-footnotes").text(), /<img src=x onerror=evil\(\)>/);
+});
+
+test("plain-text footer cannot inject an image or event handler", () => {
+  const footer = '<img src="https://attacker.test/pixel" onerror="evil()">';
+  const result = renderMarkdown("# Safe", { theme: "claude", footer });
+  const $ = cheerio.load(result.html);
+  assert.equal($("img, script, iframe, [onerror]").length, 0);
+  assert.ok($("#publy").text().includes(footer), "footer should remain visible as text");
+});
+
 test("remote and data images are explicitly reported without leaking signed URLs", () => {
   const secret = "private-query-token-do-not-log";
   const raw = [
@@ -144,4 +164,21 @@ test("remote and data images are explicitly reported without leaking signed URLs
   assert.ok(rendered.warnings.some((w) => w.startsWith("Embedded data image not uploaded:")));
   assert.ok(!rendered.warnings.join(" ").includes(secret), "private signed URL leaked into warning");
   assert.equal(rendered.attachments.length, 0, "no remote image was silently uploaded");
+  assert.ok(!rendered.html.includes(secret), "signed remote image URL must not survive into a preview");
+  assert.doesNotMatch(rendered.html, /src=["']data:image\//i, "unsupported data images must not remain in the preview");
+});
+
+test("generated previews never load protocol-relative or disguised remote images", () => {
+  const raw = [
+    '<img src="//tracker.example.test/pixel?token=private-marker" alt="remote">',
+    '<img src="https:&#9;//tracker.example.test/obfuscated" alt="obfuscated">',
+    String.raw`<img src="\\\\tracker.example.test\\pixel" alt="backslash host">`,
+    '<img src="data:image/png;base64,aGVsbG8=" alt="embedded">',
+  ].join("\n\n");
+  const result = renderMarkdown(raw, { theme: "claude" });
+  assert.ok(result.warnings.filter((w) => w.startsWith("Remote image not uploaded:")).length >= 3);
+  assert.ok(result.warnings.some((w) => w.startsWith("Embedded data image not uploaded:")));
+  assert.doesNotMatch(result.html, /tracker\.example\.test|data:image\/png|private-marker/i);
+  assert.match(result.html, /alt="remote"/);
+  assert.equal(result.attachments.length, 0);
 });

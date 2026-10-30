@@ -289,12 +289,19 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
     // WeChat media API by this renderer. Never silently ship draft HTML that
     // only happens to reference them. Do not log their full source URL:
     // signed image URLs may contain user credentials/query tokens.
-    if (/^https?:/i.test(src)) {
+    // A warning alone is insufficient: leaving a remote src in the HTML
+    // causes Obsidian/browser previews to fetch it (including signed URLs),
+    // even when the draft submission is later blocked. Treat protocol-relative
+    // and control-character-obfuscated HTTP(S) URLs as remote as well.
+    const normalizedSrc = src.trim().replace(/[\u0000-\u0020]/g, "");
+    if (/^https?:/i.test(normalizedSrc) || /^[/\\]{2}/.test(normalizedSrc)) {
       warnings.push("Remote image not uploaded: save the HTTP(S) image locally before publishing.");
+      $(el).removeAttr("src");
       return;
     }
-    if (/^data:/i.test(src)) {
+    if (/^data:/i.test(normalizedSrc)) {
       warnings.push("Embedded data image not uploaded: save the image as a local file before publishing.");
+      $(el).removeAttr("src");
       return;
     }
     // Preserve relative directories from Typora and other Markdown files
@@ -323,12 +330,15 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 3c. footnote section
   if (footnoteEnabled && notes.length > 0) {
     const items = notes
-      .map((note) => `<p><sup>[${note.n}]</sup> ${escapeText(note.label)}：${note.href}</p>`)
+      // href came from untrusted Markdown/HTML. Escaping is required again
+      // because Cheerio decodes entities when reading the href attribute.
+      .map((note) => `<p><sup>[${note.n}]</sup> ${escapeText(note.label)}：${escapeText(note.href)}</p>`)
       .join("");
     $.root().append(`<div class="publy-footnotes"><p><strong>引用链接</strong></p>${items}</div>`);
   }
   if (opts.footer) {
-    $.root().append(`<hr/><p>${opts.footer}</p>`);
+    // Footer is documented as plain text, not a trusted HTML fragment.
+    $.root().append(`<hr/><p>${escapeText(opts.footer)}</p>`);
   }
 
   const inner = $.html();
