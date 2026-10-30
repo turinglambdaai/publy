@@ -19,7 +19,8 @@ test("exact same WeChat draft payload keeps one request identity across retries"
   const key = draftIdempotencyKey(first);
   assert.match(key, /^[0-9a-f]{32}$/);
   assert.equal(key, draftIdempotencyKey(structuredClone(first)));
-  assert.equal(key, draftIdempotencyKey({ ...first, idempotencyKey: "ignored" }));
+  const retried = { ...first, idempotencyKey: "ignored" };
+  assert.equal(key, draftIdempotencyKey(retried));
 });
 
 test("same-length different content never silently deduplicates a real draft", () => {
