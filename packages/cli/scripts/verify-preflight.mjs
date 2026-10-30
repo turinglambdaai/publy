@@ -62,6 +62,12 @@ try {
   assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
   assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
   assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
+  const sendCommand = contract.commands.find((c) => c.name === "publish");
+  assert.equal(sendCommand.requiresUserApproval, true);
+  assert.match(sendCommand.usage, /publish <file\.md> --account <name> --json/);
+  const checkCommand = contract.commands.find((c) => c.name === "check");
+  assert.equal(checkCommand.requiresUserApproval, false);
+  assert.equal(checkCommand.usage, "publy check <file.md> --json");
 
   const agentPreview = cli("preview", goodPath, "--json");
   assert.equal(agentPreview.status, 0, agentPreview.stderr);
