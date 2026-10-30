@@ -93,13 +93,13 @@ try {
   assert.match(blockedCover.stderr, /Cover not found/);
 
   const noCoverArticle = path.join(project, "no-cover.md");
-  fs.writeFileSync(noCoverArticle, "# Text only\\n\\nNo image and no cover");
+  fs.writeFileSync(noCoverArticle, "# Text only\n\nNo image and no cover");
   const blockedNoCover = publishWith(noCoverArticle);
   assert.equal(blockedNoCover.status, 4, blockedNoCover.stderr);
   assert.match(blockedNoCover.stderr, /Missing cover:/);
 
   const emptyImagePost = path.join(project, "empty-image-post.md");
-  fs.writeFileSync(emptyImagePost, "---\\ntype: image\\n---\\n\\nJust some words");
+  fs.writeFileSync(emptyImagePost, "---\ntype: image\n---\n\nJust some words");
   const blockedImagePost = publishWith(emptyImagePost);
   assert.equal(blockedImagePost.status, 4, blockedImagePost.stderr);
   assert.match(blockedImagePost.stderr, /No local images found/);
