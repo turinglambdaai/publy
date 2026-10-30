@@ -293,13 +293,34 @@ function inlineLocalPreviewImages(html: string, attachments: readonly { name: st
 
 async function cmdPreview(file: string, opts: Record<string, any>): Promise<void> {
   const source = path.resolve(file);
-  const raw = fs.readFileSync(source, "utf8");
-  const parsed = parseSource(raw);
+  let raw: string;
+  let parsed: ReturnType<typeof parseSource>;
+  try {
+    if (!/\.(?:md|markdown)$/i.test(source)) throw new Error("Not a Markdown file");
+    raw = fs.readFileSync(source, "utf8");
+    parsed = parseSource(raw);
+  } catch {
+    const problem = "Choose a readable Markdown (.md or .markdown) file with valid frontmatter.";
+    if (opts.json) {
+      console.log(JSON.stringify({ schemaVersion: 1, kind: "local-preview", ok: false, code: "INPUT_INVALID", source, problems: [problem], submitted: false, networkUsed: false }));
+    } else {
+      console.error("publy: " + problem);
+    }
+    process.exitCode = 2;
+    return;
+  }
   const cardsMode = publishType(parsed.meta) === "image_post" && parsed.meta.mode?.toLowerCase() === "cards";
   const out = opts.out
     ? path.resolve(opts.out)
     : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
-  if (!allowHtmlOutput(source, out, opts.force === true)) return;
+  if (!allowHtmlOutput(source, out, opts.force === true)) {
+    if (opts.json) console.log(JSON.stringify({
+      schemaVersion: 1, kind: "local-preview", ok: false, code: "OUTPUT_INVALID",
+      source, problems: ["Choose a new .html output path or explicitly use --force."],
+      submitted: false, networkUsed: false,
+    }));
+    return;
+  }
 
   let preview = "";
   let problems: string[] = [];
@@ -329,6 +350,11 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
       // Some glyphs are not in the bundled subset. The offline preview must
       // fail visibly, not secretly download fonts or claim readiness.
       console.error("publy: offline card preview unavailable; check bundled fonts or unsupported glyphs. No draft was sent.");
+      if (opts.json) console.log(JSON.stringify({
+        schemaVersion: 1, kind: "local-preview", ok: false, code: "CARD_RENDER_FAILED",
+        source, problems: ["Cannot render cards with offline fonts; inspect locally."],
+        submitted: false, networkUsed: false,
+      }));
       process.exitCode = 3;
       return;
     } finally {
@@ -359,8 +385,20 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     { flag: opts.force ? "w" : "wx", mode: 0o600 },
   );
   if (process.platform !== "win32") fs.chmodSync(out, 0o600);
-  console.error(`preview → ${out}`);
-  if (opts.open !== false) openInBrowser(out);
+  if (opts.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1, kind: "local-preview", ok: problems.length === 0,
+      source, output: out, title,
+      type: publishType(parsed.meta),
+      mode: cardsMode ? "cards" : "article",
+      problems, contentType: "text/html",
+      networkUsed: false, submitted: false,
+    }));
+    if (problems.length) process.exitCode = 4;
+  } else {
+    console.error(`preview → ${out}`);
+    if (opts.open !== false) openInBrowser(out);
+  }
 }
 
 async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
@@ -769,6 +807,7 @@ export function createProgram(): Command {
     .argument("<file>")
     .option("-o, --out <path>", "write the local preview to a chosen HTML file")
     .option("--no-open", "do not open a browser after writing the preview")
+    .option("--json", "single JSON result; do not open browser")
     .option("--force", "explicitly replace an existing .html preview output");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
