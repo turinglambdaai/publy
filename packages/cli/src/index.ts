@@ -570,6 +570,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   // Fingerprint the final request, including image bytes and schedule.
   // Computing this earlier would miss publishAt/digest/author or cover data.
   payload.idempotencyKey = draftIdempotencyKey(payload);
+  const idempotencyKey = payload.idempotencyKey;
 
   type PublishResult = Partial<PublishResponse> & { code?: string; message?: string; deduped?: boolean; jobId?: string; runAt?: string };
   async function postPublish(serverUrl: string): Promise<{ res: Response; body: PublishResult }> {
