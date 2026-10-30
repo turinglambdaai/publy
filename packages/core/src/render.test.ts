@@ -112,3 +112,23 @@ test("renderMarkdown falls back to raw TeX when the formula is invalid", () => {
   assert.ok(result.warnings.some((w) => w.startsWith("Math not rendered")), "warning missing");
   assert.ok(result.html.includes("<code"), "raw TeX fallback missing");
 });
+
+// Security regression: untrusted note HTML must not become active clipboard,
+// browser-preview or WeChat-draft markup. Theme CSS is applied separately.
+test("renderMarkdown removes active raw HTML and unsafe URL attributes", () => {
+  const source = [
+    "<script>alert('evil-marker')</script>",
+    '<iframe src="https://example.test/frame"></iframe>',
+    '<img src="javascript:alert(1)" onerror="evil-marker()">',
+    '<a href="javascript:alert(1)" onclick="evil-marker()">unsafe anchor</a>',
+    '<span style="background-image:url(https://example.test/track)">visible span</span>',
+    '<img src="data:image/svg+xml;base64,PHN2Zz4=" alt="blocked svg">',
+    '<p><strong>allowed bold</strong> content</p>',
+    '[Safe link](https://example.test/safe)',
+  ].join("\\n\\n");
+  const result = renderMarkdown(source, { theme: "claude", footnote: false });
+  assert.doesNotMatch(result.html, /<script|<iframe|<svg|evil-marker|onclick|onerror|javascript:|data:image\\/svg\\+xml|background-image:\\s*url/i);
+  assert.match(result.html, /allowed bold/);
+  assert.match(result.html, /visible span/);
+  assert.match(result.html, /https:\\/\\/example\\.test\\/safe/);
+});
