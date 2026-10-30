@@ -29,9 +29,16 @@ const run = (file) => {
 try {
   const project = path.join(dir, "project");
   fs.mkdirSync(path.join(project, "assets"), { recursive: true });
-  fs.writeFileSync(path.join(project, "assets", "photo.jpg"), "synthetic");
+  // Use real PNG bytes: a placeholder string would falsely prove that the
+  // browser can display a broken image. This is the same 1×1 fixture used by
+  // the core renderer's cover-crop tests.
+  const tinyPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  fs.writeFileSync(path.join(project, "assets", "photo.png"), tinyPng);
   const goodPath = path.join(project, "article.md");
-  const goodSource = "---\ntitle: User Article\n---\n\n# Hello\n\n![photo](assets/photo.jpg)";
+  const goodSource = "---\ntitle: User Article\n---\n\n# Hello\n\n![photo](assets/photo.png)";
   fs.writeFileSync(goodPath, goodSource);
   const good = run(goodPath);
   assert.equal(good.code, 0);
@@ -48,8 +55,12 @@ try {
     { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
   assert.equal(preview.status, 0, preview.stderr);
   const previewHtml = fs.readFileSync(previewPath, "utf8");
-  assert.ok(previewHtml.includes("data:image/jpeg;base64,"), "local image must be embedded");
-  assert.ok(!previewHtml.includes("attachment://photo.jpg"), "local attachment reference must be replaced");
+  const embeddedPrefix = "data:image/png;base64,";
+  assert.ok(previewHtml.includes(embeddedPrefix), "local image must be embedded");
+  assert.ok(!previewHtml.includes("attachment://photo.png"), "local attachment reference must be replaced");
+  const encoded = previewHtml.slice(previewHtml.indexOf(embeddedPrefix) + embeddedPrefix.length).split('"')[0];
+  const embeddedBytes = Buffer.from(encoded, "base64");
+  assert.deepEqual(embeddedBytes, tinyPng, "preview must embed the exact PNG bytes without mutation");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preview must not alter source");
 
   const missingPath = path.join(project, "broken.md");
