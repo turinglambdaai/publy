@@ -48,6 +48,32 @@ try {
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
 
+  // Structured config writes must not expose secrets, even in error paths.
+  const jsonConfig = path.join(dir, "json-config.json");
+  const jsonSecret = "agent-config-secret-must-stay-private";
+  const jsonSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", jsonSecret, "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(jsonSet.status, 0, jsonSet.stderr);
+  const configResult = JSON.parse(jsonSet.stdout);
+  assert.equal(configResult.kind, "config-set");
+  assert.equal(configResult.code, "CONFIG_SAVED");
+  assert.equal(configResult.ok, true);
+  assert.equal(configResult.networkUsed, false);
+  assert.equal(configResult.submitted, false);
+  assert.ok(!jsonSet.stdout.includes(jsonSecret));
+  assert.equal(JSON.parse(fs.readFileSync(jsonConfig, "utf8")).api_key, jsonSecret);
+  const badJsonSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "unrecognized_key", jsonSecret, "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(badJsonSet.status, 1);
+  assert.equal(JSON.parse(badJsonSet.stdout).code, "CONFIG_KEY_INVALID");
+  assert.ok(!badJsonSet.stdout.includes(jsonSecret));
+
   // Agent contract discovery is offline and truthful: don't claim JSON
   // support for operations that still only offer human-oriented output.
   const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
