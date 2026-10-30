@@ -24,8 +24,11 @@ publy history --json
 
 `capabilities --json` 离线返回版本化的能力列表：每个命令是否
 支持 JSON、是否可能联网、是否修改本地文件或真正创建草稿。
-**没有声明 JSON 的命令不要凭猜测去解析：**目前 `render`、
-`jobs cancel/retry`、`config set`、`theme` 等老命令仍偏向人类使用。
+**没有声明 JSON 的命令不要凭猜测去解析：**目前 `render`、`config set`、`theme` 等老命令仍偏向人类使用。
+`jobs cancel <jobId> --json` 和 `jobs retry <jobId> --json` 现在能返回
+结构化回执，但**属于修改服务器状态的操作，Agent 必须先获得用户授权**。
+若网络异常而结果不确定，返回 `status:"unknown"` 与原 jobId，
+应先通过 `jobs list --json` 对账，不能盲目反复操作。
 对 Agent 公开真实能力，不虚报“所有命令已统一”。
 
 ## 安全检查和本地预览
