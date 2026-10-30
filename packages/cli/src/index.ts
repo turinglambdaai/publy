@@ -808,23 +808,38 @@ async function readServerJson(
   endpoint: string,
 ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; code: string }> {
   if (!config.server || !config.api_key) return { ok: false, code: "SERVER_NOT_CONFIGURED" };
+  let target: URL;
   try {
-    const response = await fetch(new URL(endpoint, config.server).toString(), {
+    target = new URL(endpoint, config.server);
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return { ok: false, code: "CONFIG_INVALID" };
+    }
+  } catch {
+    return { ok: false, code: "CONFIG_INVALID" };
+  }
+  let response: Response;
+  try {
+    response = await fetch(target.toString(), {
       headers: { "x-api-key": config.api_key },
       signal: AbortSignal.timeout(15_000),
     });
-    if (!response.ok) {
-      return { ok: false, code: response.status === 401 || response.status === 403
-        ? "UNAUTHORIZED" : "SERVER_REJECTED" };
-    }
-    const body: unknown = await response.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      return { ok: false, code: "INVALID_SERVER_RESPONSE" };
-    }
-    return { ok: true, body: body as Record<string, unknown> };
   } catch {
     return { ok: false, code: "SERVER_UNREACHABLE" };
   }
+  if (!response.ok) {
+    return { ok: false, code: response.status === 401 || response.status === 403
+      ? "UNAUTHORIZED" : response.status === 429 ? "RATE_LIMITED" : "SERVER_REJECTED" };
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: "INVALID_SERVER_RESPONSE" };
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, code: "INVALID_SERVER_RESPONSE" };
+  }
+  return { ok: true, body: body as Record<string, unknown> };
 }
 function readAgentConfig(
   opts: { json?: boolean },
