@@ -118,7 +118,7 @@ try {
   const fetchSentinel = path.join(dir, "theme-fetch-was-called");
   const preload = path.join(dir, "reject-theme-fetch.cjs");
   fs.writeFileSync(preload,
-    'globalThis.fetch = () => { require("node:fs").writeFileSync(process.env.PUBLY_THEME_FETCH_SENTINEL, "called"); throw new Error("unexpected theme registry fetch"); };\\n'.replace('\\\\n', '\\n'));
+    'globalThis.fetch = () => { require("node:fs").writeFileSync(process.env.PUBLY_THEME_FETCH_SENTINEL, "called"); throw new Error("unexpected theme registry fetch"); };');
   for (const json of [false, true]) {
     fs.rmSync(fetchSentinel, { force: true });
     const listed = spawnSync(process.execPath,
@@ -137,8 +137,8 @@ try {
       assert.equal(result.source, "bundled");
       assert.ok(result.articleThemes.length > 0 && result.cardThemes.length > 0);
     } else {
-      assert.match(listed.stdout, /Article themes \\(built-in\\):/);
-      assert.match(listed.stdout, /Card themes \\(built-in\\):/);
+      assert.ok(listed.stdout.includes("Article themes (built-in):"));
+      assert.ok(listed.stdout.includes("Card themes (built-in):"));
     }
   }
   assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
