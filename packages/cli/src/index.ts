@@ -140,6 +140,39 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
         const lint = lintCards(cards.sections, cards.caption);
         cardCount = cards.sections.length;
         problems.push(...lint.problems);
+        if (lint.ok) {
+          // Pure section lint is not sufficient: the actual PNG renderer may
+          // be missing fonts/WASM or produce an invalid image. Fail locally
+          // before telling the author it is safe to save a WeChat draft.
+          const tempCards = fs.mkdtempSync(path.join(os.tmpdir(), "publy-check-cards-"));
+          try {
+            const deck = await renderCards(raw, {
+              theme: opts.theme,
+              outDir: tempCards,
+              offline: true,
+            });
+            for (const card of deck.cards) {
+              const png = fs.readFileSync(card.file);
+              if (png.length < 24 ||
+                  !png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+                  png.readUInt32BE(16) !== 1080 ||
+                  png.readUInt32BE(20) !== 1440) {
+                problems.push("Card PNG is invalid; do not submit this image-post draft.");
+                break;
+              }
+            }
+            attachments = deck.cards.length;
+            if (attachments !== cards.sections.length) {
+              problems.push("Rendered card count differs from source sections.");
+            }
+            warnings.push(...deck.warnings);
+          } catch {
+            renderError = true;
+            problems.push("Cannot render card images offline. Check bundled fonts or unsupported characters before publishing.");
+          } finally {
+            fs.rmSync(tempCards, { recursive: true, force: true });
+          }
+        }
       } else {
         // Local rendering shares the same asset resolution as real publish.
         // Check does not require login, an API key or a running server.
