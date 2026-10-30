@@ -352,6 +352,48 @@ try {
   assert.equal(missingServerReport.code, "SERVER_NOT_CONFIGURED");
   assert.equal(missingServerReport.submitted, false);
 
+  // A configured default must never silently select a WeChat draft
+  // destination. This test uses a synthetic unreachable endpoint: the
+  // command must reject before reading a source or making any HTTP request.
+  const explicitAccountConfig = path.join(dir, "explicit-account.json");
+  const explicitAccountSecret = "synthetic-account-guard-secret";
+  fs.writeFileSync(explicitAccountConfig, JSON.stringify({
+    server: "http://127.0.0.1:9", api_key: explicitAccountSecret,
+    default_account: "Work", accounts: [{ name: "Work" }],
+  }));
+  const missingAccount = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath, "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: explicitAccountConfig },
+    });
+  assert.equal(missingAccount.status, 1, missingAccount.stderr);
+  const missingAccountReport = JSON.parse(missingAccount.stdout);
+  assert.equal(missingAccountReport.schemaVersion, 1);
+  assert.equal(missingAccountReport.kind, "publish-result");
+  assert.equal(missingAccountReport.ok, false);
+  assert.equal(missingAccountReport.status, "not_submitted");
+  assert.equal(missingAccountReport.code, "ACCOUNT_REQUIRED");
+  assert.equal(missingAccountReport.submitted, false);
+  assert.equal(missingAccountReport.requestId, null);
+  assert.ok(!missingAccount.stdout.includes(explicitAccountSecret));
+  assert.ok(!missingAccount.stderr.includes(explicitAccountSecret));
+  const missingAccountHuman = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: explicitAccountConfig },
+    });
+  assert.equal(missingAccountHuman.status, 1);
+  assert.match(missingAccountHuman.stderr, /--account/);
+  // Explicitly choosing the account passes this guard; missing input then
+  // fails locally before any HTTP request is attempted.
+  const explicitAccountMissingSource = spawnSync(process.execPath,
+    [entrypoint, "publish", path.join(project, "missing.md"), "--account", "Work", "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: explicitAccountConfig },
+    });
+  assert.equal(explicitAccountMissingSource.status, 2);
+  assert.equal(JSON.parse(explicitAccountMissingSource.stdout).code, "INPUT_INVALID");
+
   // JSON render writes a private HTML artifact without embedding private
   // source content in stdout, and explicitly reports unresolved media refs.
   const jsonRender = cli("render", goodPath, "--json");
