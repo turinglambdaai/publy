@@ -394,12 +394,19 @@ try {
   const corruptPublish = spawnSync(process.execPath,
     [entrypoint, "publish", corrupt, "--json", "--account", "fixture"],
     { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
-  assert.equal(corruptPublish.status, 2, corruptPublish.stderr);
+  assert.equal(corruptPublish.status, 3, corruptPublish.stderr);
   const corruptResult = JSON.parse(corruptPublish.stdout);
-  assert.equal(corruptResult.code, "INPUT_INVALID");
+  assert.equal(corruptResult.code, "RENDER_FAILED");
   assert.equal(corruptResult.submitted, false);
   assert.ok(!corruptPublish.stderr.includes(secret), "private frontmatter should not leak to stderr");
   assert.ok(!corruptPublish.stdout.includes(secret), "private frontmatter should not leak to JSON");
+  const invalidPreview = cli("preview", corrupt, "--json");
+  assert.equal(invalidPreview.status, 3);
+  const invalidPreviewJson = JSON.parse(invalidPreview.stdout);
+  assert.equal(invalidPreviewJson.code, "RENDER_FAILED");
+  assert.equal(invalidPreviewJson.submitted, false);
+  assert.ok(!invalidPreview.stdout.includes(secret));
+  assert.ok(!invalidPreview.stderr.includes(secret));
 
   const malformed = run(corrupt);
   assert.equal(malformed.code, 3);
