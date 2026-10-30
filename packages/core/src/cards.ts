@@ -7,7 +7,7 @@ import path from "node:path";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { parseSource, type SourceMeta } from "./frontmatter.js";
-import { NOTO_SANS_SC, loadSatoriFonts, loadSatoriFontsWithFallback, type FontSpec } from "./fonts.js";
+import { NOTO_SANS_SC, loadSatoriFonts, loadSatoriFontsOffline, loadSatoriFontsWithFallback, type FontSpec } from "./fonts.js";
 import { svgToPng } from "./svg.js";
 
 export const CARD_WIDTH = 1080;
@@ -255,6 +255,8 @@ export async function renderCards(
     theme?: string;
     outDir?: string;
     fontFiles?: string[];
+    /** never download fonts for an offline preview; use bundled subsets only */
+    offline?: boolean;
     /** progressive rendering: fires as soon as each card is rasterized */
     onCard?: (card: CardOutput, index: number, total: number) => void;
   } = {},
@@ -275,11 +277,15 @@ export async function renderCards(
     let svg: string;
     try {
       // fast path: bundled GB2312 subset (no network)
-      const fonts = opts.fontFiles?.length ? await loadSatoriFonts(fontSpecs) : await loadSatoriFontsWithFallback(fontSpecs);
+      const fonts = opts.fontFiles?.length
+        ? await loadSatoriFonts(fontSpecs)
+        : opts.offline
+          ? await loadSatoriFontsOffline(fontSpecs)
+          : await loadSatoriFontsWithFallback(fontSpecs);
       svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts });
     } catch (err) {
       // glyph outside the subset: retry once with the full downloadable fonts
-      if (!opts.fontFiles?.length) {
+      if (!opts.fontFiles?.length && !opts.offline) {
         const full = await loadSatoriFonts(fontSpecs);
         svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts: full });
       } else {
