@@ -596,13 +596,15 @@ export function buildApp(config: ServerConfig) {
       }
     }
 
-    // quota pre-check for user keys
-    if (!caller.admin) {
-      const limit = planLimit(caller.user);
-      if (store.getUsage(caller.user) >= limit) {
-        return reply.code(429).send({ code: "QUOTA_EXCEEDED", message: `monthly limit ${limit} reached — upgrade at ${publicUrl}` });
-      }
-    }
+    // A confirmed retry must resolve to the already-created draft even if
+    // the caller has since reached quota. Check idempotency BEFORE quotas;
+    // only genuinely new draft admissions consume quota.
+    const quotaLimit = caller.admin ? null : planLimit(caller.user);
+    const quotaExceeded = !caller.admin && store.getUsage(caller.user) >= quotaLimit!;
+    const quotaReply = () => reply.code(429).send({
+      code: "QUOTA_EXCEEDED",
+      message: `monthly limit ${quotaLimit} reached — upgrade at ${publicUrl}`,
+    });
 
     const key = body.idempotencyKey;
     if (key) {
@@ -644,12 +646,15 @@ export function buildApp(config: ServerConfig) {
           return { jobId: twin.id, runAt: new Date(twin.runAt).toISOString(), scheduled: true, deduped: true };
         }
       }
+      if (quotaExceeded) return quotaReply();
       const id = crypto.randomUUID();
       jobs[id] = { id, runAt, body, userId: caller.admin ? null : caller.user.id, status: "pending", attempts: 0, nextAttemptAt: runAt, idempotencyKey: key };
       saveJobs();
       audit({ event: "scheduled", account: body.account, type: body.type, title: body.title, runAt: new Date(runAt).toISOString(), jobId: id });
       return { jobId: id, runAt: new Date(runAt).toISOString(), scheduled: true };
     }
+
+    if (quotaExceeded) return quotaReply();
 
     try {
       const cred = resolveAccount(body.account, caller);
