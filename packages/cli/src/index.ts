@@ -350,7 +350,7 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   }
 
   const warningPanel = problems.length
-    ? `<section role="alert" style="border:2px solid #b42318;background:#fff4f2;color:#7a271a;padding:14px 18px;border-radius:10px;margin:12px 0"><strong>草稿素材未就绪 / Draft not ready</strong><p>下列问题必须在投递公众号草稿前修复：</p><ul>${problems.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></section>`
+    ? `<section role="alert" style="border:2px solid #b42318;background:#fff4f2;color:#7a271a;padding:14px 18px;border-radius:10px;margin:12px 0"><strong>草稿素材未就绪 / Missing draft media</strong><p>下列问题必须在投递公众号草稿前修复：</p><ul>${problems.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></section>`
     : "";
   const localHeader = `<header style="padding:12px 16px;background:#e7f1ff;border-radius:9px;color:#123962;margin-bottom:12px;font:14px system-ui,sans-serif" role="status"><strong>Publy · 本地预览</strong> — 此内容尚未投递到公众号草稿箱 / Preview only, not submitted</header>`;
   fs.writeFileSync(
