@@ -278,7 +278,7 @@ try {
     { encoding: "utf8", timeout: 40000 });
   assert.equal(invalidPreview.status, 0, invalidPreview.stderr);
   const invalidHtml = fs.readFileSync(invalidOut, "utf8");
-  assert.match(invalidHtml, /Draft not ready/);
+  assert.match(invalidHtml, /Missing draft media/);
   assert.match(invalidHtml, /图片数量须为 3/);
 
   // Do not leak private YAML values or parser internals into an agent JSON
