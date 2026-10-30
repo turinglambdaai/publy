@@ -275,4 +275,40 @@ if (!lastSubmitted.html?.includes("Publy")) {
   fail("card image post caption was not included in draft HTML");
 }
 
+// Re-submitting byte-identical content has the same retry identity. A
+// same-length edit to an existing note (unchanged path and mtime) must have
+// a different identity, otherwise WeChat's server could silently dedupe it.
+const idCover = path.join(os.tmpdir(), "publy-id-identity-" + process.pid + ".png");
+fs.writeFileSync(idCover, png);
+try {
+  const identityPath = "samples/idempotency.md";
+  const identitySource = (headline) =>
+    "---\ncover: " + idCover.split(path.sep).join("/") + "\n---\n\n# " + headline;
+  app.vaultContentByPath[identityPath] = identitySource("Alpha");
+  app.workspace.activeFile = {
+    path: identityPath, basename: "idempotency", extension: "md",
+    stat: { mtime: 1700000000000 },
+  };
+  await inst.publishCurrentNote();
+  const first = lastSubmitted;
+  if (!first?.idempotencyKey || !first.html?.includes("Alpha")) {
+    fail("first identity draft not submitted");
+  }
+  await inst.publishCurrentNote();
+  if (lastSubmitted?.idempotencyKey !== first.idempotencyKey) {
+    fail("identical draft retry changed identity");
+  }
+  app.vaultContentByPath[identityPath] = identitySource("Omega");
+  await inst.publishCurrentNote();
+  if (!lastSubmitted?.html?.includes("Omega") ||
+      lastSubmitted.html.length !== first.html.length) {
+    fail("identity fixture must render same-length different HTML");
+  }
+  if (lastSubmitted.idempotencyKey === first.idempotencyKey) {
+    fail("same-length edited note was wrongly deduped");
+  }
+} finally {
+  fs.rmSync(idCover, { force: true });
+}
+
 console.log(`PASS — ${communityOnly ? "simulated Community Directory three-file install" : "side-loaded development bundle"}: onload, article preview, card deck preview, history, publish`);
