@@ -694,9 +694,56 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 
 // ---------------------------------------------------------------------------
 
+
+/** Stable agent discovery of implemented operations (not a future roadmap). */
+const AGENT_COMMANDS = [
+  { name: "capabilities", json: true, network: false, effect: "read" },
+  { name: "check", json: true, network: false, effect: "read" },
+  { name: "render", json: false, network: false, effect: "write-html-if-out" },
+  { name: "preview", json: true, network: false, effect: "write-private-html" },
+  { name: "card", json: true, network: "font-fallback-may-download", effect: "write-png" },
+  { name: "publish", json: true, network: true, effect: "create-wechat-draft" },
+  { name: "publish-result", json: true, network: true, effect: "read" },
+  { name: "jobs list", json: false, network: true, effect: "read" },
+  { name: "jobs cancel", json: false, network: true, effect: "cancel-scheduled-job" },
+  { name: "jobs retry", json: false, network: true, effect: "re-admit-job" },
+  { name: "history", json: false, network: true, effect: "read" },
+  { name: "quota", json: false, network: true, effect: "read" },
+  { name: "account list", json: false, network: false, effect: "read-local-config" },
+  { name: "account add", json: false, network: false, effect: "write-local-config" },
+  { name: "config set", json: false, network: false, effect: "write-local-config" },
+  { name: "theme ls", json: false, network: "registry-may-be-fetched", effect: "read" },
+  { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
+  { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
+] as const;
+
 export function createProgram(): Command {
   const program = new Command();
   program.name("publy").description("Publish Markdown to WeChat Official Accounts").version(pkg.version);
+  program.command("capabilities")
+    .description("Discover supported CLI operations without login, network or local mutation")
+    .option("--json", "versioned machine-readable operations")
+    .action((opts: { json?: boolean }) => {
+      const result = {
+        schemaVersion: 1,
+        tool: "publy", version: pkg.version,
+        destination: "wechat-official-account-drafts",
+        inputs: ["markdown-file"],
+        firstClassEditors: ["Typora", "Obsidian"],
+        noPublicSend: true,
+        commands: AGENT_COMMANDS,
+      };
+      if (opts.json) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log("Publy CLI — WeChat Official Account drafts only");
+        console.log("Use publy capabilities --json for versioned agent metadata.");
+        for (const item of AGENT_COMMANDS) {
+          console.log(item.name.padEnd(17) + " JSON=" + (item.json ? "yes" : "no") + " effect=" + item.effect);
+        }
+      }
+    });
+
 
   const common = (cmd: Command) =>
     cmd
