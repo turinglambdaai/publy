@@ -12,10 +12,10 @@ Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the se
 
 ## Editor-independent product contract (2026-10-30)
 
-**Obsidian is a client integration, not the product boundary.** Publy
-must accept existing Markdown files from Typora, VS Code, Zettlr, MarkText,
-Obsidian and plain-file workflows through the same source-neutral render,
-preflight, preview and draft protocol. A future slim publishing companion
+**Typora and Obsidian are our two customer-facing writing entry points.**
+Both use the same source-neutral Markdown render, preflight, preview and
+WeChat-draft protocol. Other files compatible with Markdown can still be
+read, but do not build, advertise or maintain separate editor integrations. A future slim publishing companion
 may accept drag/drop or open-with, but must not become a second editor or
 copy/index the user's notebook by default. The original Markdown/assets stay
 in place; local preview/check must not call a hosted service or require an
@@ -34,12 +34,12 @@ Preserve the family authorization decision `2026-10-auth-1`.
 
 ## Scope discipline for an independent developer (2026-10-30)
 
-WeChat Official Account **draft delivery is the only current publishing
-destination**. Never interpret editor-neutral input support as authorization
-to add multi-platform publishing, scheduling or a generalized provider
-framework. Zhihu is a research-only candidate requiring verified official
-authorization and clear paying-user evidence; WordPress, Ghost and other
-destinations remain deferred. Preserve the focused customer journey:
+WeChat Official Account **draft delivery is the only supported publishing
+destination**. Typora and Obsidian are the two first-class writing entry
+points; generic Markdown stays an internal/shared file capability. Do not
+add new publishing destinations, including Zhihu, Toutiao, WordPress, Ghost,
+Xiaohongshu, Douyin or others. No provider abstraction, future-platform
+backlog, API research or platform-specific placeholders. Preserve the focused customer journey:
 existing Markdown -> reliable local preflight/preview -> explicit selected
 WeChat draft -> verified/reconciled status. Normative product decision:
 [English](docs/platform-strategy.md) ·
