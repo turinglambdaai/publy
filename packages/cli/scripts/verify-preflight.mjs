@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const entrypoint = path.resolve(here, "..", "dist", "index.js");
@@ -99,6 +99,27 @@ try {
   assert.equal(typoraPreview.status, 0, typoraPreview.stderr);
   assert.ok(fs.readFileSync(typoraPreviewPath, "utf8").includes("data:image/png;base64,"));
   assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource, "Typora source must remain exactly unchanged");
+
+  // Typora can also save absolute file:/// image links, including Chinese
+  // paths. They must resolve to the exact same local bytes, without exporting
+  // a clickable file:// link into the WeChat HTML.
+  const fileUriArticle = path.join(project, "Typora file URI.md");
+  const localFileUrl = pathToFileURL(typoraPhoto).href;
+  const fileUriRaw = "---\ncover: " + JSON.stringify(localFileUrl) +
+    "\n---\n\n![absolute](" + localFileUrl + ")";
+  fs.writeFileSync(fileUriArticle, fileUriRaw);
+  const fileUriCheck = run(fileUriArticle);
+  assert.equal(fileUriCheck.code, 0);
+  assert.equal(fileUriCheck.report.attachmentCount, 1);
+  const fileUriOut = path.join(dir, "file-uri-review.html");
+  const fileUriPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", fileUriArticle, "--no-open", "--out", fileUriOut],
+    { encoding: "utf8", timeout: 25000 });
+  assert.equal(fileUriPreview.status, 0, fileUriPreview.stderr);
+  const fileUriHtml = fs.readFileSync(fileUriOut, "utf8");
+  assert.ok(fileUriHtml.includes("data:image/png;base64,"));
+  assert.ok(!fileUriHtml.includes("file:///"));
+  assert.equal(fs.readFileSync(fileUriArticle, "utf8"), fileUriRaw);
 
   // Customer-specified output must never clobber existing HTML or the .md.
   const overwriteRefused = spawnSync(process.execPath,
