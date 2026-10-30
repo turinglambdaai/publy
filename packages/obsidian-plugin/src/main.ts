@@ -9,6 +9,7 @@ import {
   renderCards,
   captionToHtml,
   blockingMediaWarning,
+  draftIdempotencyKey,
   setPngRenderer,
   setFontDir,
   generateTitleCover,
@@ -1619,7 +1620,10 @@ export default class PublyPlugin extends Plugin {
     // the request identity is fixed before sending: a retry of any kind
     // (timeout recovery, double-click slipping past the lock) carries the
     // same key and can never create a second draft (#7)
-    const payload: Record<string, unknown> = {
+    // Identity follows the actual draft body and image payload, not the
+    // active editor filename/mtime or a same-length HTML collision. The
+    // account, cover, card bytes and schedule are all included.
+    const submission = {
       account: submitAccount,
       type,
       title,
@@ -1628,11 +1632,11 @@ export default class PublyPlugin extends Plugin {
       cover: coverName,
       author,
       ...(coverMode ? { coverMode } : {}),
-      idempotencyKey: "obs-" + crypto
-        .createHash("sha1")
-        .update([f.path, f.stat.mtime, type, title, html.length, publishAt ?? ""].join("|"))
-        .digest("hex"),
       ...(publishAt ? { publishAt } : {}),
+    };
+    const payload: Record<string, unknown> = {
+      ...submission,
+      idempotencyKey: draftIdempotencyKey(submission),
     };
     try {
       const body = await this.submitPayload(payload);
