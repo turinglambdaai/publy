@@ -28,8 +28,11 @@ publy history --json
 side effects and returns a **versioned** manifest. Each command declares
 `json` support and whether it reads, writes local output, may access the
 network or performs a draft-creating/mutating action. **Do not guess** that
-every command supports `--json`: `render`, `config set`, `jobs retry`,
-`jobs cancel`, `theme` and some legacy commands are still human-oriented.
+every command supports `--json`: `render`, `config set`, `theme` and some legacy commands are still human-oriented.
+`jobs cancel --json` and `jobs retry --json` now return structured results,
+but are **mutating operations requiring explicit user approval**. If their
+network outcome is uncertain, they return `status:"unknown"` with the original
+job ID; query `jobs list --json` before deciding what to do next.
 Their `json:false` entry is deliberate, not hidden implementation detail.
 
 ## Structured local review
