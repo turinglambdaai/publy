@@ -1028,7 +1028,7 @@ const AGENT_COMMANDS = [
   { name: "account list", json: true, network: false, effect: "read-local-config" },
   { name: "account add", json: false, network: false, effect: "write-local-config" },
   { name: "config set", json: false, network: false, effect: "write-local-config" },
-  { name: "theme ls", json: true, network: "registry-may-be-fetched", jsonNetwork: false, effect: "read" },
+  { name: "theme ls", json: true, network: false, jsonNetwork: false, effect: "read" },
   { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
   { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
 ] as const;
@@ -1318,10 +1318,10 @@ export function createProgram(): Command {
     }
   });
 
-  const themeCmd = program.command("theme").description("Manage themes");
+  const themeCmd = program.command("theme").description("Manage bundled themes");
   themeCmd.command("ls")
-    .description("list built-in themes; human output may also include registry entries")
-    .option("--json", "offline JSON list of bundled themes only; never fetch a registry")
+    .description("list bundled article and card themes (always offline)")
+    .option("--json", "offline JSON list of bundled themes")
     .action(async (opts: { json?: boolean }) => {
       const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
       const articleThemes = [...BUILTIN_THEMES];
@@ -1336,17 +1336,6 @@ export function createProgram(): Command {
       }
       console.log("Article themes (built-in):", articleThemes.join(", "));
       console.log("Card themes (built-in):", cardThemes.join(", "));
-      try {
-        const res = await fetch("https://raw.githubusercontent.com/turinglambdaai/publy-themes/main/index.json");
-        if (res.ok) {
-          const registry = (await res.json()) as { themes: { id: string; kind: string; source: string }[] };
-          const external = registry.themes.filter((t) => t.source !== "builtin");
-          if (external.length) console.log("Registry:", external.map((t) => `${t.id} (${t.kind})`).join(", "));
-          else console.log("Registry: no external themes yet");
-        }
-      } catch {
-        /* offline: built-ins only */
-      }
     });
 
   themeCmd

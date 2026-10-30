@@ -112,7 +112,47 @@ try {
   assert.deepEqual(contract.firstClassEditors, ["Typora", "Obsidian"]);
   assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
   assert.ok(contract.commands.some((c) => c.name === "render" && c.json === true && c.network === false));
-  assert.ok(contract.commands.some((c) => c.name === "theme ls" && c.json === true && c.jsonNetwork === false));
+  assert.ok(contract.commands.some((c) => c.name === "theme ls" && c.json === true && c.network === false && c.jsonNetwork === false));
+  // Both human and machine theme discovery must be genuinely offline, not
+  // merely reporting networkUsed:false while silently fetching a registry.
+  const fetchSentinel = path.join(dir, "theme-fetch-was-called");
+  const preload = path.join(dir, "reject-theme-fetch.cjs");
+  // Satori uses fetch for non-network resources during module initialization.
+  // Preserve those operations, but fail if the CLI attempts any HTTP(S) request.
+  fs.writeFileSync(preload, [
+    'const originalFetch = globalThis.fetch;',
+    'globalThis.fetch = (...args) => {',
+    '  const input = args[0];',
+    '  const target = typeof input === "string" ? input : (input?.url ?? String(input));',
+    '  if (/^https?:\\/\\//i.test(target)) {',
+    '    require("node:fs").writeFileSync(process.env.PUBLY_THEME_FETCH_SENTINEL, "called");',
+    '    throw new Error("unexpected HTTP(S) request during offline theme listing");',
+    '  }',
+    '  return originalFetch(...args);',
+    '};',
+  ].join("\n"));
+  for (const json of [false, true]) {
+    fs.rmSync(fetchSentinel, { force: true });
+    const listed = spawnSync(process.execPath,
+      ["--require", preload, entrypoint, "theme", "ls", ...(json ? ["--json"] : [])], {
+        encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json"),
+          PUBLY_THEME_FETCH_SENTINEL: fetchSentinel },
+      });
+    assert.equal(listed.status, 0, listed.stderr);
+    assert.equal(fs.existsSync(fetchSentinel), false,
+      "theme ls must not attempt a registry request");
+    if (json) {
+      const result = JSON.parse(listed.stdout);
+      assert.equal(result.kind, "themes");
+      assert.equal(result.networkUsed, false);
+      assert.equal(result.source, "bundled");
+      assert.ok(result.articleThemes.length > 0 && result.cardThemes.length > 0);
+    } else {
+      assert.ok(listed.stdout.includes("Article themes (built-in):"));
+      assert.ok(listed.stdout.includes("Card themes (built-in):"));
+    }
+  }
   assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
   assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
   for (const operation of ["jobs cancel", "jobs retry"]) {
