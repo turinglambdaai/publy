@@ -324,7 +324,7 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
       const tags = Array.isArray(cards.meta.tags)
         ? cards.meta.tags.map((tag) => "#" + String(tag)).join(" ")
         : "";
-      preview = `<section aria-label="WeChat image post card preview"><h2 style="font:600 16px system-ui">公众号图片消息 · ${cards.cards.length} 张卡片</h2>${images}<div style="padding:14px;border:1px solid #ccc;border-radius:8px;background:#fff;white-space:pre-wrap;overflow-wrap:anywhere"><strong>图片消息配文</strong><p>${escapeHtml(cards.caption)}${tags ? "\\n\\n" + escapeHtml(tags) : ""}</p></div></section>`;
+      preview = `<section aria-label="WeChat image post card preview"><h2 style="font:600 16px system-ui">公众号图片消息 · ${cards.cards.length} 张卡片</h2>${images}<div style="padding:14px;border:1px solid #ccc;border-radius:8px;background:#fff;white-space:pre-wrap;overflow-wrap:anywhere"><strong>图片消息配文</strong><p>${escapeHtml(cards.caption)}${tags ? "\n\n" + escapeHtml(tags) : ""}</p></div></section>`;
     } catch {
       // Some glyphs are not in the bundled subset. The offline preview must
       // fail visibly, not secretly download fonts or claim readiness.
