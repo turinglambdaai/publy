@@ -104,6 +104,18 @@ try {
   assert.equal(blockedImagePost.status, 4, blockedImagePost.stderr);
   assert.match(blockedImagePost.stderr, /No local images found/);
 
+  // Local previews may contain unresolved media while the author fixes the
+  // note. They must call that out in the rendered page, not only on stderr.
+  const brokenPreviewPath = path.join(dir, "broken-preview.html");
+  const brokenPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", missingPath, "--no-open", "--out", brokenPreviewPath],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(brokenPreview.status, 0, brokenPreview.stderr);
+  const brokenHtml = fs.readFileSync(brokenPreviewPath, "utf8");
+  assert.match(brokenHtml, /Missing draft media/);
+  assert.match(brokenHtml, /missing\\/other\\.jpg/);
+  assert.match(brokenHtml, /Preview only, not submitted/);
+
   const cardsPath = path.join(project, "cards.md");
   fs.writeFileSync(cardsPath,
     "---\nmode: cards\ncaption: synthetic test\n---\n\n## cover\nTitle\n\n## point\nDetail\n\n## ending\nThanks");
