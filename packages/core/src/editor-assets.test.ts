@@ -147,3 +147,24 @@ test("literal percent signs and malformed URL encoding do not make a real file d
     assert.equal(resolveEditorAsset("assets/Sale%20100%25%20free.png", { baseDir: root }), file);
   });
 });
+
+test("a declared Typora root never silently falls back to an unrelated absolute file", () => {
+  fixture((root) => {
+    const site = path.join(root, "site");
+    fs.mkdirSync(site);
+    const outside = put(root, "outside/private-cover.png");
+    // Without Typora's root, explicit absolute files are valid local inputs.
+    assert.equal(resolveEditorAsset(outside, { baseDir: root }), outside);
+    // When Typora's root is declared, slash-prefixed references must stay in
+    // that namespace, even if an unrelated absolute file happens to exist.
+    if (process.platform !== "win32") {
+      assert.equal(resolveEditorAsset(outside, { baseDir: root, typoraRootUrl: site }), null);
+    }
+    const secret = put(root, "secret.png");
+    assert.equal(resolveEditorAsset("/../secret.png", { baseDir: root, typoraRootUrl: site }), null);
+    assert.ok(fs.existsSync(secret), "the decoy exists but must never be chosen");
+    assert.equal(resolveEditorAsset("/assets/not-present.png", { baseDir: root, typoraRootUrl: site }), null);
+    assert.equal(resolveEditorAsset("/assets/not-present.png",
+      { baseDir: root, typoraRootUrl: "https://example.test/root" }), null);
+  });
+});
