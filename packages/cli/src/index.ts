@@ -474,6 +474,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     blockingAssetWarning(warning) &&
     !(type === "article" && opts.cover && warning.startsWith("Cover not found:")),
   );
+  // The official WeChat draft requires a usable cover for articles and at
+  // least one image for text-mode image posts. The regular preflight already
+  // reports these, so publish must enforce the same invariant.
+  if (type === "article" && !coverName && images.length === 0) {
+    blockers.push("Missing cover: provide --cover, cover: frontmatter or a local body image.");
+  }
+  if (type === "image_post" && images.length === 0) {
+    blockers.push("No local images found for image-post draft.");
+  }
   if (blockers.length) {
     console.error("publy: draft NOT sent; fix the missing or unrenderable media first:");
     for (const warning of blockers) console.error("fix: " + warning);
