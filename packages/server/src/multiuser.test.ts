@@ -13,6 +13,8 @@ const config: ServerConfig = {
   port: 0,
   apiKey: "admin-key",
   dataDir,
+  // Existing checkout test exercises the deprecated path only with explicit opt-in.
+  payments: { enableLegacyCheckout: true, provider: "manual" },
   accounts: [{ name: "SharedAcct", appId: "wx_shared", appSecret: "s" }],
 };
 

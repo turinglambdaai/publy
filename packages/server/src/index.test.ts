@@ -27,6 +27,36 @@ after(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 
+test("hosted checkout endpoints are closed without an explicit legacy test opt-in", async () => {
+  const homepage = await app.inject({ method: "GET", url: "/" });
+  assert.equal(homepage.statusCode, 200);
+  assert.match(homepage.body, /Public hosted subscriptions are not open/);
+  assert.doesNotMatch(homepage.body, /<form/i);
+  const requests = [
+    { method: "POST" as const, url: "/purchase", payload: { contact: "any@example.test", plan: "personal", months: 1 } },
+    { method: "GET" as const, url: "/order/synthetic" },
+    { method: "GET" as const, url: "/lookup?contact=any%40example.test" },
+    { method: "POST" as const, url: "/pay/xunhupay/notify", payload: { status: "OD", trade_order_id: "synthetic" } },
+  ];
+  for (const request of requests) {
+    const res = await app.inject(request);
+    assert.equal(res.statusCode, 503, request.url);
+    assert.equal(res.json().code, "CHECKOUT_NOT_AVAILABLE", request.url);
+  }
+  const overview = await app.inject({ method: "GET", url: "/v1/admin/overview", headers: { "x-api-key": "test-key" } });
+  assert.equal(overview.json().orders.pending, 0);
+});
+test("legacy online checkout cannot be re-enabled without Commerce", () => {
+  const isolatedDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-legacy-closed-"));
+  try {
+    assert.throws(
+      () => buildApp({ ...config, dataDir: isolatedDir, payments: { enableLegacyCheckout: true, provider: "alipay" } }),
+      /Commerce\/Permit/,
+    );
+  } finally {
+    fs.rmSync(isolatedDir, { recursive: true, force: true });
+  }
+});
 test("health is reachable without auth", async () => {
   const res = await app.inject({ method: "GET", url: "/health" });
   assert.equal(res.statusCode, 200);

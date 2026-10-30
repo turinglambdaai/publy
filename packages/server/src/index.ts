@@ -14,7 +14,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 import Fastify from "fastify";
-import type { FastifyError } from "fastify";
+import type { FastifyError, FastifyReply } from "fastify";
 import type { JobInfo, JobStatus, PublishRequest, PublishResponse, PublishResultInfo } from "@publy/shared";
 import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
 import { Store, PLAN_LIMITS, PRICES, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
@@ -45,6 +45,8 @@ export interface ServerConfig {
   /** scheduler poll interval; tests shorten it to exercise the job runner */
   jobPollMs?: number;
   payments?: {
+    /** Old checkout is off by default. This opt-in permits only isolated tests. */
+    enableLegacyCheckout?: boolean;
     provider?: "alipay" | "xunhupay" | "manual";
     alipay?: { appId?: string; privateKey?: string; alipayPublicKey?: string };
     xunhupay?: { appId?: string; secret?: string };
@@ -176,6 +178,12 @@ function jobInfo(j: StoredJob): JobInfo {
 type Caller = { admin: true } | { admin: false; user: UserRow };
 
 export function buildApp(config: ServerConfig) {
+  // Validate policy before opening SQLite or any other resources. A rejected
+  // configuration must not leave a locked database (especially on Windows).
+  const legacyCheckoutEnabled = config.payments?.enableLegacyCheckout === true;
+  if (legacyCheckoutEnabled && config.payments?.provider !== "manual") {
+    throw new Error("legacy checkout is restricted to manual synthetic testing; online providers require Commerce/Permit");
+  }
   const app = Fastify({ bodyLimit: 30 * 1024 * 1024 });
   const dataDir = config.dataDir ?? path.join(os.homedir(), ".publy", "server-data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -408,16 +416,23 @@ export function buildApp(config: ServerConfig) {
   }
 
   app.get("/health", async () => ({ status: "ok", service: "publy-server", protocol: "v1" }));
-  app.get("/", async (_req, reply) => reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）")));
+  // Historical checkout is not Commerce/Permit-authorized public billing.
+  const checkoutClosed = (reply: FastifyReply) =>
+    reply.code(503).send({ code: "CHECKOUT_NOT_AVAILABLE", message: "Public hosted subscriptions are not open" });
+  app.get("/", async (_req, reply) => legacyCheckoutEnabled
+    ? reply.type("text/html").send(purchasePage(config.publicIp ?? "（探测中，稍后刷新可见）"))
+    : reply.type("text/html").send('<!doctype html><html lang="en"><meta charset="utf-8"><title>Publy</title><body><main><h1>Publy</h1><p>Local preview, CLI and self-hosted publishing are available. Public hosted subscriptions are not open.</p><a href="https://github.com/turlamai/publy">Source and documentation</a></main></body></html>'));
   app.get("/admin", async (_req, reply) => reply.type("text/html").send(adminPage()));
 
-  const payments = createProvider(config.payments, store, (order) => {
+  // The disabled path must never initialize a configured external gateway.
+  const payments = createProvider(legacyCheckoutEnabled ? config.payments : { provider: "manual" }, store, (order) => {
     audit({ event: "purchase-paid", contact: order.contact, plan: order.plan, months: order.months, orderId: order.id });
   });
   console.log(`[payments] provider: ${payments.provider.name}`);
   const pollThrottle = new Map<string, number>();
 
   app.post<{ Body: { contact?: string; plan?: string; months?: number } }>("/purchase", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const ip = req.ip ?? "unknown";
     if (rateLimited(ip)) {
       return reply.code(429).send({ code: "RATE_LIMITED", message: "too many requests, try later" });
@@ -446,6 +461,7 @@ export function buildApp(config: ServerConfig) {
   });
 
   app.get<{ Params: { id: string } }>("/order/:id", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const order = store.findOrder((req.params as { id: string }).id);
     if (!order) return reply.code(404).send({ code: "NOT_FOUND", message: "no such order" });
     if (order.status !== "paid") {
@@ -468,7 +484,8 @@ export function buildApp(config: ServerConfig) {
     return { orderId: fresh.id, status: "paid", apiKey: user?.apiKey, plan: user?.plan, expiresAt: user?.expiresAt };
   });
 
-  app.get<{ Querystring: { contact?: string } }>("/lookup", async (req) => {
+  app.get<{ Querystring: { contact?: string } }>("/lookup", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const contact = (req.query as { contact?: string }).contact ?? "";
     const user = store.findUserByContact(contact);
     if (!user) return { keys: [] };
@@ -476,6 +493,7 @@ export function buildApp(config: ServerConfig) {
   });
 
   app.post<{ Body: Record<string, unknown> }>("/pay/xunhupay/notify", async (req, reply) => {
+    if (!legacyCheckoutEnabled) return checkoutClosed(reply);
     const orderId = payments.provider.verifyNotify(req.body);
     if (!orderId) return reply.code(400).send({ code: "BAD_SIGNATURE" });
     const done = payments.completeOrder(orderId);

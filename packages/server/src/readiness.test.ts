@@ -19,6 +19,8 @@ const config: ServerConfig = {
   apiKey: "admin-key",
   dataDir,
   secretKey: crypto.randomBytes(32).toString("hex"),
+  // This suite includes a historical purchase-pricing contract, not live sales.
+  payments: { enableLegacyCheckout: true, provider: "manual" },
   jobPollMs: 40,
   accounts: [{ name: "TestAcct", appId: "wx_dummy", appSecret: "dummy" }],
 };
