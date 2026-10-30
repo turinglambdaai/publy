@@ -62,14 +62,10 @@ export function preprocessObsidian(
       return `![${alt}](${name})`;
     }
     assets.push(resolved);
-    // Raw filesystem paths are not valid Markdown image destinations when
-    // they contain spaces, parentheses, '#', '?' or percent signs. A file URL
-    // preserves the exact filename and is decoded by resolveEditorAsset.
-    // MarkdownIt permits file:/// for local images; the renderer replaces
-    // these URLs with attachment:// refs before producing the final HTML.
-    const fileUrl = pathToFileURL(resolved).href.replace(/\\(/g, "%28").replace(/\\)/g, "%29");
-    const safeAlt = alt.replace(/[\\\\[\\]]/g, "\\\\    assets.push(resolved);
-    return `![${alt}](${resolved.split(path.sep).join("/")})`;");
+    // Markdown destinations cannot contain raw spaces, parentheses or URL delimiters.
+    // A local file URL preserves the exact path until the attachment pass.
+    const fileUrl = pathToFileURL(resolved).href.replace(/\(/g, "%28").replace(/\)/g, "%29");
+    const safeAlt = alt.replace(/[\\[\]]/g, "\\$&");
     return `![${safeAlt}](${fileUrl})`;
   });
 
