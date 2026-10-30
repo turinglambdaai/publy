@@ -30,7 +30,12 @@ not an exported PDF or HTML. Publy resolves image paths from the source
 directory first, preserving nested directories and preventing two unrelated
 `logo.png` files from being confused. It also respects a **local filesystem**
 `typora-root-url` for references starting with `/`. Remote root URLs are not
-downloaded. The source file is not edited.
+downloaded. The source file is not edited. **Privacy note:** the preview HTML contains
+embedded copies of local media for display, stored in a temporary file by
+default or at an explicitly selected `--out` path. Handle that preview as
+private content and delete it when done. Remote HTTP images are left as
+remote references and may cause network requests **when opened in a browser**;
+`publy check` itself performs no network requests.
 
 Example alongside a real file and `assets/cover.jpg`:
 
