@@ -110,7 +110,7 @@ function escapeHtml(s: string): string {
  * become a silently incomplete draft in the official account.
  */
 function blockingAssetWarning(warning: string): boolean {
-  return /^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered)/i.test(warning);
+  return /^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered|Remote image not uploaded:|Embedded data image not uploaded:)/i.test(warning);
 }
 
 async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> {
