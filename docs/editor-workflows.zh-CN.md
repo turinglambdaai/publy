@@ -26,7 +26,10 @@ Typora 可以将图片放在原文件附近、相对资源目录中；也支持
 `typora-root-url`。Publy 优先从 Markdown 所在目录解析图片的完整相对路径，
 不把 `a/logo.png` 和 `b/logo.png` 错配。对于 `/images/xx.png`，
 可按 YAML 中的**本地** `typora-root-url` 定位；不会下载远端根目录。
-不会修改原始笔记。
+不会修改原始笔记。**隐私提示：**为了离线显示本地图片，预览 HTML 会临时
+内嵌图片内容；默认写入系统临时目录，也可以用 `--out` 明确指定保存位置。
+预览文件属于私密内容，使用后请删除。远程 HTTP 图片仍保留远程引用，**在浏览器
+打开预览时可能联网加载**；`publy check` 本身不联网。
 
 假设目录里有 `article.md` 和 `assets/cover.jpg`：
 
