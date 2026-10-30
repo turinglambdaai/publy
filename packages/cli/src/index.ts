@@ -522,19 +522,43 @@ async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
   }
 }
 
-async function cmdConfigSet(key: string, value: string): Promise<void> {
-  const config = loadConfig();
+async function cmdConfigSet(key: string, value: string, opts: { json?: boolean } = {}): Promise<void> {
+  const result = (ok: boolean, code: string): void => {
+    if (opts.json) {
+      // Do not echo values: URLs can contain credentials and api_key is secret.
+      console.log(JSON.stringify({
+        schemaVersion: 1, kind: "config-set", ok, code,
+        key, networkUsed: false, submitted: false,
+      }));
+    }
+  };
   const allowed = ["server", "api_key", "default_account", "media_dirs"];
   if (!allowed.includes(key)) {
-    console.error(`publy: unknown config key "${key}" (allowed: ${allowed.join(", ")})`);
-    process.exit(1);
+    if (!opts.json) console.error("publy: unknown config key (allowed: " + allowed.join(", ") + ")");
+    result(false, "CONFIG_KEY_INVALID");
+    process.exitCode = 1;
+    return;
   }
-  // media_dirs is a string[] — accept comma-separated dirs; everything else is a plain string
+  let config: CliConfig;
+  try { config = loadConfig(); }
+  catch {
+    if (!opts.json) console.error("publy: invalid local config");
+    result(false, "CONFIG_INVALID");
+    process.exitCode = 1;
+    return;
+  }
   (config as Record<string, unknown>)[key] = key === "media_dirs"
     ? value.split(",").map((s) => s.trim()).filter(Boolean)
     : value;
-  saveConfig(config);
-  console.log(`${key} = ${key === "api_key" ? "***" : value}`);
+  try { saveConfig(config); }
+  catch {
+    if (!opts.json) console.error("publy: cannot save local config");
+    result(false, "CONFIG_WRITE_FAILED");
+    process.exitCode = 1;
+    return;
+  }
+  if (opts.json) result(true, "CONFIG_SAVED");
+  else console.log(`${key} = ${key === "api_key" ? "***" : value}`);
 }
 
 async function cmdAccountAdd(name: string, opts: Record<string, any>): Promise<void> {
@@ -988,7 +1012,7 @@ const AGENT_USAGE: Record<string, string> = {
   quota: "publy quota --json",
   "account list": "publy account list --json",
   "account add": "publy account add <name> [--app-id <id>]",
-  "config set": "publy config set <key> <value>",
+  "config set": "publy config set <key> <value> --json",
   "theme ls": "publy theme ls --json",
   "theme preview": "publy theme preview <name>",
   tunnel: "publy tunnel",
@@ -1010,7 +1034,7 @@ const AGENT_COMMANDS = [
   { name: "quota", json: true, network: true, effect: "read" },
   { name: "account list", json: true, network: false, effect: "read-local-config" },
   { name: "account add", json: false, network: false, effect: "write-local-config" },
-  { name: "config set", json: false, network: false, effect: "write-local-config" },
+  { name: "config set", json: true, network: false, effect: "write-local-config" },
   { name: "theme ls", json: true, network: "registry-may-be-fetched", jsonNetwork: false, effect: "read" },
   { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
   { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
@@ -1274,7 +1298,8 @@ export function createProgram(): Command {
     .argument("<key>")
     .argument("<value>")
     .description("set server / api_key / default_account / media_dirs (comma-separated)")
-    .action(async (key: string, value: string) => cmdConfigSet(key, value));
+    .option("--json", "structured result with no credential values")
+    .action(async (key: string, value: string, opts: { json?: boolean }) => cmdConfigSet(key, value, opts));
 
   const accountCmd = program.command("account").description("Manage accounts");
   accountCmd
