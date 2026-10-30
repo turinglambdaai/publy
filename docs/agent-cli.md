@@ -30,7 +30,8 @@ publy history --json
 side effects and returns a **versioned** manifest. Each command declares
 `json` support and whether it reads, writes local output, may access the
 network or performs a draft-creating/mutating action. **Do not guess** that
-every command supports `--json`: `config set`, `theme preview` and some legacy commands are still human-oriented.
+every command supports `--json`: `theme preview` and some legacy commands are still human-oriented.
+`config set <key> <value> --json` returns a single `config-set` object (`CONFIG_SAVED`, `CONFIG_KEY_INVALID`, `CONFIG_INVALID` or `CONFIG_WRITE_FAILED`) without ever echoing values, including API keys or credential-bearing URLs. This is a local mutation and requires the operator's approval.
 `jobs cancel --json` and `jobs retry --json` now return structured results,
 but are **mutating operations requiring explicit user approval**. If their
 network outcome is uncertain, they return `status:"unknown"` with the original
