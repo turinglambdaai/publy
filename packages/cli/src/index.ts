@@ -747,8 +747,23 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify(payload),
+      // A lost response is an unknown outcome, not permission to post again.
+      signal: AbortSignal.timeout(120_000),
     });
-    return { res, body: (await res.json()) as PublishResult };
+    let rawResponse: unknown;
+    try {
+      rawResponse = await res.json();
+    } catch {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    if (!rawResponse || typeof rawResponse !== "object" || Array.isArray(rawResponse)) {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    const body = rawResponse as PublishResult;
+    if (res.ok && !body.mediaId && !body.jobId) {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    return { res, body };
   }
 
   let result: { res: Response; body: PublishResult } | null = null;
@@ -763,7 +778,13 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     console.error("publy: server unreachable, bringing up the SSH tunnel…");
     if (await ensureTunnel(config)) {
       const tunnelServer = config.tunnel.server ?? `http://127.0.0.1:${config.tunnel.local_port}`;
-      result = await postPublish(tunnelServer);
+      try {
+        result = await postPublish(tunnelServer);
+      } catch (error) {
+        // Tunnel request may also have reached the remote server. Preserve
+        // the original draft identity and report an unknown outcome.
+        netErr = error;
+      }
     }
   }
   if (!result) {
@@ -771,9 +792,10 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     // draft — outcome unknown, never treated as permission to re-send (#7).
     // Surface the underlying cause and the request identity so an agent can
     // reconcile with `publy publish-result <key>` instead of re-publishing.
-    const cause = (netErr as Error | null)?.cause as { code?: string; message?: string } | undefined;
-    const detail = cause?.code ?? cause?.message ?? (netErr as Error | null)?.message ?? "";
-    console.error(`publy: cannot reach server ${server}${detail ? ` (${detail})` : ""}`);
+    const detail = netErr instanceof Error && netErr.message === "PUBLY_SERVER_RESPONSE_INVALID"
+      ? "server response was not valid confirmation JSON"
+      : "network failed or timed out";
+    console.error(`publy: cannot confirm draft delivery (${detail})`);
     console.error(`publy: check --server / config server, or run \`publy tunnel\` when a tunnel is configured (e.g. TLS failures on the public domain)`);
     console.error(`publy: outcome UNKNOWN — the draft may already exist. Query before retrying: publy publish-result ${idempotencyKey}`);
     agentFailure("unknown", "NETWORK_OUTCOME_UNKNOWN", 5, idempotencyKey);
@@ -781,8 +803,12 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
   const { res, body } = result;
   if (!res.ok) {
-    console.error(`publy: publish failed (${res.status}) ${body.code ?? ""}: ${body.message ?? "unknown error"}`);
-    agentFailure(res.status >= 500 ? "unknown" : "rejected", body.code ?? "SERVER_REJECTED", 5, idempotencyKey);
+    // Remote error message bodies are untrusted and may include secrets.
+    // Only emit a bounded, machine-safe server error code.
+    const code = typeof body.code === "string" && /^[A-Z0-9_]{1,64}$/.test(body.code)
+      ? body.code : "SERVER_REJECTED";
+    console.error(`publy: draft API returned HTTP ${res.status} (${code})`);
+    agentFailure(res.status >= 500 ? "unknown" : "rejected", code, 5, idempotencyKey);
     return;
   }
 
