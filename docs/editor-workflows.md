@@ -71,8 +71,10 @@ SVG/math conversion failures and remote/data images that cannot be uploaded
 all block `publish` with exit code 4 **before** any draft request. Use
 `check` for a private local problem report and `preview` for a prominent
 on-page warning banner. Save external images into the original note's
-media folder. A browser *opening* a preview may still load remote image
-links; `check` itself does not fetch them.
+media folder. The local HTML preview applies a restrictive browser Content Security Policy:
+remote images, scripts and connections are blocked while embedded local
+images display; explicit user navigation to a link is still a separate
+browser action. `check` itself does not fetch remote resources.
 
 ## Commercial-grade universal workflow (target, not already shipped)
 
