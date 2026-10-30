@@ -119,6 +119,20 @@ try {
     assert.equal(fs.statSync(typoraPreviewPath).mode & 0o077, 0, "local image preview is private");
   }
 
+  // The raw HTML export path must uphold the same "never alter the
+  // original Typora file" guarantee as the HTML preview.
+  const renderOut = path.join(dir, "rendered.html");
+  const renderWith = (...args) => spawnSync(process.execPath,
+    [entrypoint, "render", typoraFile, "--out", ...args],
+    { encoding: "utf8", timeout: 25000 });
+  const firstRender = renderWith(renderOut);
+  assert.equal(firstRender.status, 0, firstRender.stderr);
+  assert.ok(fs.readFileSync(renderOut, "utf8").includes("attachment://"));
+  assert.equal(renderWith(renderOut).status, 2, "existing exported HTML needs explicit confirmation");
+  assert.equal(renderWith(renderOut, "--force").status, 0);
+  assert.equal(renderWith(typoraFile, "--force").status, 2, "raw rendering cannot overwrite .md");
+  assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource);
+
   // Default previews are generated into isolated random temp folders, not a
   // guessable shared timestamp path. --no-open is safe for automated review.
   const ephemeral = spawnSync(process.execPath, [entrypoint, "preview", typoraFile, "--no-open"],
