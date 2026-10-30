@@ -2,7 +2,7 @@
 
 [简体中文](editor-workflows.zh-CN.md) · English
 
-**Product decision (2026-10-30): Publy is editor-independent.** The writer
+**Product decision (2026-10-30): Typora and Obsidian share one Markdown-to-WeChat workflow.** The writer
 keeps their original file and preferred editor. Publy owns review, WeChat
 formatting and explicit **draft** delivery, not the act of writing. The product
 must earn a subscription through reliable hosted delivery and recovery, not
@@ -14,10 +14,10 @@ preview.
 | Writing source | Intake | Readiness |
 | --- | --- | --- |
 | Typora | Open an existing `.md` / `.markdown` file in Publy CLI | Standard Markdown images and local `typora-root-url` support; no Typora plugin required |
-| VS Code / VSCodium, Zettlr, MarkText, Vim/Emacs, plain files | The same file path | Standard Markdown plus image references relative to the file |
+| Other programs that save standard Markdown | Generic file input only | No editor-specific integration, validation or support commitment |
 | Obsidian | Existing plugin or file path from CLI | Obsidian-style embeds; Community Directory three-file installation still blocked by #12 |
-| Notion, Feishu/Lark, Yuque, Word/WPS, Google Docs | **Future:** reviewed Markdown export/import | No direct connectors, no fidelity or formatting claim today |
-| Browser paste, mobile share or URL import | **Future:** a safe import surface | Not implemented; do not claim one-click support |
+| Notion, Feishu/Lark, Yuque, Word/WPS, Google Docs | **Out of scope** | No product integration or connector planned |
+| Browser paste, mobile share or URL import | **Out of scope** | Not a planned publishing feature |
 
 A file-based editor that can save compatible Markdown is an input, **not**
 a tested endorsement or supported proprietary plugin.
@@ -109,7 +109,7 @@ restorable backups, live status and quotas, reconciliation, cancellation,
 refunds and accessible support. Commerce/Permit is the server authority.
 No hosted checkout before merchant and operational gates pass.
 
-**P3 — format/connector expansion:** import-only adapters after fixtures
+**P3 — format/connector expansion:** import-only adapters only if necessary to validate Typora/Obsidian compatibility; fixtures must
 prove headings, local/remote images, captions, tables, code, maths, callouts,
 references and cover identity. Prioritize actual requests and measured demand,
 not a speculative plugin for each editor.
