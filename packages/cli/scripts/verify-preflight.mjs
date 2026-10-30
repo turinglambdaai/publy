@@ -47,6 +47,51 @@ try {
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
 
+  // Agent contract discovery is offline and truthful: don't claim JSON
+  // support for operations that still only offer human-oriented output.
+  const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
+    { encoding: "utf8", timeout: 40000, env: { ...process.env,
+      PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
+  const capabilities = cli("capabilities", "--json");
+  assert.equal(capabilities.status, 0, capabilities.stderr);
+  const contract = JSON.parse(capabilities.stdout);
+  assert.equal(contract.schemaVersion, 1);
+  assert.equal(contract.destination, "wechat-official-account-drafts");
+  assert.equal(contract.noPublicSend, true);
+  assert.deepEqual(contract.firstClassEditors, ["Typora", "Obsidian"]);
+  assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
+  assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
+  assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
+
+  const agentPreview = cli("preview", goodPath, "--json");
+  assert.equal(agentPreview.status, 0, agentPreview.stderr);
+  const previewReport = JSON.parse(agentPreview.stdout);
+  assert.equal(previewReport.schemaVersion, 1);
+  assert.equal(previewReport.kind, "local-preview");
+  assert.equal(previewReport.ok, true);
+  assert.equal(previewReport.type, "article");
+  assert.equal(previewReport.networkUsed, false);
+  assert.equal(previewReport.submitted, false);
+  assert.ok(fs.existsSync(previewReport.output));
+  assert.ok(previewReport.output.endsWith(".html"));
+  assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource);
+  fs.rmSync(path.dirname(previewReport.output), { recursive: true, force: true });
+
+  const badPreview = cli("preview", path.join(project, "absent.md"), "--json");
+  assert.equal(badPreview.status, 2, badPreview.stderr);
+  const badReport = JSON.parse(badPreview.stdout);
+  assert.equal(badReport.ok, false);
+  assert.equal(badReport.code, "INPUT_INVALID");
+  assert.equal(badReport.submitted, false);
+
+  const missingPublishServer = cli("publish", goodPath, "--json");
+  assert.equal(missingPublishServer.status, 5, missingPublishServer.stderr);
+  const missingServerReport = JSON.parse(missingPublishServer.stdout);
+  assert.equal(missingServerReport.ok, false);
+  assert.equal(missingServerReport.status, "not_submitted");
+  assert.equal(missingServerReport.code, "SERVER_NOT_CONFIGURED");
+  assert.equal(missingServerReport.submitted, false);
+
   // CLI browser preview must resolve local images without any remote server,
   // leaving both the source and the original asset file untouched.
   const previewPath = path.join(dir, "offline-preview.html");
@@ -224,6 +269,28 @@ try {
   assert.ok(brokenHtml.includes("missing/other.jpg"), "preview should list the missing image path");
   assert.match(brokenHtml, /Preview only, not submitted/);
 
+  const blockedJson = spawnSync(process.execPath,
+    [entrypoint, "publish", missingPath, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(blockedJson.status, 4, blockedJson.stderr);
+  const mediaFailure = JSON.parse(blockedJson.stdout);
+  assert.equal(mediaFailure.kind, "publish-result");
+  assert.equal(mediaFailure.status, "not_submitted");
+  assert.equal(mediaFailure.code, "MEDIA_NOT_READY");
+  assert.equal(mediaFailure.submitted, false);
+  assert.ok(mediaFailure.problems.some((p) => p.includes("missing/other.jpg")));
+
+  const unknownJson = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(unknownJson.status, 5, unknownJson.stderr);
+  const uncertain = JSON.parse(unknownJson.stdout);
+  assert.equal(uncertain.kind, "publish-result");
+  assert.equal(uncertain.status, "unknown");
+  assert.equal(uncertain.submitted, null);
+  assert.match(uncertain.requestId, /^[a-f0-9]{32}$/);
+  assert.ok(!uncertain.problems?.length);
+  
   // The local cover is valid, but external body images still must NOT
   // silently enter an incomplete WeChat draft. Query tokens are private.
   const remoteOnly = path.join(project, "external-body-image.md");
@@ -251,6 +318,16 @@ try {
 
   // The image-post preview must show the same rasterized PNG cards as
   // publish, never ordinary Markdown/HTML pretending to be card output.
+  const cardAgentOut = path.join(dir, "agent-cards.html");
+  const cardAgentPreview = cli("preview", cardsPath, "--json", "--out", cardAgentOut);
+  assert.equal(cardAgentPreview.status, 0, cardAgentPreview.stderr);
+  const cardAgent = JSON.parse(cardAgentPreview.stdout);
+  assert.equal(cardAgent.kind, "local-preview");
+  assert.equal(cardAgent.type, "image_post");
+  assert.equal(cardAgent.mode, "cards");
+  assert.equal(cardAgent.submitted, false);
+  assert.ok(fs.readFileSync(cardAgent.output, "utf8").includes("data:image/png;base64,"));
+
   const cardsOut = path.join(dir, "card-review.html");
   const cardPreview = spawnSync(process.execPath,
     [entrypoint, "preview", cardsPath, "--no-open", "--out", cardsOut],
