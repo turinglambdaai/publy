@@ -111,6 +111,24 @@ try {
   assert.ok(!aliases.stdout.includes(secretKey));
   assert.ok(!aliases.stdout.includes(appId));
 
+  // Read-only server queries are scriptable even when no credentials have
+  // been configured. One JSON object on stdout, no raw URL exception trace.
+  for (const [args, kind] of [
+    [["jobs", "list", "--json"], "jobs"],
+    [["history", "--json"], "history"],
+    [["quota", "--json"], "quota"],
+  ]) {
+    const result = cli(...args);
+    assert.equal(result.status, 5, args.join(" ") + " " + result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.ok, false);
+    assert.equal(report.kind, kind);
+    assert.equal(report.code, "SERVER_NOT_CONFIGURED");
+    assert.ok(!result.stderr.includes("TypeError:"));
+    assert.ok(!result.stderr.includes("ERR_INVALID_URL"));
+  }
+
   const missingPublishServer = cli("publish", goodPath, "--json");
   assert.equal(missingPublishServer.status, 5, missingPublishServer.stderr);
   const missingServerReport = JSON.parse(missingPublishServer.stdout);
