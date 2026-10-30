@@ -53,7 +53,7 @@ export function resolveEditorAsset(reference: string, opts: EditorAssetOptions):
     }
     // A Typora root must refer to a local filesystem path. Never fetch HTTP
     // URLs or allow a remote URL to influence local file resolution.
-    if (root && !/^[a-z][a-z0-9+.-]*:/i.test(root)) {
+    if (root && !/^(?:https?:|data:|ftp:)/i.test(root)) {
       const rootDir = path.resolve(opts.baseDir, root);
       const relative = source.replace(/^\/+/, "");
       const target = path.resolve(rootDir, relative);
