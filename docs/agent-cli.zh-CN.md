@@ -14,7 +14,7 @@ English：[agent-cli.md](agent-cli.md) · 简体中文
 
 ```bash
 publy capabilities --json
-publy config set api_key '$PUBLY_API_KEY' --json
+publy config set api_key "$PUBLY_API_KEY" --json
 publy check "D:/Notes/article.md" --json
 publy preview "D:/Notes/article.md" --json
 publy render "D:/Notes/article.md" --json
