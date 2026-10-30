@@ -45,7 +45,8 @@ cover: assets/cover.jpg
 
 ```sh
 publy check "D:/Notes/article.md" --json   # 离线检查图片和卡片结构
-publy preview "D:/Notes/article.md"      # 本地预览，无需服务器
+publy preview "D:/Notes/article.md"      # 本地预览内嵌图片，无需服务器
+publy preview "D:/Notes/article.md" --no-open --out preview.html  # 不自动打开，便于复核
 # 配好有权限的自托管服务，确认目标账号后再执行：
 publy publish "D:/Notes/article.md" --account 我的公众号
 ```
