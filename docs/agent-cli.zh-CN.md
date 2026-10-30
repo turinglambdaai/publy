@@ -16,6 +16,8 @@ English：[agent-cli.md](agent-cli.md) · 简体中文
 publy capabilities --json
 publy check "D:/Notes/article.md" --json
 publy preview "D:/Notes/article.md" --json
+publy render "D:/Notes/article.md" --json
+publy theme ls --json
 publy account list --json
 publy quota --json
 publy jobs list --json
@@ -24,7 +26,7 @@ publy history --json
 
 `capabilities --json` 离线返回版本化的能力列表：每个命令是否
 支持 JSON、是否可能联网、是否修改本地文件或真正创建草稿。
-**没有声明 JSON 的命令不要凭猜测去解析：**目前 `render`、`config set`、`theme` 等老命令仍偏向人类使用。
+**没有声明 JSON 的命令不要凭猜测去解析：**目前 `config set`、`theme preview` 等剩余命令仍偏向人类使用。
 `jobs cancel <jobId> --json` 和 `jobs retry <jobId> --json` 现在能返回
 结构化回执，但**属于修改服务器状态的操作，Agent 必须先获得用户授权**。
 若网络异常而结果不确定，返回 `status:"unknown"` 与原 jobId，
@@ -45,6 +47,20 @@ publy history --json
 预览调用实际 PNG 引擎，且不静默联网下载字体。有缺图等阻塞时
 仍可生成带错误提示的预览，但 JSON 中 `ok:false`、退出码为 4。
 检查和预览都不会创建公众号草稿。
+
+## HTML 导出与离线主题列表
+
+`render --json` 生成权限受限的本地 HTML，stdout 返回
+`kind:"html-render"`、文件路径 `output`、附件数量、素材问题
+以及 `containsAttachmentReferences`。注意与 `preview` 不同：
+**这里是公众号渲染原始 HTML**，可能仍包含 `attachment://`
+占位链接，必须经过正式图片上传流程，不能当成已可直接粘贴的成品。
+原文绝不修改；覆盖现有 HTML 必须显式 `--force`。
+命令不会上传文章，也不会创建公众号草稿。
+
+`theme ls --json` 仅列出随程序内置的文章/卡片主题，
+返回 `source:"bundled"`、`networkUsed:false`，不会访问主题仓库；
+旧的人工 `theme ls` 则可能联网查询注册表。
 
 ## 发布和“结果未知”的恢复
 
