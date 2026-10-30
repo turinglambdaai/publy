@@ -27,13 +27,16 @@ CLI、默认主题、Obsidian 和自托管按现行许可证保持免费。公�
 
 ```bash
 publy config set server https://your-server.example
-publy config set api_key <key>
+publy config set api_key "$PUBLY_API_KEY"   # POSIX shell：先设置此环境变量
 publy account add me --app-id wx... --theme claude
-publy preview article.md     # 先看效果
-publy publish article.md     # 排版稿进公众号草稿箱
+publy check article.md
+publy preview article.md     # 仅本地预览，不创建草稿
+publy publish article.md --account me  # 明确授权后才执行：只创建公众号草稿，不群发
 ```
 
-图片消息：frontmatter 写 `mode: cards`，正文按 `## cover` / `## point` / `## list` / `## ending` 分节，`publy card post.md --preview` 出拼版预览，`publy publish post.md` 发布。
+PowerShell 请将 `"$PUBLY_API_KEY"` 换成 `"$env:PUBLY_API_KEY"`。CLI 会通过命令行参数接收密钥，可能被本机进程查看；不要把真实凭据粘贴到共享日志中。
+
+图片消息：frontmatter 写 `mode: cards`，正文按 `## cover` / `## point` / `## list` / `## ending` 分节，`publy card post.md --preview` 出拼版预览，`publy publish post.md --account me` 投递到草稿箱（需先确认账号与授权）。
 
 完整手册：[English manual](docs/guide.md) · [中文手册](docs/guide.zh-CN.md) · 主题画廊：[themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
 
