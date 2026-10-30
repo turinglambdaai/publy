@@ -74,6 +74,24 @@ try {
   assert.equal(JSON.parse(badJsonSet.stdout).code, "CONFIG_KEY_INVALID");
   assert.ok(!badJsonSet.stdout.includes(jsonSecret));
 
+  // A malformed existing config can include credentials in the parser error.
+  // JSON mode must return only a stable code, never parser excerpts.
+  const malformedConfig = path.join(dir, "malformed-agent-config.json");
+  const malformedSecret = "do-not-echo-this-parser-token";
+  fs.writeFileSync(malformedConfig, '{"api_key":"' + malformedSecret + '",');
+  const malformedSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "server", "https://example.invalid", "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig },
+    });
+  assert.equal(malformedSet.status, 1);
+  assert.equal(JSON.parse(malformedSet.stdout).code, "CONFIG_INVALID");
+  assert.ok(!malformedSet.stdout.includes(malformedSecret));
+  assert.ok(!malformedSet.stderr.includes(malformedSecret));
+  assert.equal(fs.readFileSync(malformedConfig, "utf8"),
+    '{"api_key":"' + malformedSecret + '",',
+    "failed config update must preserve the original file");
+
   // Agent contract discovery is offline and truthful: don't claim JSON
   // support for operations that still only offer human-oriented output.
   const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
