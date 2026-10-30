@@ -113,7 +113,7 @@ try {
   assert.equal(brokenPreview.status, 0, brokenPreview.stderr);
   const brokenHtml = fs.readFileSync(brokenPreviewPath, "utf8");
   assert.match(brokenHtml, /Missing draft media/);
-  assert.match(brokenHtml, /missing\\/other\\.jpg/);
+  assert.ok(brokenHtml.includes("missing/other.jpg"), "preview should list the missing image path");
   assert.match(brokenHtml, /Preview only, not submitted/);
 
   const cardsPath = path.join(project, "cards.md");
