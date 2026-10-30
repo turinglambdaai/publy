@@ -289,12 +289,19 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
     // WeChat media API by this renderer. Never silently ship draft HTML that
     // only happens to reference them. Do not log their full source URL:
     // signed image URLs may contain user credentials/query tokens.
-    if (/^https?:/i.test(src)) {
+    // A warning alone is insufficient: leaving a remote src in the HTML
+    // causes Obsidian/browser previews to fetch it (including signed URLs),
+    // even when the draft submission is later blocked. Treat protocol-relative
+    // and control-character-obfuscated HTTP(S) URLs as remote as well.
+    const normalizedSrc = src.trim().replace(/[\u0000-\u0020]/g, "");
+    if (/^https?:/i.test(normalizedSrc) || /^[/\\]{2}/.test(normalizedSrc)) {
       warnings.push("Remote image not uploaded: save the HTTP(S) image locally before publishing.");
+      $(el).removeAttr("src");
       return;
     }
-    if (/^data:/i.test(src)) {
+    if (/^data:/i.test(normalizedSrc)) {
       warnings.push("Embedded data image not uploaded: save the image as a local file before publishing.");
+      $(el).removeAttr("src");
       return;
     }
     // Preserve relative directories from Typora and other Markdown files
