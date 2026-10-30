@@ -15,6 +15,7 @@ On a development machine with Racket installed:
 ```sh
 raco test racket/publy-cli-prototype-test.rkt
 raco exe -o publy-racket-probe racket/publy-cli-prototype.rkt
+mkdir -p dist
 raco distribute dist/publy-racket-probe publy-racket-probe
 ```
 
