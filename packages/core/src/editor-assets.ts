@@ -78,10 +78,13 @@ export function resolveEditorAsset(reference: string, opts: EditorAssetOptions):
       const target = path.resolve(rootDir, relative);
       // Treat this as a rooted namespace, not arbitrary path traversal.
       if (target.startsWith(rootDir + path.sep) || target === rootDir) {
-        const file = existingFile(target);
-        if (file) return file;
+        return existingFile(target);
       }
     }
+    // A document declares this root for slash-prefixed Typora images.
+    // Missing files or invalid/remote roots MUST NOT fall back to an
+    // unrelated OS-absolute file with the same pathname.
+    return null;
   }
 
   if (path.isAbsolute(source)) return existingFile(source);
