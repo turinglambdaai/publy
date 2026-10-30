@@ -10,7 +10,7 @@ import { exec, execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
-import { captionToHtml, lintCards, parseCardSource, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
+import { blockingMediaWarning, captionToHtml, lintCards, parseCardSource, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
 
 const pkg = JSON.parse(
   fs.readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -105,14 +105,6 @@ function escapeHtml(s: string): string {
  * The source document remains where it is. This function makes no server
  * calls, and does not publish or alter the source file.
  */
-/** Publishing an incomplete image set is worse than a failed local check.
- * Share these rules between `check` and `publish` so that a warning cannot
- * become a silently incomplete draft in the official account.
- */
-function blockingAssetWarning(warning: string): boolean {
-  return /^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered|Remote image not uploaded:|Embedded data image not uploaded:)/i.test(warning);
-}
-
 async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> {
   const source = path.resolve(file);
   const problems: string[] = [];
@@ -161,7 +153,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
         attachments = rendered.attachments.length;
         warnings.push(...rendered.warnings);
         for (const warning of rendered.warnings) {
-          if (blockingAssetWarning(warning)) {
+          if (blockingMediaWarning(warning)) {
             problems.push(warning);
           }
         }
@@ -248,7 +240,7 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   for (const w of result.warnings) console.error(`warn: ${w}`);
   const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
   const preview = inlineLocalPreviewImages(result.html, result.attachments);
-  const warnings = result.warnings.filter(blockingAssetWarning);
+  const warnings = result.warnings.filter(blockingMediaWarning);
   // The preview is intentionally allowed to show incomplete sources: that is
   // how a writer fixes a note. But missing media must be VISIBLE in the page,
   // not only hidden in terminal stderr while a seemingly finished article
@@ -480,7 +472,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   // --cover wins over stale source frontmatter, so suppress that one warning
   // only after the override file has been validated in the article branch.
   const blockers = warnings.filter((warning) =>
-    blockingAssetWarning(warning) &&
+    blockingMediaWarning(warning) &&
     !(type === "article" && opts.cover && warning.startsWith("Cover not found:")),
   );
   // The official WeChat draft requires a usable cover for articles and at

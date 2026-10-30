@@ -45,6 +45,7 @@ if (!communityOnly) {
 // --- stubs -------------------------------------------------------------------
 
 const calls = [];
+let lastSubmitted = null;
 
 class Component {
   replaceChildren(...children) { this.children = children; }
@@ -142,7 +143,13 @@ class Modal {
   onClose() {}
 }
 class TFile { path = ""; }
-const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, sanitizeHTMLToDom: (html) => ({ html }), requestUrl: async () => ({ json: {}, status: 200 }) };
+const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, sanitizeHTMLToDom: (html) => ({ html }), requestUrl: async (req) => {
+  if (req.method === "POST" && new URL(req.url).pathname === "/v1/publish") {
+    lastSubmitted = JSON.parse(req.body);
+    calls.push("request:publish");
+  }
+  return { json: {}, status: 200 };
+} };
 
 // intercept module loading for obsidian/electron
 const origLoad = Module._load;
@@ -195,5 +202,77 @@ await inst.publishCurrentNote();
 if (!calls.some((c) => c.includes("WeChat drafts"))) fail("publish success toast missing — calls: " + calls.join(" | "));
 const dupes = calls.filter((c) => c.includes("WeChat drafts")).length;
 if (dupes !== 1) fail("unexpected publish toast count: " + dupes);
+
+// The broken image may be previewed locally, but must never be submitted.
+const beforeBlocked = calls.filter((c) => c === "request:publish").length;
+const brokenAsset = "publy-verified-missing-image-unique-20261030.png";
+app.vaultContentByPath["samples/broken-media.md"] = "# Broken media\n\n![unavailable](" + brokenAsset + ")";
+app.workspace.activeFile = {
+  path: "samples/broken-media.md", basename: "broken-media", extension: "md",
+  stat: { mtime: Date.now() },
+};
+await inst.publishCurrentNote();
+if (calls.filter((c) => c === "request:publish").length !== beforeBlocked) {
+  fail("missing image must block WeChat draft submission");
+}
+if (!calls.some((c) => c.includes("素材未就绪") || c.includes("Media not ready"))) {
+  fail("missing-image user-facing error not displayed");
+}
+
+// Frontmatter cover need not be present in the article body. A valid PNG
+// must be attached to the submitted draft without reopening a cover picker.
+const coverPath = path.join(os.tmpdir(), "publy-cover-synthetic-" + process.pid + ".png");
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+fs.writeFileSync(coverPath, png);
+try {
+  app.vaultContentByPath["samples/standalone-cover.md"] =
+    "---\ntitle: Explicit Cover\ncover: " + coverPath.split(path.sep).join("/") + "\n---\n\n# Article with a cover not in body";
+  app.workspace.activeFile = {
+    path: "samples/standalone-cover.md", basename: "standalone-cover", extension: "md",
+    stat: { mtime: Date.now() },
+  };
+  const previousPostCount = calls.filter((c) => c === "request:publish").length;
+  await inst.publishCurrentNote();
+  if (calls.filter((c) => c === "request:publish").length !== previousPostCount + 1) {
+    fail("frontmatter-only cover did not submit a draft");
+  }
+  if (!lastSubmitted?.cover) fail("frontmatter-only cover not selected");
+  const matched = lastSubmitted.images?.find((img) => img.name === lastSubmitted.cover);
+  if (!matched || matched.contentType !== "image/png" || matched.data !== png.toString("base64")) {
+    fail("frontmatter-only cover was not included as exact PNG material");
+  }
+} finally {
+  fs.rmSync(coverPath, { force: true });
+}
+
+// Card mode must submit generated PNGs, not just preview them. A successful
+// toast with an empty images array would be a severe user-facing regression.
+app.workspace.activeFile = {
+  path: "samples/card-sample.md", basename: "card-sample", extension: "md",
+  stat: { mtime: Date.now() },
+};
+const beforeCards = calls.filter((c) => c === "request:publish").length;
+await inst.publishCurrentNote();
+if (calls.filter((c) => c === "request:publish").length !== beforeCards + 1) {
+  fail("card mode did not send the WeChat image-post draft");
+}
+if (lastSubmitted?.type !== "image_post" || lastSubmitted.images?.length !== 4) {
+  fail("card draft must include four PNG files and image_post type");
+}
+if (lastSubmitted.cover !== lastSubmitted.images[0].name) {
+  fail("card draft cover should be the first generated card");
+}
+for (const img of lastSubmitted.images) {
+  if (img.contentType !== "image/png" || !Buffer.from(img.data, "base64").subarray(0, 4)
+    .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]))) {
+    fail("card image-post payload includes a non-PNG attachment");
+  }
+}
+if (!lastSubmitted.html?.includes("Publy")) {
+  fail("card image post caption was not included in draft HTML");
+}
 
 console.log(`PASS — ${communityOnly ? "simulated Community Directory three-file install" : "side-loaded development bundle"}: onload, article preview, card deck preview, history, publish`);
