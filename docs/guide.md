@@ -42,6 +42,7 @@ types and clean-install goals, see [editor-independent workflows](editor-workflo
 
 ```sh
 publy preview article.md
+publy preview article.md --no-open --out preview.html  # offline, images embedded
 publy render article.md -o out.html
 publy theme ls
 publy theme preview claude
