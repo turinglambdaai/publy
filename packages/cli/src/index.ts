@@ -528,7 +528,7 @@ async function cmdConfigSet(key: string, value: string, opts: { json?: boolean }
       // Do not echo values: URLs can contain credentials and api_key is secret.
       console.log(JSON.stringify({
         schemaVersion: 1, kind: "config-set", ok, code,
-        key, networkUsed: false, submitted: false,
+        ...(allowed.includes(key) ? { key } : {}), networkUsed: false, submitted: false,
       }));
     }
   };
