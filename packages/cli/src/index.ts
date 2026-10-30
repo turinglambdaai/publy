@@ -259,38 +259,72 @@ function inlineLocalPreviewImages(html: string, attachments: readonly { name: st
 }
 
 async function cmdPreview(file: string, opts: Record<string, any>): Promise<void> {
-  const raw = fs.readFileSync(file, "utf-8");
-  const result = renderMarkdown(raw, {
-    theme: opts.theme,
-    customThemePath: opts.customTheme,
-    highlight: opts.highlight,
-    mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
-    baseDir: path.dirname(path.resolve(file)),
-    footnote: opts.footnote !== false,
-    footer: opts.footer,
-  });
-  for (const w of result.warnings) console.error(`warn: ${w}`);
+  const source = path.resolve(file);
+  const raw = fs.readFileSync(source, "utf8");
+  const parsed = parseSource(raw);
+  const cardsMode = publishType(parsed.meta) === "image_post" && parsed.meta.mode?.toLowerCase() === "cards";
   const out = opts.out
     ? path.resolve(opts.out)
     : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
-  if (!allowHtmlOutput(file, out, opts.force === true)) return;
-  const preview = inlineLocalPreviewImages(result.html, result.attachments);
-  const warnings = result.warnings.filter(blockingMediaWarning);
-  // The preview is intentionally allowed to show incomplete sources: that is
-  // how a writer fixes a note. But missing media must be VISIBLE in the page,
-  // not only hidden in terminal stderr while a seemingly finished article
-  // appears underneath.
-  const warningPanel = warnings.length
-    ? `<section role="alert" style="border:2px solid #b42318;background:#fff4f2;color:#7a271a;padding:14px 18px;border-radius:10px;margin:12px 0"><strong>草稿素材未就绪 / Missing draft media</strong><p style="margin:8px 0">下列问题必须在投递公众号草稿前修复：</p><ul>${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></section>`
+  if (!allowHtmlOutput(source, out, opts.force === true)) return;
+
+  let preview = "";
+  let problems: string[] = [];
+  const title = parsed.meta.title || path.basename(source, path.extname(source));
+
+  if (cardsMode) {
+    // Use the real PNG card engine, not the article HTML renderer. Keep the
+    // author's original note unchanged and never ask a CDN for fonts.
+    const tempCards = fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-cards-"));
+    try {
+      const cards = await renderCards(raw, {
+        theme: opts.theme,
+        outDir: tempCards,
+        offline: true,
+      });
+      problems = [...cards.lint.problems, ...cards.warnings];
+      for (const warning of problems) console.error("warn: " + warning);
+      const images = cards.cards.map((card, i) => {
+        const bytes = fs.readFileSync(card.file).toString("base64");
+        return `<figure style="margin:0 0 18px;text-align:center"><img alt="Card ${i + 1}: ${escapeHtml(card.kind)}" src="data:image/png;base64,${bytes}" style="width:100%;max-width:405px;height:auto;border-radius:10px"><figcaption style="font:12px system-ui;color:#555;margin-top:5px">#${i + 1} / ${cards.cards.length} — ${escapeHtml(card.kind)}</figcaption></figure>`;
+      }).join("");
+      const tags = Array.isArray(cards.meta.tags)
+        ? cards.meta.tags.map((tag) => "#" + String(tag)).join(" ")
+        : "";
+      preview = `<section aria-label="WeChat image post card preview"><h2 style="font:600 16px system-ui">公众号图片消息 · ${cards.cards.length} 张卡片</h2>${images}<div style="padding:14px;border:1px solid #ccc;border-radius:8px;background:#fff;white-space:pre-wrap;overflow-wrap:anywhere"><strong>图片消息配文</strong><p>${escapeHtml(cards.caption)}${tags ? "\\n\\n" + escapeHtml(tags) : ""}</p></div></section>`;
+    } catch {
+      // Some glyphs are not in the bundled subset. The offline preview must
+      // fail visibly, not secretly download fonts or claim readiness.
+      console.error("publy: offline card preview unavailable; check bundled fonts or unsupported glyphs. No draft was sent.");
+      process.exitCode = 3;
+      return;
+    } finally {
+      fs.rmSync(tempCards, { recursive: true, force: true });
+    }
+  } else {
+    const result = renderMarkdown(raw, {
+      theme: opts.theme,
+      customThemePath: opts.customTheme,
+      highlight: opts.highlight,
+      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
+      baseDir: path.dirname(source),
+      footnote: opts.footnote !== false,
+      footer: opts.footer,
+    });
+    for (const warning of result.warnings) console.error("warn: " + warning);
+    preview = inlineLocalPreviewImages(result.html, result.attachments);
+    problems = result.warnings.filter(blockingMediaWarning);
+  }
+
+  const warningPanel = problems.length
+    ? `<section role="alert" style="border:2px solid #b42318;background:#fff4f2;color:#7a271a;padding:14px 18px;border-radius:10px;margin:12px 0"><strong>草稿素材未就绪 / Draft not ready</strong><p>下列问题必须在投递公众号草稿前修复：</p><ul>${problems.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></section>`
     : "";
   const localHeader = `<header style="padding:12px 16px;background:#e7f1ff;border-radius:9px;color:#123962;margin-bottom:12px;font:14px system-ui,sans-serif" role="status"><strong>Publy · 本地预览</strong> — 此内容尚未投递到公众号草稿箱 / Preview only, not submitted</header>`;
   fs.writeFileSync(
     out,
-    `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><main style="max-width:578px;width:100%;padding:14px 8px;box-sizing:border-box">${localHeader}${warningPanel}${preview}</main></body></html>`,
+    `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><main style="max-width:578px;width:100%;padding:14px 8px;box-sizing:border-box">${localHeader}${warningPanel}${preview}</main></body></html>`,
     { flag: opts.force ? "w" : "wx", mode: 0o600 },
   );
-  // Existing HTML files may have previously had permissive access rights.
-  // Keep the copied local note and image bytes private on Unix.
   if (process.platform !== "win32") fs.chmodSync(out, 0o600);
   console.error(`preview → ${out}`);
   if (opts.open !== false) openInBrowser(out);
