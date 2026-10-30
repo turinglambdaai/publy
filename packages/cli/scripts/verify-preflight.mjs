@@ -48,8 +48,8 @@ try {
     { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
   assert.equal(preview.status, 0, preview.stderr);
   const previewHtml = fs.readFileSync(previewPath, "utf8");
-  assert.match(previewHtml, /data:image\\/jpeg;base64,/);
-  assert.doesNotMatch(previewHtml, /attachment:\\/\\/photo\\.jpg/);
+  assert.ok(previewHtml.includes("data:image/jpeg;base64,"), "local image must be embedded");
+  assert.ok(!previewHtml.includes("attachment://photo.jpg"), "local attachment reference must be replaced");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preview must not alter source");
 
   const missingPath = path.join(project, "broken.md");
