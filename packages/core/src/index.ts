@@ -5,6 +5,7 @@ export * from "./svg.js";
 export * from "./png.js";
 export * from "./render.js";
 export * from "./media-validation.js";
+export * from "./draft-identity.js";
 export * from "./fonts.js";
 export * from "./cards.js";
 export * from "./crop.js";
