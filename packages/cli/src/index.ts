@@ -51,8 +51,11 @@ export function loadConfig(): CliConfig {
 }
 
 function saveConfig(config: CliConfig): void {
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
+  // API keys may be stored here. The default umask is not a safe guarantee,
+  // and an existing config may already be readable by other local users.
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
+  if (process.platform !== "win32") fs.chmodSync(CONFIG_PATH, 0o600);
 }
 
 function resolveMediaDirs(explicit: string[], config: CliConfig): string[] {
