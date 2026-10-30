@@ -125,10 +125,10 @@ test("renderMarkdown removes active raw HTML and unsafe URL attributes", () => {
     '<img src="data:image/svg+xml;base64,PHN2Zz4=" alt="blocked svg">',
     '<p><strong>allowed bold</strong> content</p>',
     '[Safe link](https://example.test/safe)',
-  ].join("\\n\\n");
+  ].join("\n\n");
   const result = renderMarkdown(source, { theme: "claude", footnote: false });
-  assert.doesNotMatch(result.html, /<script|<iframe|<svg|evil-marker|onclick|onerror|javascript:|data:image\\/svg\\+xml|background-image:\\s*url/i);
+  assert.doesNotMatch(result.html, /<script|<iframe|<svg|evil-marker|onclick|onerror|javascript:|data:image\/svg\+xml|background-image:\s*url/i);
   assert.match(result.html, /allowed bold/);
   assert.match(result.html, /visible span/);
-  assert.match(result.html, /https:\\/\\/example\\.test\\/safe/);
+  assert.match(result.html, /https:\/\/example\.test\/safe/);
 });
