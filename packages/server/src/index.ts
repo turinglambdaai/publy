@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import type { FastifyError, FastifyReply } from "fastify";
 import type { JobInfo, JobStatus, PublishRequest, PublishResponse, PublishResultInfo } from "@publy/shared";
-import { publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
+import { draftIdempotencyKey, publishToWechat, MaterialCache, TokenManager, WechatError, PublishError, checkWechatCredential, type AccountCredential } from "@publy/core";
 import { Store, PLAN_LIMITS, PRICES, monthKey, type AccountRow, type Plan, type UserRow } from "./store.js";
 import { createProvider } from "./payments.js";
 import { purchasePage } from "./pages.js";
@@ -303,6 +303,9 @@ export function buildApp(config: ServerConfig) {
       if (job.idempotencyKey) {
         const hit = idempotency[job.idempotencyKey];
         if (hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS) {
+          if (!sameDraftIdentity(hit, body, job.userId)) {
+            throw new PublishError("IDEMPOTENCY_CONFLICT", "This request key belongs to a different WeChat draft.");
+          }
           job.status = "done";
           job.result = { mediaId: hit.mediaId, deduped: true, account: body.account, title: body.title, requestId: job.idempotencyKey };
           job.error = undefined;
@@ -317,7 +320,7 @@ export function buildApp(config: ServerConfig) {
       job.result = result;
       job.error = undefined;
       if (job.idempotencyKey) {
-        idempotency[job.idempotencyKey] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: job.userId };
+        idempotency[job.idempotencyKey] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: job.userId, requestFingerprint: draftIdempotencyKey(body) };
         saveIdempotency();
       }
       if (!caller.admin) store.incrementUsage(caller.user.id);
@@ -358,6 +361,8 @@ export function buildApp(config: ServerConfig) {
     type: string;
     /** owning user (null = admin) — records are not visible across callers */
     userId: string | null;
+    /** verified request body hash; absent only in pre-v2 persisted records */
+    requestFingerprint?: string;
   }
 
   const idempotencyFile = path.join(dataDir, "idempotency.json");
@@ -373,6 +378,15 @@ export function buildApp(config: ServerConfig) {
     const hit = idempotency[key];
     return hit && Date.now() - hit.at < IDEMPOTENCY_TTL_MS ? hit : null;
   };
+
+  const sameDraftIdentity = (hit: IdempotencyRecord, body: PublishRequest, owner: string | null): boolean =>
+    hit.userId === owner &&
+    hit.account === body.account &&
+    hit.title === body.title &&
+    hit.type === body.type &&
+    // Prior server files lack this field. Keep legacy same-account/title/type
+    // retries readable, while all newly persisted records verify full bytes.
+    (!hit.requestFingerprint || hit.requestFingerprint === draftIdempotencyKey(body));
 
   // test seams: multiuser/readiness tests drive quota and idempotency state
   // directly instead of making real WeChat calls
@@ -593,7 +607,13 @@ export function buildApp(config: ServerConfig) {
     const key = body.idempotencyKey;
     if (key) {
       const hit = idempotencyFresh(key);
-      if (hit && (caller.admin || hit.userId === caller.user.id)) {
+      if (hit) {
+        if (!sameDraftIdentity(hit, body, caller.admin ? null : caller.user.id)) {
+          return reply.code(409).send({
+            code: "IDEMPOTENCY_CONFLICT",
+            message: "This request key belongs to a different WeChat draft; inspect the previous result and use a new request identity for changed content.",
+          });
+        }
         // re-delivery of a request whose draft already landed — the response
         // names the original destination so a caller that lost the first
         // response can reconcile instead of sending a second publish (#7)
@@ -614,6 +634,12 @@ export function buildApp(config: ServerConfig) {
           (j) => j.idempotencyKey === key && (j.status === "pending" || j.status === "running" || j.status === "interrupted") && (caller.admin ? j.userId === null : j.userId === caller.user.id),
         );
         if (twin) {
+          if (draftIdempotencyKey(twin.body) !== draftIdempotencyKey(body)) {
+            return reply.code(409).send({
+              code: "IDEMPOTENCY_CONFLICT",
+              message: "This request key already schedules a different WeChat draft.",
+            });
+          }
           audit({ event: "deduped", key, account: body.account, title: body.title, jobId: twin.id, admission: true });
           return { jobId: twin.id, runAt: new Date(twin.runAt).toISOString(), scheduled: true, deduped: true };
         }
@@ -633,7 +659,7 @@ export function buildApp(config: ServerConfig) {
       }
       const result: PublishResponse = await publishToWechat(body, cred, tokens, materials);
       if (key) {
-        idempotency[key] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: caller.admin ? null : caller.user.id };
+        idempotency[key] = { mediaId: result.mediaId, at: Date.now(), account: body.account, title: body.title, type: body.type, userId: caller.admin ? null : caller.user.id, requestFingerprint: draftIdempotencyKey(body) };
         saveIdempotency();
       }
       if (!caller.admin) store.incrementUsage(caller.user.id);
