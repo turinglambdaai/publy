@@ -21,6 +21,7 @@ const run = (file) => {
   try { report = JSON.parse(result.stdout.trim()); }
   catch { throw new Error("Invalid JSON preflight output: " + result.stdout + " / " + result.stderr); }
   assert.equal(report.kind, "local-preflight");
+  assert.equal(report.schemaVersion, 1);
   assert.equal(report.networkUsed, false);
   assert.equal(report.submitted, false);
   return { code: result.status, report };
@@ -177,6 +178,22 @@ try {
   assert.equal(damagedPreviewReport.networkUsed, false);
   assert.equal(damagedPreviewReport.submitted, false);
   fs.rmSync(path.dirname(damagedPreviewReport.output), { recursive: true, force: true });
+
+  // An invalid endpoint is a configuration error, not an instruction for
+  // the Agent to retry an unreachable server.
+  const invalidEndpoint = path.join(dir, "invalid-agent-server.json");
+  fs.writeFileSync(invalidEndpoint, JSON.stringify({
+    server: "file:///private/agent-local-note", api_key: privateConfigToken,
+  }));
+  const badEndpointQuery = spawnSync(process.execPath,
+    [entrypoint, "jobs", "list", "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: invalidEndpoint } });
+  assert.equal(badEndpointQuery.status, 1, badEndpointQuery.stderr);
+  const badEndpointReport = JSON.parse(badEndpointQuery.stdout);
+  assert.equal(badEndpointReport.code, "CONFIG_INVALID");
+  assert.ok(!badEndpointQuery.stdout.includes(privateConfigToken));
+  assert.ok(!badEndpointQuery.stderr.includes(privateConfigToken));
 
   const unreachableConfig = path.join(dir, "unreachable-agent-server.json");
   fs.writeFileSync(unreachableConfig, JSON.stringify({
