@@ -117,6 +117,7 @@ try {
     [["jobs", "list", "--json"], "jobs"],
     [["history", "--json"], "history"],
     [["quota", "--json"], "quota"],
+    [["publish-result", "test-identity", "--json"], "publish-result"],
   ]) {
     const result = cli(...args);
     assert.equal(result.status, 5, args.join(" ") + " " + result.stderr);
