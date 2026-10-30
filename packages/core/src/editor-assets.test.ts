@@ -184,3 +184,16 @@ test("Typora local file URI image becomes a media attachment, not an unsafe clic
     assert.ok(!link.html.includes("file:///"), "local file links may not be exported as clickable hrefs");
   });
 });
+
+test("file URLs decode reserved filename characters exactly once", () => {
+  fixture((root) => {
+    const actual = put(root, "assets/Photo #1 (100%).png");
+    const uri = pathToFileURL(actual).href;
+    assert.match(uri, /%23/);
+    assert.match(uri, /%25/);
+    assert.equal(resolveEditorAsset(uri, { baseDir: root }), actual);
+    const rendered = renderMarkdown(`![photo](${uri.replace(/\(/g, "%28").replace(/\)/g, "%29")})`, { baseDir: root });
+    assert.deepEqual(rendered.warnings, []);
+    assert.deepEqual(rendered.attachments.map((a) => a.path), [actual]);
+  });
+});
