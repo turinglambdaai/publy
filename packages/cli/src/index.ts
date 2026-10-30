@@ -780,6 +780,44 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 // ---------------------------------------------------------------------------
 
 
+/** Read-only Agent requests must never throw a raw URL/fetch/JSON error
+ * to stdout. Remote status codes are not private diagnostics, while server
+ * URLs, API keys and response bodies may contain sensitive information.
+ */
+async function readServerJson(
+  config: CliConfig,
+  endpoint: string,
+): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; code: string }> {
+  if (!config.server || !config.api_key) return { ok: false, code: "SERVER_NOT_CONFIGURED" };
+  try {
+    const response = await fetch(new URL(endpoint, config.server).toString(), {
+      headers: { "x-api-key": config.api_key },
+    });
+    if (!response.ok) {
+      return { ok: false, code: response.status === 401 || response.status === 403
+        ? "UNAUTHORIZED" : "SERVER_REJECTED" };
+    }
+    const body: unknown = await response.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return { ok: false, code: "INVALID_SERVER_RESPONSE" };
+    }
+    return { ok: true, body: body as Record<string, unknown> };
+  } catch {
+    return { ok: false, code: "SERVER_UNREACHABLE" };
+  }
+}
+function reportReadFailure(
+  opts: { json?: boolean },
+  kind: string,
+  code: string,
+): void {
+  if (opts.json) console.log(JSON.stringify({
+    schemaVersion: 1, ok: false, kind, code,
+  }));
+  console.error("publy: " + code);
+  process.exitCode = 5;
+}
+
 /** Exact invocation examples for machine clients. These are examples,
  * not an argv parser or a claim that every legacy command supports JSON.
  */
@@ -975,13 +1013,9 @@ export function createProgram(): Command {
 
   const jobsCmd = program.command("jobs").description("manage scheduled publishes");
   jobsCmd.command("list").description("list scheduled jobs").option("--json", "machine-readable job list").action(async (opts: {json?: boolean}) => {
-    const config = loadConfig();
-    const res = await fetch(new URL("/v1/jobs", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-    const body = (await res.json()) as { jobs?: JobInfo[] } & { code?: string; message?: string };
-    if (!res.ok) {
-      console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
-      process.exit(5);
-    }
+    const reply = await readServerJson(loadConfig(), "/v1/jobs");
+    if (!reply.ok) { reportReadFailure(opts, "jobs", reply.code); return; }
+    const body = reply.body as { jobs?: JobInfo[] };
     if (opts.json) {
       console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "jobs", jobs: body.jobs ?? [] }));
     } else {
@@ -1033,13 +1067,9 @@ export function createProgram(): Command {
     .option("-n, --limit <count>", "number of entries", "20")
     .option("--json", "machine-readable history")
     .action(async (opts) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/history?limit=${encodeURIComponent(opts.limit)}`, config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-      const body = (await res.json()) as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] } & { code?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}`);
-        process.exit(5);
-      }
+      const reply = await readServerJson(loadConfig(), `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
+      if (!reply.ok) { reportReadFailure(opts, "history", reply.code); return; }
+      const body = reply.body as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] };
       if (opts.json) {
         console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "history", history: body.history ?? [] }));
       } else {
@@ -1055,12 +1085,9 @@ export function createProgram(): Command {
     .option("--json", "machine-readable quota")
     .action(async (opts: {json?: boolean}) => {
       const config = loadConfig();
-      const res = await fetch(new URL("/v1/quota", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-      const body = (await res.json()) as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean } & { code?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}`);
-        process.exit(5);
-      }
+      const reply = await readServerJson(config, "/v1/quota");
+      if (!reply.ok) { reportReadFailure(opts, "quota", reply.code); return; }
+      const body = reply.body as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean };
       if (opts.json) {
         console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "quota", ...body }));
       } else if (body.unlimited) {
