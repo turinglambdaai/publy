@@ -132,3 +132,16 @@ test("renderMarkdown removes active raw HTML and unsafe URL attributes", () => {
   assert.match(result.html, /visible span/);
   assert.match(result.html, /https:\/\/example\.test\/safe/);
 });
+
+test("remote and data images are explicitly reported without leaking signed URLs", () => {
+  const secret = "private-query-token-do-not-log";
+  const raw = [
+    "![remote](https://example.test/asset.png?token=" + secret + ")",
+    "![embedded](data:image/png;base64,aGVsbG8=)",
+  ].join("\n\n");
+  const rendered = renderMarkdown(raw, { theme: "claude" });
+  assert.ok(rendered.warnings.some((w) => w.startsWith("Remote image not uploaded:")));
+  assert.ok(rendered.warnings.some((w) => w.startsWith("Embedded data image not uploaded:")));
+  assert.ok(!rendered.warnings.join(" ").includes(secret), "private signed URL leaked into warning");
+  assert.equal(rendered.attachments.length, 0, "no remote image was silently uploaded");
+});
