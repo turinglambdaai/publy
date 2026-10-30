@@ -7,6 +7,7 @@ import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting
 import {
   renderMarkdown,
   renderCards,
+  captionToHtml,
   blockingMediaWarning,
   setPngRenderer,
   setFontDir,
@@ -1498,49 +1499,72 @@ export default class PublyPlugin extends Plugin {
       if (problems.length) {
         throw new Error(t("mediaNotReady") + " " + problems.join("; "));
       }
-      payloadAttachments = rendered.attachments.map((a) => ({
-        name: a.name,
-        data: fs.readFileSync(a.path).toString("base64"),
-        contentType: a.contentType,
-      }));
-      if (rendered.type === "image_post" && !payloadAttachments.length) {
-        throw new Error(t("mediaNotReady") + " No local images found for image post.");
-      }
-      if (rendered.cover) {
-        const existing = rendered.attachments.find((a) => a.path === rendered.cover);
-        if (existing) {
-          coverName = existing.name;
-          explicitCover = true;
-        } else {
-          // A frontmatter cover is not required to appear in article body
-          // Markdown. Carry it explicitly into the media payload, instead
-          // of discarding it and surprising the author with a picker.
-          const ext = path.extname(rendered.cover).toLowerCase();
-          const data = fs.readFileSync(rendered.cover);
-          const png = ext === ".png" &&
-            data.length > 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-          const jpg = (ext === ".jpg" || ext === ".jpeg") &&
-            data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
-          if (!png && !jpg) {
-            throw new Error(t("coverFormatBad", { path: path.basename(rendered.cover) }));
-          }
-          const basename = path.basename(rendered.cover);
-          const name = payloadAttachments.some((attachment) => attachment.name === basename)
-            ? `cover-${crypto.createHash("sha256").update(data).digest("hex").slice(0,12)}${ext}`
-            : basename;
-          payloadAttachments.unshift({
-            name,
-            data: data.toString("base64"),
-            contentType: png ? "image/png" : "image/jpeg",
-          });
-          coverName = name;
-          explicitCover = true;
-        }
-      }
-      html = rendered.html;
       type = rendered.type;
       title = rendered.title || f.basename;
       author = rendered.meta.author;
+      if (type === "image_post" && rendered.meta.mode?.toLowerCase() === "cards") {
+        if (!this.wasmOk) throw new Error(t("wasmDown"));
+        const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-publish-cards-"));
+        try {
+          const cards = await renderCards(raw, { outDir });
+          if (!cards.lint.ok) {
+            throw new Error(t("mediaNotReady") + " " + cards.lint.problems.join("; "));
+          }
+          payloadAttachments = cards.cards.map((card) => ({
+            name: card.name,
+            data: fs.readFileSync(card.file).toString("base64"),
+            contentType: "image/png",
+          }));
+          if (!payloadAttachments.length) {
+            throw new Error(t("mediaNotReady") + " No cards were generated.");
+          }
+          html = captionToHtml(cards.caption);
+          coverName = payloadAttachments[0].name;
+        } finally {
+          // The POST payload now owns the base64 data. Avoid leaving copies
+          // of private note content in the system temp directory.
+          fs.rmSync(outDir, { recursive: true, force: true });
+        }
+      } else {
+        payloadAttachments = rendered.attachments.map((a) => ({
+          name: a.name,
+          data: fs.readFileSync(a.path).toString("base64"),
+          contentType: a.contentType,
+        }));
+        if (type === "image_post" && !payloadAttachments.length) {
+          throw new Error(t("mediaNotReady") + " No local images found for image post.");
+        }
+        if (rendered.cover) {
+          const existing = rendered.attachments.find((a) => a.path === rendered.cover);
+          if (existing) {
+            coverName = existing.name;
+            explicitCover = true;
+          } else {
+            // The cover can be a standalone frontmatter image, not in body.
+            const ext = path.extname(rendered.cover).toLowerCase();
+            const data = fs.readFileSync(rendered.cover);
+            const png = ext === ".png" &&
+              data.length > 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            const jpg = (ext === ".jpg" || ext === ".jpeg") &&
+              data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+            if (!png && !jpg) {
+              throw new Error(t("coverFormatBad", { path: path.basename(rendered.cover) }));
+            }
+            const basename = path.basename(rendered.cover);
+            const name = payloadAttachments.some((attachment) => attachment.name === basename)
+              ? `cover-${crypto.createHash("sha256").update(data).digest("hex").slice(0,12)}${ext}`
+              : basename;
+            payloadAttachments.unshift({
+              name,
+              data: data.toString("base64"),
+              contentType: png ? "image/png" : "image/jpeg",
+            });
+            coverName = name;
+            explicitCover = true;
+          }
+        }
+        html = rendered.html;
+      }
     } catch (err) {
       progress.hide();
       this.status("");
