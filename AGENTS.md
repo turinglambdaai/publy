@@ -32,6 +32,21 @@ reliability and recovery**, never for moving content between editors.
 Public checkout stays closed until Commerce/Permit and merchant gates pass.
 Preserve the family authorization decision `2026-10-auth-1`.
 
+## Scope discipline for an independent developer (2026-10-30)
+
+WeChat Official Account **draft delivery is the only current publishing
+destination**. Never interpret editor-neutral input support as authorization
+to add multi-platform publishing, scheduling or a generalized provider
+framework. Zhihu is a research-only candidate requiring verified official
+authorization and clear paying-user evidence; WordPress, Ghost and other
+destinations remain deferred. Preserve the focused customer journey:
+existing Markdown -> reliable local preflight/preview -> explicit selected
+WeChat draft -> verified/reconciled status. Normative product decision:
+[English](docs/platform-strategy.md) ·
+[中文](docs/platform-strategy.zh-CN.md). Do not change this scope due to
+a passing thought or a technically easy API without a separate user-backed
+decision. Current hosted checkout remains closed.
+
 ## racket/ — Racket components (2026-10-13)
 
 `racket/publy-ws.rkt` is the live-events WebSocket gateway. It sits NEXT TO

@@ -27,6 +27,23 @@ Typora、VS Code、MarkText、Zettlr 与普通 Markdown 应当走同一条检查
 真正商业级的门槛是安装、缺图提示、预览一致性、无障碍、恢复与可验证的
 草稿回执，而不是支持的插件数量或界面截图。
 
+## Destination scope decision / 发布目的地范围决定 — 2026-10-30
+
+Publy remains **WeChat Official Account draft-first**, not a generic
+multi-platform distribution suite. Accepting Typora/Obsidian/other saved
+Markdown as **inputs** is in scope; new publishing **destinations** are
+separate products with security/permission/maintenance costs. Zhihu is only
+a candidate for post-P0 research and lawful authorized access, not an
+active publishing adapter. Defer WordPress/Ghost/DEV and all other
+destinations until proven user demand and readiness. Do not build a
+speculative provider framework or mass-posting UI. Normative scope:
+[English](platform-strategy.md) · [中文](platform-strategy.zh-CN.md).
+
+Publy 以**微信公众号草稿为唯一当前正式输出**。兼容 Typora、Obsidian
+等多种 Markdown **输入**，不等于做所有平台的**发布**。
+知乎只列为需要官方权限与真实用户需求验证的下一阶段候选，其他目的地
+暂缓；不为假想场景预建庞大的适配器框架。完整决定见上方中英文文档。
+
 ## Current scope and interaction decision / 当前范围与交互决定
 
 The primary task is **write in the existing editor → local preview/copy → explicitly deliver to the selected WeChat account's drafts → inspect the result**. The CLI and Obsidian plugin are both clients; neither an additional desktop editor nor a theme marketplace is required for this loop. Local rendering/copy and the self-host path remain free under the existing licence. Public hosted service is not yet open for sale.
