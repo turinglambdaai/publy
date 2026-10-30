@@ -128,3 +128,26 @@ export function loadSatoriFontsWithFallback(specs: FontSpec[]): Promise<{ name: 
   }
   return loadSatoriFonts(specs);
 }
+
+
+/**
+ * Offline-only font loader for local preview/check. It must not call
+ * ensureFontFile(), which can download from external CDNs. If a required
+ * bundled subset is missing, fail visibly instead of accessing the network.
+ */
+export async function loadSatoriFontsOffline(
+  specs: FontSpec[],
+): Promise<{ name: string; data: Buffer; weight: 400 | 700; style: "normal" | "italic" }[]> {
+  const dir = bundledSubsetDir();
+  if (!dir) throw new Error("Bundled card fonts unavailable for offline preview");
+  return Promise.all(specs.map(async (spec) => {
+    const file = path.join(dir, spec.weight === 700 ? "NotoSansSC-subset-Bold.otf" : "NotoSansSC-subset-Regular.otf");
+    if (!fs.existsSync(file)) throw new Error("Bundled card font missing for offline preview");
+    return {
+      name: spec.family,
+      data: await fs.promises.readFile(file),
+      weight: spec.weight,
+      style: "normal" as const,
+    };
+  }));
+}

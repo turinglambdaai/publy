@@ -48,6 +48,15 @@ signed remote-image URL query parameters in its errors. A missing article
 cover (unless a local body image exists) or an image post with no images
 also blocks draft submission before any network request.
 
+**Image-card preview:** for a Markdown file with `mode: cards`,
+`publy preview post.md --no-open --out cards-review.html` renders actual
+PNG cards with the same rasterizer used for a WeChat image-post draft.
+It embeds their bytes into a local HTML preview with the caption, displays
+lint problems, and does **not** contact a server or download fonts. If the
+bundled subset cannot display the text, it fails locally rather than
+silently fetching a remote font or pretending the draft is ready.
+The source document remains unchanged; no draft is submitted.
+
 ## Preview before delivery
 
 ```sh

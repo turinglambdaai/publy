@@ -7,7 +7,7 @@ import path from "node:path";
 import satori from "satori";
 import { Resvg } from "@resvg/resvg-js";
 import { parseSource, type SourceMeta } from "./frontmatter.js";
-import { NOTO_SANS_SC, loadSatoriFonts, loadSatoriFontsWithFallback, type FontSpec } from "./fonts.js";
+import { NOTO_SANS_SC, loadSatoriFonts, loadSatoriFontsOffline, loadSatoriFontsWithFallback, type FontSpec } from "./fonts.js";
 import { svgToPng } from "./svg.js";
 
 export const CARD_WIDTH = 1080;
@@ -255,6 +255,8 @@ export async function renderCards(
     theme?: string;
     outDir?: string;
     fontFiles?: string[];
+    /** never download fonts for an offline preview; use bundled subsets only */
+    offline?: boolean;
     /** progressive rendering: fires as soon as each card is rasterized */
     onCard?: (card: CardOutput, index: number, total: number) => void;
   } = {},
@@ -275,11 +277,15 @@ export async function renderCards(
     let svg: string;
     try {
       // fast path: bundled GB2312 subset (no network)
-      const fonts = opts.fontFiles?.length ? await loadSatoriFonts(fontSpecs) : await loadSatoriFontsWithFallback(fontSpecs);
+      const fonts = opts.fontFiles?.length
+        ? await loadSatoriFonts(fontSpecs)
+        : opts.offline
+          ? await loadSatoriFontsOffline(fontSpecs)
+          : await loadSatoriFontsWithFallback(fontSpecs);
       svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts });
     } catch (err) {
       // glyph outside the subset: retry once with the full downloadable fonts
-      if (!opts.fontFiles?.length) {
+      if (!opts.fontFiles?.length && !opts.offline) {
         const full = await loadSatoriFonts(fontSpecs);
         svg = await satori(el as never, { width: CARD_WIDTH, height: CARD_HEIGHT, fonts: full });
       } else {
@@ -302,19 +308,26 @@ export async function renderCards(
   return { cards, caption, meta, warnings, lint: lintCards(sections, caption) };
 }
 
+// Browser previews can contain untrusted, imported or AI-generated Markdown
+// captions. HTML-escape all user strings and stop active network/script loads.
+function escapePreviewText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 /** Contact-sheet preview: one HTML file with all cards + simulated caption. */
 export function buildPreviewHtml(result: RenderCardsResult): string {
   const imgs = result.cards
     .map((c) => {
       const b64 = fs.readFileSync(c.file).toString("base64");
-      return `<figure><img src="data:image/png;base64,${b64}"/><figcaption>${c.kind}</figcaption></figure>`;
+      return `<figure><img src="data:image/png;base64,${b64}" alt="Card: ${escapePreviewText(c.kind)}"/><figcaption>${escapePreviewText(c.kind)}</figcaption></figure>`;
     })
     .join("\n");
-  const tags = Array.isArray(result.meta.tags) ? result.meta.tags.map((t) => `#${t}`).join(" ") : "";
+  const tags = Array.isArray(result.meta.tags) ? result.meta.tags.map((t) => `#${escapePreviewText(String(t))}`).join(" ") : "";
   const problems = result.lint.ok
     ? `<p class="ok">lint 通过 · ${result.cards.length} 张卡片</p>`
-    : `<p class="bad">lint 未通过：</p><ul>${result.lint.problems.map((p) => `<li>${p}</li>`).join("")}</ul>`;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Publy card preview</title><style>
+    : `<p class="bad">lint 未通过：</p><ul>${result.lint.problems.map((p) => `<li>${escapePreviewText(p)}</li>`).join("")}</ul>`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><title>Publy card preview</title><style>
     body{background:#222;color:#eee;font-family:sans-serif;padding:24px}
     h1{font-size:18px}
     .deck{display:flex;flex-wrap:wrap;gap:16px}
@@ -327,7 +340,7 @@ export function buildPreviewHtml(result: RenderCardsResult): string {
   <h1>Publy 卡片预览 — ${result.cards.length} 张 · 3:4 · ${CARD_WIDTH}×${CARD_HEIGHT}</h1>
   <div class="deck">${imgs}</div>
   <div class="caption"><strong>caption（${result.caption.length} 字）</strong>
-${result.caption}${tags ? `\n\n${tags}` : ""}</div>
+${escapePreviewText(result.caption)}${tags ? `\n\n${tags}` : ""}</div>
   ${problems}
   </body></html>`;
 }
