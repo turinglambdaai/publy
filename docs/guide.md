@@ -119,6 +119,15 @@ publy history
 
 Client configuration is stored under `~/.publy/config.json`; it contains the server API key. `media_dirs` configures local attachment lookup. Keep credentials out of screenshots and logs. Never send AppSecret through an issue or place it in a URL.
 
+**Request identity (CLI + Obsidian):** Publy now hashes the complete submitted
+draft, including target account, full HTML, media bytes, cover and schedule.
+Different text of the same length or an updated image with the same filename
+must never be silently treated as a duplicate. An unchanged retry reuses its
+key. The key identifies the *submission*, not a promise of exactly-once
+delivery: a crash after remote acceptance but before durable recording can
+still leave an **unknown** outcome; reconcile using the original key and
+inspect the official drafts before deciding whether to retry.
+
 Confirm the returned outcome in WeChat’s draft backend. On a network failure the outcome is unknown, not failed: query the original request identity with `publy publish-result <key>` (the failed command prints it), then retry the same request — the server reconciles against its idempotency record instead of duplicating. Interrupted scheduled jobs never auto-rerun after a restart; re-admit them with `publy jobs retry <id>`. The source has token caching, media deduplication, bounded duplicate handling and queued jobs, but their existence is not a qualified guarantee of exactly-once delivery or crash recovery. Scheduling via `--at` needs a running, recovered server and its actual timezone/queue semantics checked first.
 
 ## Obsidian
