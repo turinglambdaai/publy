@@ -84,6 +84,27 @@ try {
   assert.equal(badReport.code, "INPUT_INVALID");
   assert.equal(badReport.submitted, false);
 
+  // An Agent needs account aliases to choose a destination, never the
+  // WeChat App ID or the caller's long-lived API key.
+  const aliasesConfig = path.join(dir, "agent-aliases.json");
+  const secretKey = "test-secret-must-not-enter-machine-output";
+  const appId = "wx-internal-app-id";
+  fs.writeFileSync(aliasesConfig, JSON.stringify({
+    server: "https://invalid.local", api_key: secretKey,
+    default_account: "Work",
+    accounts: [{ name: "Work", app_id: appId, theme: "claude" }],
+  }));
+  const aliases = spawnSync(process.execPath,
+    [entrypoint, "account", "list", "--json"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: aliasesConfig } });
+  assert.equal(aliases.status, 0, aliases.stderr);
+  const aliasData = JSON.parse(aliases.stdout);
+  assert.equal(aliasData.kind, "accounts");
+  assert.equal(aliasData.defaultAccount, "Work");
+  assert.deepEqual(aliasData.accounts, [{ name: "Work", theme: "claude" }]);
+  assert.ok(!aliases.stdout.includes(secretKey));
+  assert.ok(!aliases.stdout.includes(appId));
+
   const missingPublishServer = cli("publish", goodPath, "--json");
   assert.equal(missingPublishServer.status, 5, missingPublishServer.stderr);
   const missingServerReport = JSON.parse(missingPublishServer.stdout);
