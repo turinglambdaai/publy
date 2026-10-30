@@ -49,7 +49,8 @@ Developer-built CLI (no public one-click installer yet):
 
 ```sh
 publy check "/path/to/draft.md" --json    # offline, checks assets and card lint
-publy preview "/path/to/draft.md"       # local preview, no server required
+publy preview "/path/to/draft.md"       # offline preview embeds local images
+publy preview "/path/to/draft.md" --no-open --out preview.html  # for review/automation
 # Only after confirming the destination, and configuring an approved self-hosted server:
 publy publish "/path/to/draft.md" --account my-account
 ```
