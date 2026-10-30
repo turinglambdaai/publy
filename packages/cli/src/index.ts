@@ -105,6 +105,14 @@ function escapeHtml(s: string): string {
  * The source document remains where it is. This function makes no server
  * calls, and does not publish or alter the source file.
  */
+/** Publishing an incomplete image set is worse than a failed local check.
+ * Share these rules between `check` and `publish` so that a warning cannot
+ * become a silently incomplete draft in the official account.
+ */
+function blockingAssetWarning(warning: string): boolean {
+  return /^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered)/i.test(warning);
+}
+
 async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> {
   const source = path.resolve(file);
   const problems: string[] = [];
@@ -153,7 +161,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
         attachments = rendered.attachments.length;
         warnings.push(...rendered.warnings);
         for (const warning of rendered.warnings) {
-          if (/^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered)/i.test(warning)) {
+          if (blockingAssetWarning(warning)) {
             problems.push(warning);
           }
         }
@@ -457,6 +465,21 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     html = rendered.html;
     images = attachments;
     title = opts.title || rendered.title || path.basename(file, path.extname(file));
+  }
+
+  // Failed image references must stop before any HTTP POST. An explicit
+  // --cover wins over stale source frontmatter, so suppress that one warning
+  // only after the override file has been validated in the article branch.
+  const blockers = warnings.filter((warning) =>
+    blockingAssetWarning(warning) &&
+    !(type === "article" && opts.cover && warning.startsWith("Cover not found:")),
+  );
+  if (blockers.length) {
+    console.error("publy: draft NOT sent; fix the missing or unrenderable media first:");
+    for (const warning of blockers) console.error("fix: " + warning);
+    console.error("Run `publy check <file>` to inspect local problems, then preview before retrying.");
+    process.exitCode = 4;
+    return;
   }
 
   const accountName = opts.account ?? config.default_account ?? config.accounts?.[0]?.name;
