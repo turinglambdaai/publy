@@ -615,13 +615,13 @@ server.listen(0, "127.0.0.1", () => {
   assert.equal(corruptResult.submitted, false);
   assert.ok(!corruptPublish.stderr.includes(secret), "private frontmatter should not leak to stderr");
   assert.ok(!corruptPublish.stdout.includes(secret), "private frontmatter should not leak to JSON");
-  const invalidPreview = cli("preview", corrupt, "--json");
-  assert.equal(invalidPreview.status, 3);
-  const invalidPreviewJson = JSON.parse(invalidPreview.stdout);
-  assert.equal(invalidPreviewJson.code, "RENDER_FAILED");
-  assert.equal(invalidPreviewJson.submitted, false);
-  assert.ok(!invalidPreview.stdout.includes(secret));
-  assert.ok(!invalidPreview.stderr.includes(secret));
+  const corruptPreviewRun = cli("preview", corrupt, "--json");
+  assert.equal(corruptPreviewRun.status, 3);
+  const corruptPreviewReport = JSON.parse(corruptPreviewRun.stdout);
+  assert.equal(corruptPreviewReport.code, "RENDER_FAILED");
+  assert.equal(corruptPreviewReport.submitted, false);
+  assert.ok(!corruptPreviewRun.stdout.includes(secret));
+  assert.ok(!corruptPreviewRun.stderr.includes(secret));
 
   const malformed = run(corrupt);
   assert.equal(malformed.code, 3);
