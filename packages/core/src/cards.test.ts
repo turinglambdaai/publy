@@ -85,3 +85,28 @@ test("renderCards produces real PNGs via bundled subset fonts", async () => {
   }
   assert.equal(result.lint.ok, true);
 });
+
+test("offline card preview renders real PNGs without fetching remote fonts", async () => {
+  const fs = await import("node:fs");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-card-offline-"));
+  const originalFetch = globalThis.fetch;
+  let attempted = false;
+  globalThis.fetch = (async () => {
+    attempted = true;
+    throw new Error("offline preview must not fetch a font");
+  }) as typeof fetch;
+  try {
+    const result = await renderCards(SAMPLE, { outDir, offline: true });
+    assert.equal(result.cards.length, 3);
+    assert.equal(attempted, false);
+    for (const card of result.cards) {
+      const png = fs.readFileSync(card.file);
+      assert.deepEqual([...png.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
+});
