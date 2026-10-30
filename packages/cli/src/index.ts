@@ -645,6 +645,13 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     agentFailure("not_submitted", "SERVER_NOT_CONFIGURED", 5);
     return;
   }
+  // A saved default is useful for local UI convenience, but must never
+  // silently choose the destination of a real draft-creating operation.
+  if (typeof opts.account !== "string" || !opts.account.trim()) {
+    console.error("publy: specify --account <name> to choose the draft destination explicitly.");
+    agentFailure("not_submitted", "ACCOUNT_REQUIRED", 1);
+    return;
+  }
 
   let raw: string;
   let parsed: ReturnType<typeof parseSource>;
@@ -775,12 +782,7 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     return;
   }
 
-  const accountName = opts.account ?? config.default_account ?? config.accounts?.[0]?.name;
-  if (!accountName) {
-    console.error("publy: no account specified (--account or default_account in config)");
-    agentFailure("not_submitted", "ACCOUNT_NOT_CONFIGURED", 1);
-    return;
-  }
+  const accountName = opts.account.trim();
   const account = config.accounts?.find((a) => a.name === accountName);
 
   // digest: explicit frontmatter, else derived from the first body paragraph
@@ -1114,9 +1116,9 @@ export function createProgram(): Command {
 
   const publishCmd = program
     .command("publish")
-    .description("Render and publish via a Publy server")
+    .description("Create a WeChat draft via a Publy server (explicit account required)")
     .argument("<file>")
-    .option("--account <name>", "target account (defaults to config)")
+    .option("--account <name>", "required target account for draft creation; never inferred")
     .option("--title <title>", "override article title")
     .option("--cover <path>", "override cover image path")
     .option("--author <name>", "override author byline")
