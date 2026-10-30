@@ -7,6 +7,7 @@ import { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting
 import {
   renderMarkdown,
   renderCards,
+  blockingMediaWarning,
   setPngRenderer,
   setFontDir,
   generateTitleCover,
@@ -129,6 +130,8 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   rendering: { zh: "Publy: 渲染中…", en: "Publy: rendering…" },
   uploading: { zh: "Publy: 上传到公众号…", en: "Publy: uploading to WeChat…" },
   renderFail: { zh: "Publy: 渲染失败 — {msg}", en: "Publy: render failed — {msg}" },
+  mediaNotReady: { zh: "素材未就绪，草稿未发送。请修复：", en: "Media not ready; draft NOT sent. Fix:" },
+  coverFormatBad: { zh: "封面必须是有效的 PNG/JPEG 图片：{path}", en: "Cover must be a valid PNG/JPEG image: {path}" },
   publishFail: { zh: "Publy: 发布失败 — {msg}", en: "Publy: publish failed — {msg}" },
   publishOk: { zh: "✅《{title}》已进公众号草稿箱（{sec} 秒）", en: "✅ [{title}] is in your WeChat drafts ({sec}s)" },
   scheduledOk: { zh: "🕒《{title}》已排期 {when} — 在「发布历史」里可取消", en: "🕒 [{title}] scheduled for {when} — cancel it in History" },
@@ -1491,15 +1494,46 @@ export default class PublyPlugin extends Plugin {
     try {
       const rendered = renderMarkdown(raw, this.renderOptions());
       for (const w of rendered.warnings) console.warn("[publy] " + w);
+      const problems = rendered.warnings.filter(blockingMediaWarning);
+      if (problems.length) {
+        throw new Error(t("mediaNotReady") + " " + problems.join("; "));
+      }
       payloadAttachments = rendered.attachments.map((a) => ({
         name: a.name,
         data: fs.readFileSync(a.path).toString("base64"),
         contentType: a.contentType,
       }));
+      if (rendered.type === "image_post" && !payloadAttachments.length) {
+        throw new Error(t("mediaNotReady") + " No local images found for image post.");
+      }
       if (rendered.cover) {
         const existing = rendered.attachments.find((a) => a.path === rendered.cover);
         if (existing) {
           coverName = existing.name;
+          explicitCover = true;
+        } else {
+          // A frontmatter cover is not required to appear in article body
+          // Markdown. Carry it explicitly into the media payload, instead
+          // of discarding it and surprising the author with a picker.
+          const ext = path.extname(rendered.cover).toLowerCase();
+          const data = fs.readFileSync(rendered.cover);
+          const png = ext === ".png" &&
+            data.length > 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+          const jpg = (ext === ".jpg" || ext === ".jpeg") &&
+            data.length > 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff;
+          if (!png && !jpg) {
+            throw new Error(t("coverFormatBad", { path: path.basename(rendered.cover) }));
+          }
+          const basename = path.basename(rendered.cover);
+          const name = payloadAttachments.some((attachment) => attachment.name === basename)
+            ? `cover-${crypto.createHash("sha256").update(data).digest("hex").slice(0,12)}${ext}`
+            : basename;
+          payloadAttachments.unshift({
+            name,
+            data: data.toString("base64"),
+            contentType: png ? "image/png" : "image/jpeg",
+          });
+          coverName = name;
           explicitCover = true;
         }
       }
