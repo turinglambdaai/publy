@@ -144,4 +144,21 @@ test("remote and data images are explicitly reported without leaking signed URLs
   assert.ok(rendered.warnings.some((w) => w.startsWith("Embedded data image not uploaded:")));
   assert.ok(!rendered.warnings.join(" ").includes(secret), "private signed URL leaked into warning");
   assert.equal(rendered.attachments.length, 0, "no remote image was silently uploaded");
+  assert.ok(!rendered.html.includes(secret), "signed remote image URL must not survive into a preview");
+  assert.doesNotMatch(rendered.html, /src=["']data:image\//i, "unsupported data images must not remain in the preview");
+});
+
+test("generated previews never load protocol-relative or disguised remote images", () => {
+  const raw = [
+    '<img src="//tracker.example.test/pixel?token=private-marker" alt="remote">',
+    '<img src="https:&#9;//tracker.example.test/obfuscated" alt="obfuscated">',
+    '<img src="\\\\tracker.example.test\\pixel" alt="backslash host">',
+    '<img src="data:image/png;base64,aGVsbG8=" alt="embedded">',
+  ].join("\n\n");
+  const result = renderMarkdown(raw, { theme: "claude" });
+  assert.ok(result.warnings.filter((w) => w.startsWith("Remote image not uploaded:")).length >= 3);
+  assert.ok(result.warnings.some((w) => w.startsWith("Embedded data image not uploaded:")));
+  assert.doesNotMatch(result.html, /tracker\.example\.test|data:image\/png|private-marker/i);
+  assert.match(result.html, /alt="remote"/);
+  assert.equal(result.attachments.length, 0);
 });
