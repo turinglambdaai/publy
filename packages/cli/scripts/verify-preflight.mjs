@@ -116,6 +116,21 @@ try {
   assert.ok(brokenHtml.includes("missing/other.jpg"), "preview should list the missing image path");
   assert.match(brokenHtml, /Preview only, not submitted/);
 
+  // The local cover is valid, but external body images still must NOT
+  // silently enter an incomplete WeChat draft. Query tokens are private.
+  const remoteOnly = path.join(project, "external-body-image.md");
+  const privateToken = "synthetic-secret-in-url";
+  fs.writeFileSync(remoteOnly,
+    "---\ncover: assets/photo.png\n---\n\n![External](https://example.test/photo.png?token=" + privateToken + ")");
+  const remoteResult = run(remoteOnly);
+  assert.equal(remoteResult.code, 4);
+  assert.ok(remoteResult.report.problems.some((w) => w.includes("Remote image not uploaded")));
+  assert.ok(!JSON.stringify(remoteResult.report).includes(privateToken));
+  const blockedRemote = publishWith(remoteOnly);
+  assert.equal(blockedRemote.status, 4, blockedRemote.stderr);
+  assert.match(blockedRemote.stderr, /Remote image not uploaded/);
+  assert.ok(!blockedRemote.stderr.includes(privateToken), "credential URL must not appear in diagnostics");
+
   const cardsPath = path.join(project, "cards.md");
   fs.writeFileSync(cardsPath,
     "---\nmode: cards\ncaption: synthetic test\n---\n\n## cover\nTitle\n\n## point\nDetail\n\n## ending\nThanks");
