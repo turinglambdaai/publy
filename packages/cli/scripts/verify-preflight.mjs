@@ -250,6 +250,13 @@ try {
   const blockedNoCover = publishWith(noCoverArticle);
   assert.equal(blockedNoCover.status, 4, blockedNoCover.stderr);
   assert.match(blockedNoCover.stderr, /Missing cover:/);
+  const noCoverReview = cli("preview", noCoverArticle, "--json");
+  assert.equal(noCoverReview.status, 4, noCoverReview.stderr);
+  const noCoverJson = JSON.parse(noCoverReview.stdout);
+  assert.equal(noCoverJson.ok, false);
+  assert.equal(noCoverJson.submitted, false);
+  assert.ok(noCoverJson.problems.some((p) => p.startsWith("Missing cover:")));
+  fs.rmSync(path.dirname(noCoverJson.output), { recursive: true, force: true });
 
   const emptyImagePost = path.join(project, "empty-image-post.md");
   fs.writeFileSync(emptyImagePost, "---\ntype: image\n---\n\nJust some words");
@@ -363,6 +370,16 @@ try {
   const secret = "synthetic-secret-marker-do-not-print";
   const corrupt = path.join(project, "malformed.md");
   fs.writeFileSync(corrupt, "---\nprivate_key: " + secret + "\nunsupported: [broken\n---\n# hi");
+  const corruptPublish = spawnSync(process.execPath,
+    [entrypoint, "publish", corrupt, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(corruptPublish.status, 2, corruptPublish.stderr);
+  const corruptResult = JSON.parse(corruptPublish.stdout);
+  assert.equal(corruptResult.code, "INPUT_INVALID");
+  assert.equal(corruptResult.submitted, false);
+  assert.ok(!corruptPublish.stderr.includes(secret), "private frontmatter should not leak to stderr");
+  assert.ok(!corruptPublish.stdout.includes(secret), "private frontmatter should not leak to JSON");
+
   const malformed = run(corrupt);
   assert.equal(malformed.code, 3);
   assert.equal(malformed.report.ok, false);
