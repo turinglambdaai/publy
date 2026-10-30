@@ -130,6 +130,68 @@ try {
     assert.ok(!result.stderr.includes("ERR_INVALID_URL"));
   }
 
+  // A malformed configuration can contain API secrets in its parser error
+  // context. Nothing from the file should reach stdout or stderr.
+  const privateConfigToken = "private-agent-config-secret-marker";
+  const malformedConfig = path.join(dir, "malformed-agent-config.json");
+  fs.writeFileSync(malformedConfig, '{"api_key":"' + privateConfigToken + '", broken}');
+  for (const [args, kind] of [
+    [["account", "list", "--json"], "accounts"],
+    [["jobs", "list", "--json"], "jobs"],
+    [["history", "--json"], "history"],
+    [["quota", "--json"], "quota"],
+    [["publish-result", "some-id", "--json"], "publish-result"],
+  ]) {
+    const runBadConfig = spawnSync(process.execPath, [entrypoint, ...args], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig },
+    });
+    assert.equal(runBadConfig.status, 1, args.join(" ") + " " + runBadConfig.stderr);
+    const report = JSON.parse(runBadConfig.stdout);
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.kind, kind);
+    assert.equal(report.code, "CONFIG_INVALID");
+    assert.equal(report.ok, false);
+    assert.ok(!runBadConfig.stdout.includes(privateConfigToken));
+    assert.ok(!runBadConfig.stderr.includes(privateConfigToken));
+  }
+  const badCfgPublish = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath, "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+  assert.equal(badCfgPublish.status, 1);
+  const pubCfgError = JSON.parse(badCfgPublish.stdout);
+  assert.equal(pubCfgError.code, "CONFIG_INVALID");
+  assert.equal(pubCfgError.submitted, false);
+  assert.ok(!badCfgPublish.stdout.includes(privateConfigToken));
+  assert.ok(!badCfgPublish.stderr.includes(privateConfigToken));
+
+  // Local Markdown preview must still work with damaged global config:
+  // it should not require an account or a repair to private credentials.
+  const damagedPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", goodPath, "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+  assert.equal(damagedPreview.status, 0, damagedPreview.stderr);
+  const damagedPreviewReport = JSON.parse(damagedPreview.stdout);
+  assert.equal(damagedPreviewReport.networkUsed, false);
+  assert.equal(damagedPreviewReport.submitted, false);
+  fs.rmSync(path.dirname(damagedPreviewReport.output), { recursive: true, force: true });
+
+  const unreachableConfig = path.join(dir, "unreachable-agent-server.json");
+  fs.writeFileSync(unreachableConfig, JSON.stringify({
+    server: "http://127.0.0.1:9", api_key: privateConfigToken,
+  }));
+  const readUnreachable = spawnSync(process.execPath,
+    [entrypoint, "quota", "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: unreachableConfig } });
+  assert.equal(readUnreachable.status, 5);
+  const unreachableReport = JSON.parse(readUnreachable.stdout);
+  assert.equal(unreachableReport.code, "SERVER_UNREACHABLE");
+  assert.ok(!readUnreachable.stdout.includes(privateConfigToken));
+  assert.ok(!readUnreachable.stderr.includes(privateConfigToken));
+
   const missingPublishServer = cli("publish", goodPath, "--json");
   assert.equal(missingPublishServer.status, 5, missingPublishServer.stderr);
   const missingServerReport = JSON.parse(missingPublishServer.stdout);
