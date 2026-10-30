@@ -170,6 +170,13 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
 
   // 2. markdown → html fragment
   const md = new MarkdownIt({ html: true, breaks: false, highlight });
+  // Typora may write file:///... for local inserted images. MarkdownIt's
+  // default link validator bans file: for both links and images; permit the
+  // syntax at parsing time, then remove file: from ordinary <a> hrefs in the
+  // DOM sanitizer and resolve <img> to the usual local attachment pipeline.
+  const defaultValidateLink = md.validateLink.bind(md);
+  md.validateLink = (url: string): boolean =>
+    /^file:\/\/\//i.test(url) || defaultValidateLink(url);
   md.block.ruler.before("fence", "publy_math_block", mathBlockRule);
   md.inline.ruler.after("escape", "publy_math_inline", mathInlineRule);
   const bodyHtml = md.render(pre.body);
@@ -199,6 +206,10 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
     if (!scheme) return true; // relative link or vault-relative asset
     if (scheme === "http" || scheme === "https") return true;
     if (kind === "href") return scheme === "mailto";
+    // A local file:/// image is not an executable URL; it is immediately
+    // resolved into an attachment:// reference below. File links are never
+    // retained as clickable hrefs in the submitted HTML.
+    if (kind === "src" && scheme === "file") return /^file:\/\/\//i.test(schemeText);
     if (scheme === "attachment") return true;
     if (scheme === "data") {
       return /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(schemeText);
