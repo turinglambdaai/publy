@@ -54,16 +54,18 @@ export function decodeTyporaImagePath(reference: string): string {
 }
 
 export function resolveEditorAsset(reference: string, opts: EditorAssetOptions): string | null {
-  const source = decodeTyporaImagePath(reference);
-  if (!source || /^(?:https?:|data:|attachment:)/i.test(source)) return null;
-
-  if (/^file:\/\//i.test(source)) {
+  // Decode file URLs exactly once. Decoding the path first would turn %23
+  // into a URL fragment and %25 into a stray percent before fileURLToPath.
+  const raw = reference.trim();
+  if (/^file:\/\//i.test(raw)) {
     try {
-      return existingFile(fileURLToPath(source));
+      return existingFile(fileURLToPath(raw));
     } catch {
       return null;
     }
   }
+  const source = decodeTyporaImagePath(reference);
+  if (!source || /^(?:https?:|data:|attachment:)/i.test(source)) return null;
 
   if (source.startsWith("/") && typeof opts.typoraRootUrl === "string") {
     let root = opts.typoraRootUrl.trim();
