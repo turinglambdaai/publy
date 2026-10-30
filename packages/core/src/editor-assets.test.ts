@@ -192,7 +192,7 @@ test("file URLs decode reserved filename characters exactly once", () => {
     assert.match(uri, /%23/);
     assert.match(uri, /%25/);
     assert.equal(resolveEditorAsset(uri, { baseDir: root }), actual);
-    const rendered = renderMarkdown(`![photo](${uri.replace(/\\(/g, "%28").replace(/\\)/g, "%29")})`, { baseDir: root });
+    const rendered = renderMarkdown(`![photo](${uri.replace(/\(/g, "%28").replace(/\)/g, "%29")})`, { baseDir: root });
     assert.deepEqual(rendered.warnings, []);
     assert.deepEqual(rendered.attachments.map((a) => a.path), [actual]);
   });
