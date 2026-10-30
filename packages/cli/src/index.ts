@@ -373,6 +373,14 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     for (const warning of result.warnings) console.error("warn: " + warning);
     preview = inlineLocalPreviewImages(result.html, result.attachments);
     problems = result.warnings.filter(blockingMediaWarning);
+    // Preview readiness should not contradict the separate local check:
+    // WeChat articles need a cover or a body image; image posts need media.
+    if (publishType(parsed.meta) === "article" &&
+        !result.cover && result.attachments.length === 0) {
+      problems.push("Missing cover: add a local image or a cover: path before submitting a draft.");
+    } else if (publishType(parsed.meta) === "image_post" && result.attachments.length === 0) {
+      problems.push("No local images found for the image post.");
+    }
   }
 
   const warningPanel = problems.length
@@ -537,9 +545,20 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     return;
   }
 
-  const raw = fs.readFileSync(file, "utf-8");
+  let raw: string;
+  let parsed: ReturnType<typeof parseSource>;
+  try {
+    if (!/\.(?:md|markdown)$/i.test(file)) throw new Error("Unsupported file extension");
+    raw = fs.readFileSync(file, "utf8");
+    parsed = parseSource(raw);
+  } catch {
+    // YAML parser exceptions can contain excerpts of private note contents.
+    // Never put parser strings in JSON or log them as a raw exception.
+    console.error("publy: cannot read or parse Markdown source.");
+    agentFailure("not_submitted", "INPUT_INVALID", 2);
+    return;
+  }
   const baseDir = path.dirname(path.resolve(file));
-  const parsed = parseSource(raw);
   const type = publishType(parsed.meta);
 
   let html: string;
