@@ -35,6 +35,7 @@ if (fs.existsSync(path.join(distDir, "fonts"))) {
 const calls = [];
 
 class Component {
+  replaceChildren(...children) { this.children = children; }
   empty() { this.children = []; }
   createEl() { return { children: [], style: {} }; }
   appendChild() {}
@@ -48,6 +49,10 @@ class ItemView {
   async onOpen() {}
   async onClose() {}
   setHtml(html) { calls.push("view.setHtml(" + html.length + " chars)"); }
+  beginCards() { this.cards = []; calls.push("view.beginCards"); }
+  appendCard(b64) { if (typeof b64 !== "string" || b64.length === 0) throw new Error("empty rendered card"); this.cards.push(b64); }
+  finishCards(caption) { calls.push("view.setCards(" + this.cards.length + " cards)"); }
+  setPublishing(state) { calls.push("view.setPublishing:" + state); }
   setCards(cards, caption) { calls.push("view.setCards(" + cards.length + " cards)"); }
   renderMessage(text) { calls.push("view.renderMessage:" + String(text).slice(0, 40)); }
   renderLoading() { calls.push("view.renderLoading"); }
@@ -125,7 +130,7 @@ class Modal {
   onClose() {}
 }
 class TFile { path = ""; }
-const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, requestUrl: async () => ({ json: {}, status: 200 }) };
+const stub = { Plugin, ItemView, WorkspaceLeaf, Notice, PluginSettingTab, App, Setting, TFile, Modal, sanitizeHTMLToDom: (html) => ({ html }), requestUrl: async () => ({ json: {}, status: 200 }) };
 
 // intercept module loading for obsidian/electron
 const origLoad = Module._load;
@@ -158,12 +163,12 @@ if (!calls.includes("ribbon")) fail("ribbon not registered");
 if (!calls.some((c) => c.startsWith("command:"))) fail("commands not registered");
 
 // article render into the in-app preview view
-app.workspace.activeFile = { path: "samples/article-sample.md" };
+app.workspace.activeFile = { path: "samples/article-sample.md", basename: "article-sample", extension: "md" };
 await inst.previewCurrentNote(); // smart dispatch -> article
 if (!calls.some((c) => c.startsWith("view.setHtml("))) fail("article preview did not render — calls: " + calls.join(" | "));
 
 // card deck render into the in-app preview view (wasm + satori + harfbuzzjs)
-app.workspace.activeFile = { path: "samples/card-sample.md" };
+app.workspace.activeFile = { path: "samples/card-sample.md", basename: "card-sample", extension: "md" };
 await inst.previewCurrentNote(); // smart dispatch -> card deck
 if (!calls.some((c) => c.startsWith("view.setCards("))) fail("card preview did not render — calls: " + calls.join(" | "));
 
@@ -173,7 +178,7 @@ await inst.openHistory();
 if (!calls.some((c) => c.startsWith("view.renderHistory("))) fail("history did not render — calls: " + calls.join(" | "));
 
 // publish path: stub server 200s → success toast with title + duration
-app.workspace.activeFile = { path: "samples/article-sample.md", basename: "article-sample", stat: { mtime: Date.now() } };
+app.workspace.activeFile = { path: "samples/article-sample.md", basename: "article-sample", extension: "md", stat: { mtime: Date.now() } };
 await inst.publishCurrentNote();
 if (!calls.some((c) => c.includes("WeChat drafts"))) fail("publish success toast missing — calls: " + calls.join(" | "));
 const dupes = calls.filter((c) => c.includes("WeChat drafts")).length;

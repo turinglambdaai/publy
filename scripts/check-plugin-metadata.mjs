@@ -1,0 +1,29 @@
+// Keep the root Obsidian directory manifest and release metadata in sync
+// with the monorepo plugin source. This does NOT verify GitHub Release assets,
+// true 3-file directory installation, or private Obsidian review status.
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const read = (p) => JSON.parse(fs.readFileSync(path.join(root, p), "utf8"));
+const sourceManifest = read("packages/obsidian-plugin/manifest.json");
+const directoryManifest = read("manifest.json");
+const sourceVersions = read("packages/obsidian-plugin/versions.json");
+const directoryVersions = read("versions.json");
+const packageInfo = read("packages/obsidian-plugin/package.json");
+
+assert.deepEqual(directoryManifest, sourceManifest, "root manifest.json differs from plugin source");
+assert.deepEqual(directoryVersions, sourceVersions, "root versions.json differs from plugin source");
+assert.equal(sourceManifest.id, "publy");
+assert.equal(sourceManifest.version, packageInfo.version, "plugin package/manifest versions differ");
+assert.equal(sourceVersions[sourceManifest.version], sourceManifest.minAppVersion, "missing matching versions.json entry");
+assert.equal(sourceManifest.isDesktopOnly, true, "Node/Electron plugin must remain desktop-only");
+assert.ok(sourceManifest.description.length > 0 && sourceManifest.description.length <= 250);
+assert.ok(sourceManifest.description.endsWith("."));
+for (const file of ["main.js", "manifest.json", "styles.css"]) {
+  assert.ok(fs.existsSync(path.join(root, "packages/obsidian-plugin/dist", file)), "missing built plugin asset " + file);
+}
+assert.deepEqual(read("packages/obsidian-plugin/dist/manifest.json"), sourceManifest, "built manifest differs from source");
+console.log("PASS — Obsidian source/root/built manifest and versions consistent (" + sourceManifest.version + ")");

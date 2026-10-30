@@ -40,7 +40,7 @@ Back up configuration/data and identify the source and dependency versions. Vali
 
 ## Get help
 
-Report problems in [GitHub Issues](https://github.com/turinglambdaai/publy/issues), in English or Chinese. Include the version, OS/architecture, installation channel, steps, expected result and actual result. Reproduce with synthetic input first; do not attach keys, credentials, databases, private source documents or complete logs. Public support has no guaranteed response time.
+Report problems in [GitHub Issues](https://github.com/turlamai/publy/issues), in English or Chinese. Include the version, OS/architecture, installation channel, steps, expected result and actual result. Reproduce with synthetic input first; do not attach keys, credentials, databases, private source documents or complete logs. Public support has no guaranteed response time.
 
 ## Further reading
 
