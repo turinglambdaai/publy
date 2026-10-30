@@ -2,7 +2,7 @@
 
 English：[editor-workflows.md](editor-workflows.md) · **简体中文**
 
-**2026-10-30 产品决定：Publy 与编辑器解耦。** 用户继续在自己喜欢的
+**2026-10-30 产品决定：只重点支持 Typora 与 Obsidian，两者共用 Markdown 到公众号草稿流程。** 用户继续在自己喜欢的
 编辑器中写作，内容文件留在原位置。Publy 负责公众号排版、预览、发布前检查、
 明确投递到**草稿箱**及结果恢复，而不是再造 Markdown 编辑器或搬迁用户的内容库。
 本地预览、自托管路径保持免费；未来托管订阅应对可靠交付收费，而不是强迫用户换编辑器。
@@ -12,10 +12,10 @@ English：[editor-workflows.md](editor-workflows.md) · **简体中文**
 | 写作工具 | 接入方式 | 真实能力/边界 |
 | --- | --- | --- |
 | Typora | 原始 `.md` / `.markdown` 文件路径 | 标准 Markdown 图片相对路径和本地 `typora-root-url`；不用等待 Typora 插件 |
-| VS Code / VSCodium、Zettlr、MarkText、Vim/Emacs | 同一个文件路径 | 支持标准 Markdown 及相对图片路径；尚未逐一完成真实客户端验收 |
+| 其他保存标准 Markdown 的工具 | 仅通用文件读取 | 不开发、不宣传或承诺专用编辑器适配 |
 | Obsidian | 现有插件或 CLI 打开 Markdown | 支持 `![[...]]` 等语法；社区三文件安装仍受 #12 阻塞 |
-| Notion、飞书、语雀、Word/WPS、Google Docs | **规划：** 导出后导入并做格式校验 | 暂无原生连接器，不承诺完整保真 |
-| 网页粘贴、手机分享、URL 导入 | **规划中** | 尚未实现，不应宣传一键支持 |
+| Notion、飞书、语雀、Word/WPS、Google Docs | **不在范围** | 不计划开发独立集成与连接器 |
+| 网页粘贴、手机分享、URL 导入 | **不在范围** | 不列入当前产品开发计划 |
 
 **支持输入文件不等于已经认证某编辑器。** 首先解决常见文件工作流，
 再按真实反馈决定哪里值得开发专用集成。
