@@ -126,7 +126,8 @@ publy check "D:/Notes/article.md" --json  # 输出给 agent 的结构化问题�
 ### 写作前先看效果
 
 ```bash
-publy preview article.md     # 浏览器打开渲染结果，所见即发布
+publy preview article.md     # 浏览器打开内嵌本地图片的排版预览
+publy preview article.md --no-open --out preview.html  # 离线保存给审核/自动化
 publy render article.md -o out.html   # 只要 HTML
 ```
 
