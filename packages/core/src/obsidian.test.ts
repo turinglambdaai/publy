@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { preprocessObsidian } from "./obsidian.js";
+import { renderMarkdown } from "./render.js";
 
 function withMediaDir(fn: (dir: string) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-test-"));
@@ -45,4 +46,25 @@ test("missing asset is reported, body keeps reference", () => {
   const { missing, body } = preprocessObsidian("![[nope.png]]", []);
   assert.deepEqual(missing, ["nope.png"]);
   assert.match(body, /!\[nope\]\(nope\.png\)/);
+});
+
+test("Obsidian embeds preserve filenames with spaces, parentheses, hashes and percent signs", () => {
+  withMediaDir((dir) => {
+    const name = "Draft (final) #1 100%.png";
+    const actual = path.join(dir, name);
+    fs.writeFileSync(actual, "synthetic-image");
+    const source = `![[${name}|Cover (draft)]]`;
+    const pre = preprocessObsidian(source, [dir]);
+    assert.deepEqual(pre.missing, []);
+    assert.deepEqual(pre.assets, [actual]);
+    assert.match(pre.body, /file:\/\/\//);
+    assert.match(pre.body, /%28final%29/);
+    assert.match(pre.body, /%23/);
+    assert.match(pre.body, /%25/);
+    const rendered = renderMarkdown(source, { baseDir: dir });
+    assert.deepEqual(rendered.warnings, []);
+    assert.deepEqual(rendered.attachments.map((a) => a.path), [actual]);
+    assert.match(rendered.html, /attachment:\/\//);
+    assert.ok(!rendered.html.includes("file:///"), "file URLs must not escape into the draft");
+  });
 });
