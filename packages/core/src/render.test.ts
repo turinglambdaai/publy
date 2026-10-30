@@ -152,7 +152,7 @@ test("generated previews never load protocol-relative or disguised remote images
   const raw = [
     '<img src="//tracker.example.test/pixel?token=private-marker" alt="remote">',
     '<img src="https:&#9;//tracker.example.test/obfuscated" alt="obfuscated">',
-    '<img src="\\\\tracker.example.test\\pixel" alt="backslash host">',
+    String.raw`<img src="\\\\tracker.example.test\\pixel" alt="backslash host">`,
     '<img src="data:image/png;base64,aGVsbG8=" alt="embedded">',
   ].join("\n\n");
   const result = renderMarkdown(raw, { theme: "claude" });
