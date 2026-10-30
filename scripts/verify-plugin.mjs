@@ -16,18 +16,30 @@ import { createRequire } from "node:module";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
 const distDir = path.join(repoRoot, "packages", "obsidian-plugin", "dist");
-const pluginDir = process.argv[2] ?? fs.mkdtempSync(path.join(os.tmpdir(), "publy-plugin-verify-"));
+const communityOnly = process.argv.includes("--community-only");
+// An isolated simulated Community Directory install must use ONLY the three
+// files fetched by Obsidian. Side-loaded ZIPs are a different contract.
+const args = process.argv.slice(2).filter((x) => x !== "--community-only");
+if (args.length > 1) throw new Error("usage: verify-plugin.mjs [--community-only] [plugin-directory]");
+const pluginDir = args[0] ?? fs.mkdtempSync(path.join(os.tmpdir(), "publy-plugin-verify-"));
 
 // prepare the vault plugin dir from dist (same layout as a real install)
-for (const f of ["main.js", "manifest.json", "versions.json"]) {
+for (const f of (communityOnly
+  ? ["main.js", "manifest.json", "styles.css"]
+  : ["main.js", "manifest.json", "versions.json", "styles.css"])) {
   fs.copyFileSync(path.join(distDir, f), path.join(pluginDir, f));
 }
-fs.rmSync(path.join(pluginDir, "node_modules"), { recursive: true, force: true });
-if (fs.existsSync(path.join(distDir, "node_modules"))) {
-  fs.cpSync(path.join(distDir, "node_modules"), path.join(pluginDir, "node_modules"), { recursive: true });
+// No installed sidecars in community-only mode, even when a developer happens
+// to reuse an existing vault-like directory from a previous side-loaded build.
+for (const dir of ["node_modules", "fonts"]) {
+  fs.rmSync(path.join(pluginDir, dir), { recursive: true, force: true });
 }
-if (fs.existsSync(path.join(distDir, "fonts"))) {
-  fs.cpSync(path.join(distDir, "fonts"), path.join(pluginDir, "fonts"), { recursive: true });
+if (!communityOnly) {
+  for (const dir of ["node_modules", "fonts"]) {
+    if (fs.existsSync(path.join(distDir, dir))) {
+      fs.cpSync(path.join(distDir, dir), path.join(pluginDir, dir), { recursive: true });
+    }
+  }
 }
 
 // --- stubs -------------------------------------------------------------------
@@ -184,4 +196,4 @@ if (!calls.some((c) => c.includes("WeChat drafts"))) fail("publish success toast
 const dupes = calls.filter((c) => c.includes("WeChat drafts")).length;
 if (dupes !== 1) fail("unexpected publish toast count: " + dupes);
 
-console.log("PASS — onload, article preview, card deck preview, history, publish");
+console.log(`PASS — ${communityOnly ? "simulated Community Directory three-file install" : "side-loaded development bundle"}: onload, article preview, card deck preview, history, publish`);
