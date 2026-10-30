@@ -14,6 +14,7 @@ English：[agent-cli.md](agent-cli.md) · 简体中文
 
 ```bash
 publy capabilities --json
+publy config set api_key '$PUBLY_API_KEY' --json
 publy check "D:/Notes/article.md" --json
 publy preview "D:/Notes/article.md" --json
 publy render "D:/Notes/article.md" --json
@@ -96,3 +97,5 @@ publy publish-result <requestId> --json
 
 推荐流程：**发现能力 → 检查 → 本地预览 → 用户确认账号 →
 投递草稿 → 查询与恢复**。
+
+`config set <key> <value> --json` 是需要用户授权的本地配置变更，输出单个 `config-set` JSON 对象。`CONFIG_SAVED`、`CONFIG_KEY_INVALID`、`CONFIG_INVALID`、`CONFIG_WRITE_FAILED` 均不回显值（包括 API Key、含凭据的 URL）。
