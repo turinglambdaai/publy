@@ -58,6 +58,10 @@ try {
   const embeddedPrefix = "data:image/png;base64,";
   assert.ok(previewHtml.includes(embeddedPrefix), "local image must be embedded");
   assert.ok(!previewHtml.includes("attachment://photo.png"), "local attachment reference must be replaced");
+  assert.ok(previewHtml.includes("Content-Security-Policy"), "preview must enforce a no-network CSP");
+  assert.ok(previewHtml.includes("default-src 'none'"), "preview must deny unlisted resource loads");
+  assert.ok(previewHtml.includes("img-src data:"), "embedded local images must remain visible");
+  assert.ok(previewHtml.includes("connect-src 'none'"), "preview must not connect to a server");
   const encoded = previewHtml.slice(previewHtml.indexOf(embeddedPrefix) + embeddedPrefix.length).split('"')[0];
   const embeddedBytes = Buffer.from(encoded, "base64");
   assert.deepEqual(embeddedBytes, tinyPng, "preview must embed the exact PNG bytes without mutation");
