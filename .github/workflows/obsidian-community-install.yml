@@ -1,0 +1,29 @@
+# Manual pre-release blocker. Intentionally FAILS while Publy still requires
+# sidecar fonts/WASM/node_modules (#12); a green monorepo build is not proof of
+# compatibility with the Obsidian Community Directory installer.
+name: Obsidian Community Directory three-file gate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  community-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+      - name: Verify built plugin metadata
+        run: node scripts/check-plugin-metadata.mjs
+      - name: Verify only Community Directory files (no ZIP or sidecars)
+        run: node scripts/verify-plugin.mjs --community-only
