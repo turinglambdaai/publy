@@ -20,7 +20,10 @@ The only publishing destination is **WeChat Official Account drafts**.
 3. If your images are site-root-relative, set **Format → Image →
    Use Image Root Path** in Typora; it writes `typora-root-url` to YAML.
    Publy resolves this **local filesystem** root and the exact nested path,
-   including Windows drive roots where applicable.
+   including Windows drive roots where applicable. Local `file:///...` image
+   references are also accepted, then converted to normal embedded/attached
+   media; file URLs are not retained as clickable WeChat links. Prefer relative
+   paths for portability between computers.
 4. The currently available **developer-built** Publy CLI can check and preview
    your original file; the future user-facing publishing companion should
    provide a file picker / Open With UI without needing a terminal.
