@@ -40,6 +40,18 @@ try {
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
 
+  // CLI browser preview must resolve local images without any remote server,
+  // leaving both the source and the original asset file untouched.
+  const previewPath = path.join(dir, "offline-preview.html");
+  const preview = spawnSync(process.execPath,
+    [entrypoint, "preview", goodPath, "--no-open", "--out", previewPath],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
+  assert.equal(preview.status, 0, preview.stderr);
+  const previewHtml = fs.readFileSync(previewPath, "utf8");
+  assert.match(previewHtml, /data:image\\/jpeg;base64,/);
+  assert.doesNotMatch(previewHtml, /attachment:\\/\\/photo\\.jpg/);
+  assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preview must not alter source");
+
   const missingPath = path.join(project, "broken.md");
   fs.writeFileSync(missingPath, "# Broken\n\n![photo](missing/other.jpg)");
   const missing = run(missingPath);
