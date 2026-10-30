@@ -190,7 +190,7 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   const safeUrl = (raw: string, kind: "href" | "src"): boolean => {
     const value = raw.trim();
     // Browsers strip ASCII control characters while interpreting protocols.
-    const schemeText = value.replace(/[\\u0000-\\u0020]/g, "");
+    const schemeText = value.replace(/[\u0000-\u0020]/g, "");
     if (!schemeText || schemeText.startsWith("#") ||
         schemeText.startsWith("/") || schemeText.startsWith("./") ||
         schemeText.startsWith("../")) return true;
@@ -200,7 +200,7 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
     if (kind === "href") return scheme === "mailto";
     if (scheme === "attachment") return true;
     if (scheme === "data") {
-      return /^data:image\\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(schemeText);
+      return /^data:image\/(?:png|jpeg|gif|webp);base64,[a-z0-9+/=]+$/i.test(schemeText);
     }
     return false;
   };
