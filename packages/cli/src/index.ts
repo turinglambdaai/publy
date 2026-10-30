@@ -742,12 +742,12 @@ const AGENT_COMMANDS = [
   { name: "card", json: true, network: "font-fallback-may-download", effect: "write-png" },
   { name: "publish", json: true, network: true, effect: "create-wechat-draft" },
   { name: "publish-result", json: true, network: true, effect: "read" },
-  { name: "jobs list", json: false, network: true, effect: "read" },
+  { name: "jobs list", json: true, network: true, effect: "read" },
   { name: "jobs cancel", json: false, network: true, effect: "cancel-scheduled-job" },
   { name: "jobs retry", json: false, network: true, effect: "re-admit-job" },
-  { name: "history", json: false, network: true, effect: "read" },
-  { name: "quota", json: false, network: true, effect: "read" },
-  { name: "account list", json: false, network: false, effect: "read-local-config" },
+  { name: "history", json: true, network: true, effect: "read" },
+  { name: "quota", json: true, network: true, effect: "read" },
+  { name: "account list", json: true, network: false, effect: "read-local-config" },
   { name: "account add", json: false, network: false, effect: "write-local-config" },
   { name: "config set", json: false, network: false, effect: "write-local-config" },
   { name: "theme ls", json: false, network: "registry-may-be-fetched", effect: "read" },
@@ -865,7 +865,8 @@ export function createProgram(): Command {
         process.exit(5);
       }
       if (opts.json) {
-        console.log(JSON.stringify(body));
+        console.log(JSON.stringify({ schemaVersion: 1, ok: body.status === "confirmed", kind: "publish-result", ...body }));
+        if (body.status !== "confirmed") process.exitCode = 4;
       } else if (body.status === "confirmed") {
         console.log(`已确认：《${body.title ?? "?"}》在 ${body.account ?? "?"} 草稿箱，Media ID: ${body.mediaId}`);
       } else {
@@ -892,7 +893,7 @@ export function createProgram(): Command {
     });
 
   const jobsCmd = program.command("jobs").description("manage scheduled publishes");
-  jobsCmd.command("list").description("list scheduled jobs").action(async () => {
+  jobsCmd.command("list").description("list scheduled jobs").option("--json", "machine-readable job list").action(async (opts: {json?: boolean}) => {
     const config = loadConfig();
     const res = await fetch(new URL("/v1/jobs", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
     const body = (await res.json()) as { jobs?: JobInfo[] } & { code?: string; message?: string };
@@ -900,10 +901,14 @@ export function createProgram(): Command {
       console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
       process.exit(5);
     }
-    for (const j of body.jobs ?? []) {
-      console.log(`${j.id.slice(0, 8)}  ${j.status.padEnd(8)} ${j.runAt}  ${j.title}${j.error ? ` — ${j.error}` : ""}`);
+    if (opts.json) {
+      console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "jobs", jobs: body.jobs ?? [] }));
+    } else {
+      for (const j of body.jobs ?? []) {
+        console.log(`${j.id.slice(0, 8)}  ${j.status.padEnd(8)} ${j.runAt}  ${j.title}${j.error ? ` — ${j.error}` : ""}`);
+      }
+      if (!body.jobs?.length) console.log("(no jobs)");
     }
-    if (!body.jobs?.length) console.log("(no jobs)");
   });
   jobsCmd
     .command("cancel")
@@ -945,6 +950,7 @@ export function createProgram(): Command {
     .command("history")
     .description("show recent publish history from the server audit log")
     .option("-n, --limit <count>", "number of entries", "20")
+    .option("--json", "machine-readable history")
     .action(async (opts) => {
       const config = loadConfig();
       const res = await fetch(new URL(`/v1/history?limit=${encodeURIComponent(opts.limit)}`, config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
@@ -953,15 +959,20 @@ export function createProgram(): Command {
         console.error(`publy: ${body.code ?? res.status}`);
         process.exit(5);
       }
-      for (const h of body.history ?? []) {
-        console.log(`${h.ts}  ${h.event.padEnd(9)} ${(h.account ?? "").padEnd(16)} ${h.title ?? h.error ?? ""} ${h.mediaId ?? ""}`);
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "history", history: body.history ?? [] }));
+      } else {
+        for (const h of body.history ?? []) {
+          console.log(`${h.ts}  ${h.event.padEnd(9)} ${(h.account ?? "").padEnd(16)} ${h.title ?? h.error ?? ""} ${h.mediaId ?? ""}`);
+        }
       }
     });
 
   program
     .command("quota")
     .description("show your plan and this month's usage")
-    .action(async () => {
+    .option("--json", "machine-readable quota")
+    .action(async (opts: {json?: boolean}) => {
       const config = loadConfig();
       const res = await fetch(new URL("/v1/quota", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
       const body = (await res.json()) as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean } & { code?: string };
@@ -969,7 +980,9 @@ export function createProgram(): Command {
         console.error(`publy: ${body.code ?? res.status}`);
         process.exit(5);
       }
-      if (body.unlimited) {
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "quota", ...body }));
+      } else if (body.unlimited) {
         console.log("admin key：无配额限制");
       } else {
         const expiry = body.expiresAt ? `，Pro 到期 ${new Date(body.expiresAt).toLocaleDateString()}` : "";
@@ -995,10 +1008,18 @@ export function createProgram(): Command {
     .option("--theme <id>")
     .description("add or update an account")
     .action(async (name: string, opts) => cmdAccountAdd(name, opts));
-  accountCmd.command("list").description("list accounts").action(async () => {
+  accountCmd.command("list").description("list accounts").option("--json", "machine-readable account aliases (no secrets)").action(async (opts: {json?: boolean}) => {
     const config = loadConfig();
-    for (const a of config.accounts ?? []) {
-      console.log(`${a.name === config.default_account ? "*" : " "} ${a.name}  ${a.app_id ?? ""}  theme=${a.theme ?? "-"}`);
+    if (opts.json) {
+      console.log(JSON.stringify({
+        schemaVersion: 1, ok: true, kind: "accounts",
+        defaultAccount: config.default_account ?? null,
+        accounts: (config.accounts ?? []).map(({ name, theme }) => ({ name, theme: theme ?? null })),
+      }));
+    } else {
+      for (const a of config.accounts ?? []) {
+        console.log(`${a.name === config.default_account ? "*" : " "} ${a.name}  ${a.app_id ?? ""}  theme=${a.theme ?? "-"}`);
+      }
     }
   });
 
