@@ -61,6 +61,8 @@ try {
   assert.equal(contract.noPublicSend, true);
   assert.deepEqual(contract.firstClassEditors, ["Typora", "Obsidian"]);
   assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
+  assert.ok(contract.commands.some((c) => c.name === "render" && c.json === true && c.network === false));
+  assert.ok(contract.commands.some((c) => c.name === "theme ls" && c.json === true && c.jsonNetwork === false));
   assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
   assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
   for (const operation of ["jobs cancel", "jobs retry"]) {
@@ -259,6 +261,58 @@ try {
   assert.equal(missingServerReport.status, "not_submitted");
   assert.equal(missingServerReport.code, "SERVER_NOT_CONFIGURED");
   assert.equal(missingServerReport.submitted, false);
+
+  // JSON render writes a private HTML artifact without embedding private
+  // source content in stdout, and explicitly reports unresolved media refs.
+  const jsonRender = cli("render", goodPath, "--json");
+  assert.equal(jsonRender.status, 0, jsonRender.stderr);
+  const rendered = JSON.parse(jsonRender.stdout);
+  assert.equal(rendered.schemaVersion, 1);
+  assert.equal(rendered.kind, "html-render");
+  assert.equal(rendered.ok, true);
+  assert.equal(rendered.attachmentCount, 1);
+  assert.equal(rendered.containsAttachmentReferences, true);
+  assert.equal(rendered.networkUsed, false);
+  assert.equal(rendered.submitted, false);
+  assert.ok(rendered.output.endsWith(".html"));
+  assert.ok(fs.readFileSync(rendered.output, "utf8").includes("attachment://"));
+  assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource);
+  if (process.platform !== "win32") {
+    assert.equal(fs.statSync(rendered.output).mode & 0o077, 0);
+    assert.equal(fs.statSync(path.dirname(rendered.output)).mode & 0o077, 0);
+  }
+  fs.rmSync(path.dirname(rendered.output), { recursive: true, force: true });
+
+  const explicitRender = path.join(dir, "agent-render.html");
+  const renderAtPath = cli("render", goodPath, "--json", "--out", explicitRender);
+  assert.equal(renderAtPath.status, 0, renderAtPath.stderr);
+  assert.equal(JSON.parse(renderAtPath.stdout).output, explicitRender);
+  const repeatRender = cli("render", goodPath, "--json", "--out", explicitRender);
+  assert.equal(repeatRender.status, 2);
+  assert.equal(JSON.parse(repeatRender.stdout).code, "OUTPUT_INVALID");
+  const replaceRender = cli("render", goodPath, "--json", "--out", explicitRender, "--force");
+  assert.equal(replaceRender.status, 0, replaceRender.stderr);
+  const renderSourceGuard = cli("render", goodPath, "--json", "--out", goodPath, "--force");
+  assert.equal(renderSourceGuard.status, 2);
+  assert.equal(JSON.parse(renderSourceGuard.stdout).code, "OUTPUT_INVALID");
+  assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource);
+
+  const renderMissing = cli("render", path.join(project, "not-here.md"), "--json");
+  assert.equal(renderMissing.status, 2);
+  assert.equal(JSON.parse(renderMissing.stdout).code, "INPUT_INVALID");
+
+  // Agents can enumerate installed themes even when disconnected from the
+  // internet; the JSON variant must NOT consult a remote theme registry.
+  const themeQuery = cli("theme", "ls", "--json");
+  assert.equal(themeQuery.status, 0, themeQuery.stderr);
+  const themeManifest = JSON.parse(themeQuery.stdout);
+  assert.equal(themeManifest.schemaVersion, 1);
+  assert.equal(themeManifest.kind, "themes");
+  assert.equal(themeManifest.source, "bundled");
+  assert.equal(themeManifest.networkUsed, false);
+  assert.ok(themeManifest.articleThemes.length > 0);
+  assert.ok(themeManifest.cardThemes.length > 0);
+  assert.ok(!themeQuery.stdout.includes("Registry:"));
 
   // CLI browser preview must resolve local images without any remote server,
   // leaving both the source and the original asset file untouched.

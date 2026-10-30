@@ -264,22 +264,82 @@ function allowHtmlOutput(sourceFile: string, out: string, force: boolean): boole
 }
 
 async function cmdRender(file: string, opts: Record<string, any>): Promise<void> {
-  const raw = fs.readFileSync(file, "utf-8");
-  const result = renderMarkdown(raw, {
-    theme: opts.theme,
-    customThemePath: opts.customTheme,
-    highlight: opts.highlight,
-    mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
-    baseDir: path.dirname(path.resolve(file)),
-    footnote: opts.footnote !== false,
-    footer: opts.footer,
-  });
-  for (const w of result.warnings) console.error(`warn: ${w}`);
-  if (opts.out) {
-    const out = path.resolve(opts.out);
-    if (!allowHtmlOutput(file, out, opts.force === true)) return;
-    fs.writeFileSync(out, result.html, { flag: opts.force ? "w" : "wx", mode: 0o600 });
-    if (process.platform !== "win32") fs.chmodSync(out, 0o600);
+  const source = path.resolve(file);
+  const agentError = (code: string, exit: number, problems: string[]): void => {
+    if (opts.json) console.log(JSON.stringify({
+      schemaVersion: 1, kind: "html-render", ok: false, code,
+      source, problems, networkUsed: false, submitted: false,
+    }));
+    else for (const problem of problems) console.error("publy: " + problem);
+    process.exitCode = exit;
+  };
+
+  let raw: string;
+  try {
+    if (opts.json && !/\.(?:md|markdown)$/i.test(source)) throw new Error("Not Markdown");
+    raw = fs.readFileSync(source, "utf8");
+  } catch {
+    agentError("INPUT_INVALID", 2, ["Choose a readable Markdown (.md or .markdown) file."]);
+    return;
+  }
+
+  let result: ReturnType<typeof renderMarkdown>;
+  try {
+    let config: CliConfig = {};
+    try { config = loadConfig(); } catch { /* local render still works without global credentials */ }
+    result = renderMarkdown(raw, {
+      theme: opts.theme,
+      customThemePath: opts.customTheme,
+      highlight: opts.highlight,
+      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], config),
+      baseDir: path.dirname(source),
+      footnote: opts.footnote !== false,
+      footer: opts.footer,
+    });
+  } catch {
+    agentError("RENDER_FAILED", 3, ["Cannot render Markdown; review source and local theme options."]);
+    return;
+  }
+
+  const problems = result.warnings.filter(blockingMediaWarning);
+  if (result.type === "article" && !result.cover && result.attachments.length === 0) {
+    problems.push("Missing cover: add a local image or a cover: path before submitting a draft.");
+  } else if (result.type === "image_post" && result.attachments.length === 0) {
+    problems.push("No local images found for the image post.");
+  }
+  for (const warning of result.warnings) console.error("warn: " + warning);
+
+  const out = opts.out
+    ? path.resolve(opts.out)
+    : opts.json ? path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-render-")), "index.html") : null;
+  if (out) {
+    if (!allowHtmlOutput(source, out, opts.force === true)) {
+      if (opts.json) console.log(JSON.stringify({
+        schemaVersion: 1, kind: "html-render", ok: false, code: "OUTPUT_INVALID",
+        source, problems: ["Choose a new .html output path or explicitly use --force."],
+        networkUsed: false, submitted: false,
+      }));
+      return;
+    }
+    try {
+      fs.writeFileSync(out, result.html, { flag: opts.force ? "w" : "wx", mode: 0o600 });
+      if (process.platform !== "win32") fs.chmodSync(out, 0o600);
+    } catch {
+      agentError("OUTPUT_FAILED", 2, ["Cannot write the requested local HTML output."]);
+      return;
+    }
+  }
+  if (opts.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1, kind: "html-render", ok: problems.length === 0,
+      source, output: out, title: result.title, type: result.type,
+      contentType: "text/html", attachmentCount: result.attachments.length,
+      containsAttachmentReferences: result.html.includes("attachment://"),
+      problems, warnings: result.warnings,
+      networkUsed: false, submitted: false,
+    }));
+    if (problems.length) process.exitCode = 4;
+  } else if (out) {
     console.error(`rendered → ${out}`);
   } else {
     process.stdout.write(result.html);
@@ -916,7 +976,7 @@ function reportReadFailure(
 const AGENT_USAGE: Record<string, string> = {
   capabilities: "publy capabilities --json",
   check: "publy check <file.md> --json",
-  render: "publy render <file.md> --out <review.html>",
+  render: "publy render <file.md> --json [--out <review.html>]",
   preview: "publy preview <file.md> --json [--out <review.html>]",
   card: "publy card <file.md> --json --out <directory>",
   publish: "publy publish <file.md> --account <name> --json",
@@ -929,7 +989,7 @@ const AGENT_USAGE: Record<string, string> = {
   "account list": "publy account list --json",
   "account add": "publy account add <name> [--app-id <id>]",
   "config set": "publy config set <key> <value>",
-  "theme ls": "publy theme ls",
+  "theme ls": "publy theme ls --json",
   "theme preview": "publy theme preview <name>",
   tunnel: "publy tunnel",
 };
@@ -938,7 +998,7 @@ const AGENT_USAGE: Record<string, string> = {
 const AGENT_COMMANDS = [
   { name: "capabilities", json: true, network: false, effect: "read" },
   { name: "check", json: true, network: false, effect: "read" },
-  { name: "render", json: false, network: false, effect: "write-html-if-out" },
+  { name: "render", json: true, network: false, effect: "write-html-if-out" },
   { name: "preview", json: true, network: false, effect: "write-private-html" },
   { name: "card", json: true, network: "font-fallback-may-download", effect: "write-png" },
   { name: "publish", json: true, network: true, effect: "create-wechat-draft" },
@@ -951,7 +1011,7 @@ const AGENT_COMMANDS = [
   { name: "account list", json: true, network: false, effect: "read-local-config" },
   { name: "account add", json: false, network: false, effect: "write-local-config" },
   { name: "config set", json: false, network: false, effect: "write-local-config" },
-  { name: "theme ls", json: false, network: "registry-may-be-fetched", effect: "read" },
+  { name: "theme ls", json: true, network: "registry-may-be-fetched", jsonNetwork: false, effect: "read" },
   { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
   { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
 ] as const;
@@ -1010,7 +1070,7 @@ export function createProgram(): Command {
   common(checkCmd);
   checkCmd.action(async (file: string, opts) => cmdCheck(file, opts));
 
-  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout").option("--force", "explicitly replace an existing .html file");
+  const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout").option("--json", "single JSON report with a private HTML output path").option("--force", "explicitly replace an existing .html file");
   common(renderCmd);
   renderCmd.action(async (file: string, opts) => cmdRender(file, opts));
 
@@ -1242,21 +1302,35 @@ export function createProgram(): Command {
   });
 
   const themeCmd = program.command("theme").description("Manage themes");
-  themeCmd.command("ls").description("list built-in themes and registry entries").action(async () => {    const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
-    console.log("Article themes (built-in):", BUILTIN_THEMES.join(", "));
-    console.log("Card themes (built-in):", Object.keys(BUILTIN_CARD_THEMES).join(", "));
-    try {
-      const res = await fetch("https://raw.githubusercontent.com/turinglambdaai/publy-themes/main/index.json");
-      if (res.ok) {
-        const registry = (await res.json()) as { themes: { id: string; kind: string; source: string }[] };
-        const external = registry.themes.filter((t) => t.source !== "builtin");
-        if (external.length) console.log("Registry:", external.map((t) => `${t.id} (${t.kind})`).join(", "));
-        else console.log("Registry: no external themes yet");
+  themeCmd.command("ls")
+    .description("list built-in themes; human output may also include registry entries")
+    .option("--json", "offline JSON list of bundled themes only; never fetch a registry")
+    .action(async (opts: { json?: boolean }) => {
+      const { BUILTIN_THEMES, BUILTIN_CARD_THEMES } = await import("@publy/core");
+      const articleThemes = [...BUILTIN_THEMES];
+      const cardThemes = Object.keys(BUILTIN_CARD_THEMES);
+      if (opts.json) {
+        console.log(JSON.stringify({
+          schemaVersion: 1, kind: "themes", ok: true,
+          articleThemes, cardThemes,
+          source: "bundled", networkUsed: false, submitted: false,
+        }));
+        return;
       }
-    } catch {
-      /* offline: built-ins only */
-    }
-  });
+      console.log("Article themes (built-in):", articleThemes.join(", "));
+      console.log("Card themes (built-in):", cardThemes.join(", "));
+      try {
+        const res = await fetch("https://raw.githubusercontent.com/turinglambdaai/publy-themes/main/index.json");
+        if (res.ok) {
+          const registry = (await res.json()) as { themes: { id: string; kind: string; source: string }[] };
+          const external = registry.themes.filter((t) => t.source !== "builtin");
+          if (external.length) console.log("Registry:", external.map((t) => `${t.id} (${t.kind})`).join(", "));
+          else console.log("Registry: no external themes yet");
+        }
+      } catch {
+        /* offline: built-ins only */
+      }
+    });
 
   themeCmd
     .command("preview")
