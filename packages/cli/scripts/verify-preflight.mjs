@@ -292,9 +292,9 @@ try {
   assert.equal(JSON.parse(repeatRender.stdout).code, "OUTPUT_INVALID");
   const replaceRender = cli("render", goodPath, "--json", "--out", explicitRender, "--force");
   assert.equal(replaceRender.status, 0, replaceRender.stderr);
-  const sourceAsOutput = cli("render", goodPath, "--json", "--out", goodPath, "--force");
-  assert.equal(sourceAsOutput.status, 2);
-  assert.equal(JSON.parse(sourceAsOutput.stdout).code, "OUTPUT_INVALID");
+  const renderSourceGuard = cli("render", goodPath, "--json", "--out", goodPath, "--force");
+  assert.equal(renderSourceGuard.status, 2);
+  assert.equal(JSON.parse(renderSourceGuard.stdout).code, "OUTPUT_INVALID");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource);
 
   const renderMissing = cli("render", path.join(project, "not-here.md"), "--json");
