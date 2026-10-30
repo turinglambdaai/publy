@@ -70,6 +70,28 @@ try {
   assert.equal(missing.report.ok, false);
   assert.ok(missing.report.problems.some((p) => p.includes("missing/other.jpg")));
 
+  // A user must never receive a WeChat draft with silently dropped media.
+  // A deliberately unreachable local endpoint makes any accidental submit
+  // fail differently, without calling an external service in this smoke.
+  const fakeConfig = path.join(dir, "fake-publish-config.json");
+  fs.writeFileSync(fakeConfig, JSON.stringify({
+    server: "http://127.0.0.1:9", api_key: "fixture-key",
+    default_account: "fixture", accounts: [{ name: "fixture" }],
+  }));
+  const publishWith = (source) => spawnSync(process.execPath,
+    [entrypoint, "publish", source, "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  const blocked = publishWith(missingPath);
+  assert.equal(blocked.status, 4, blocked.stderr);
+  assert.match(blocked.stderr, /draft NOT sent/);
+  assert.match(blocked.stderr, /Image not found:/);
+  assert.doesNotMatch(blocked.stderr, /outcome UNKNOWN|publish failed \(/);
+  const badCover = path.join(project, "missing-cover.md");
+  fs.writeFileSync(badCover, "---\ncover: assets/absent.png\n---\n\n# Missing cover\n\n![valid](assets/photo.png)");
+  const blockedCover = publishWith(badCover);
+  assert.equal(blockedCover.status, 4, blockedCover.stderr);
+  assert.match(blockedCover.stderr, /Cover not found/);
+
   const cardsPath = path.join(project, "cards.md");
   fs.writeFileSync(cardsPath,
     "---\nmode: cards\ncaption: synthetic test\n---\n\n## cover\nTitle\n\n## point\nDetail\n\n## ending\nThanks");
