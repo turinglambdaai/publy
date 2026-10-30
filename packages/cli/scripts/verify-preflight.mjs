@@ -246,6 +246,8 @@ try {
   assert.equal(cards.code, 0);
   assert.equal(cards.report.type, "image_post");
   assert.equal(cards.report.cardCount, 3);
+  assert.equal(cards.report.attachmentCount, 3, "preflight must verify real PNG cards");
+  assert.equal(cards.report.ok, true);
 
   // The image-post preview must show the same rasterized PNG cards as
   // publish, never ordinary Markdown/HTML pretending to be card output.
@@ -266,6 +268,10 @@ try {
   const invalidCards = path.join(project, "invalid-cards.md");
   fs.writeFileSync(invalidCards,
     "---\nmode: cards\ncaption: invalid deck\n---\n\n## cover\nFirst only\n\n## ending\nSecond");
+  const invalidCheck = run(invalidCards);
+  assert.equal(invalidCheck.code, 4, "invalid card deck must fail preflight");
+  assert.equal(invalidCheck.report.ok, false);
+  assert.ok(invalidCheck.report.problems.some((problem) => problem.includes("3")));
   const invalidOut = path.join(dir, "invalid-card-preview.html");
   const invalidPreview = spawnSync(process.execPath,
     [entrypoint, "preview", invalidCards, "--no-open", "--out", invalidOut],
