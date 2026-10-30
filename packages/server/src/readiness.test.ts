@@ -10,6 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { buildApp, signWsTicket, verifyWsTicket, redactSecrets, type ServerConfig } from "./index.js";
+import { draftIdempotencyKey } from "@publy/core";
 import type { Store } from "./store.js";
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-ready-test-"));
@@ -150,6 +151,72 @@ test("scheduling twice with the same idempotency key enqueues one job", async ()
   assert.equal(same.length, 1);
 });
 
+test("a reused key cannot silently return a different saved draft", async () => {
+  const seam = (app as unknown as {
+    idempotency: { records: Record<string, unknown>; save: () => void };
+  }).idempotency;
+  const key = "collision-guard-test";
+  const original = {
+    account: "UserAcct", type: "article" as const, title: "Fixed title",
+    html: "<p>alpha</p>",
+    images: [{ name: "unchanged.png", contentType: "image/png", data: Buffer.from("IMG-A").toString("base64") }],
+  };
+  seam.records[key] = {
+    mediaId: "ORIGINAL-DRAFT", at: Date.now(), account: original.account,
+    title: original.title, type: original.type, userId,
+    requestFingerprint: draftIdempotencyKey(original),
+  };
+  seam.save();
+  const post = (payload: Record<string, unknown>, caller = userKey) =>
+    app.inject({ method: "POST", url: "/v1/publish", headers: H(caller), payload: { ...payload, idempotencyKey: key } });
+
+  const retry = await post(original);
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.json().deduped, true);
+  assert.equal(retry.json().mediaId, "ORIGINAL-DRAFT");
+
+  const changedText = await post({ ...original, html: "<p>omega</p>" });
+  assert.equal(original.html.length, "<p>omega</p>".length);
+  assert.equal(changedText.statusCode, 409);
+  assert.equal(changedText.json().code, "IDEMPOTENCY_CONFLICT");
+  assert.ok(!JSON.stringify(changedText.json()).includes("ORIGINAL-DRAFT"));
+
+  const changedImage = await post({
+    ...original,
+    images: [{ ...original.images[0], data: Buffer.from("IMG-B").toString("base64") }],
+  });
+  assert.equal(changedImage.statusCode, 409);
+  assert.equal(changedImage.json().code, "IDEMPOTENCY_CONFLICT");
+
+  const crossCaller = await post(original, "admin-key");
+  assert.equal(crossCaller.statusCode, 409, "the admin key cannot hijack another caller's request identity");
+  assert.equal(crossCaller.json().code, "IDEMPOTENCY_CONFLICT");
+});
+
+test("a reused scheduled request key cannot silently enqueue or dedupe different content", async () => {
+  const key = "scheduled-payload-guard";
+  const runAt = new Date(Date.now() + 3600_000).toISOString();
+  const base = {
+    account: "TestAcct", type: "article" as const, title: "Job",
+    html: "<p>one</p>", publishAt: runAt, idempotencyKey: key,
+  };
+  const first = await app.inject({ method: "POST", url: "/v1/publish", headers: H("admin-key"), payload: base });
+  assert.equal(first.statusCode, 200);
+  const retry = await app.inject({ method: "POST", url: "/v1/publish", headers: H("admin-key"), payload: base });
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.json().deduped, true);
+  assert.equal(retry.json().jobId, first.json().jobId);
+
+  const changed = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H("admin-key"),
+    payload: { ...base, html: "<p>two</p>" },
+  });
+  assert.equal(changed.statusCode, 409);
+  assert.equal(changed.json().code, "IDEMPOTENCY_CONFLICT");
+  const jobs = (await app.inject({ method: "GET", url: "/v1/jobs", headers: H("admin-key") })).json().jobs;
+  assert.equal(jobs.filter((job: { id: string }) => job.id === first.json().jobId).length, 1);
+});
+
 // --- crash reconciliation + explicit retry ----------------------------------------
 
 const reconciliationDir = fs.mkdtempSync(path.join(os.tmpdir(), "publy-recon-test-"));
@@ -280,6 +347,40 @@ test("quota exhaustion returns QUOTA_EXCEEDED before any publish", async () => {
   const q = (await app.inject({ method: "GET", url: "/v1/quota", headers: H(userKey) })).json();
   assert.equal(q.used, 30);
   assert.equal(q.limit, 30);
+
+  // Once the monthly quota is exhausted, a legitimate retry still needs to
+  // retrieve the previously confirmed draft. A new draft must stay blocked.
+  const seam = (app as unknown as {
+    idempotency: { records: Record<string, unknown>; save: () => void };
+  }).idempotency;
+  const original = { account: "UserAcct", type: "article" as const, title: "paid-for draft", html: "<p>completed</p>" };
+  seam.records["quota-confirmed-key"] = {
+    mediaId: "ALREADY-DELIVERED", at: Date.now(), account: original.account,
+    title: original.title, type: original.type, userId,
+    requestFingerprint: draftIdempotencyKey(original),
+  };
+  seam.save();
+  const retry = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, idempotencyKey: "quota-confirmed-key" },
+  });
+  assert.equal(retry.statusCode, 200);
+  assert.equal(retry.json().deduped, true);
+  assert.equal(retry.json().mediaId, "ALREADY-DELIVERED");
+
+  const conflict = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, html: "<p>modified!</p>", idempotencyKey: "quota-confirmed-key" },
+  });
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(conflict.json().code, "IDEMPOTENCY_CONFLICT");
+
+  const newDraft = await app.inject({
+    method: "POST", url: "/v1/publish", headers: H(userKey),
+    payload: { ...original, idempotencyKey: "quota-new-key" },
+  });
+  assert.equal(newDraft.statusCode, 429);
+  assert.equal(newDraft.json().code, "QUOTA_EXCEEDED");
 });
 
 // --- new plans / prices ----------------------------------------------------------------
