@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resolveEditorAsset } from "./editor-assets.js";
+import { decodeTyporaImagePath, resolveEditorAsset } from "./editor-assets.js";
 import { renderMarkdown } from "./render.js";
 
 function fixture(run: (root: string) => void) {
@@ -87,5 +87,63 @@ test("non-local URLs cannot be resolved as local attachment paths", () => {
     for (const url of ["https://example.test/image.png", "data:image/png;base64,aGVsbG8=", "attachment://image.png"]) {
       assert.equal(resolveEditorAsset(url, { baseDir: root }), null);
     }
+  });
+});
+
+test("Typora's legacy %u Chinese filename escapes resolve the original local file", () => {
+  fixture((root) => {
+    const photo = put(root, "assets/Name 名字.png");
+    assert.equal(
+      resolveEditorAsset("assets/Name%20%u540D%u5B57.png", { baseDir: root }),
+      photo,
+    );
+    // markdown-it and HTML parsers may escape the literal % as %25.
+    assert.equal(
+      resolveEditorAsset("assets/Name%20%25u540D%25u5B57.png", { baseDir: root }),
+      photo,
+    );
+    const source = "![插图](assets/Name%20%u540D%u5B57.png)";
+    const rendered = renderMarkdown(source, { baseDir: root });
+    assert.deepEqual(rendered.warnings, []);
+    assert.deepEqual(rendered.attachments.map((a) => a.path), [photo]);
+    assert.equal(fs.readFileSync(photo, "utf8"), "synthetic-image");
+  });
+});
+
+test("Typora roots support escaped non-ASCII filenames and covers", () => {
+  fixture((root) => {
+    const actual = put(root, "site/blog/配图/封面.png");
+    const yaml = [
+      "---",
+      `typora-root-url: "${path.join(root, "site").replaceAll("\\\\", "/")}"`,
+      "cover: /blog/%u914D%u56FE/%u5C01%u9762.png",
+      "typora-copy-images-to: assets/pasted",
+      "---",
+      "",
+      "![img](/blog/%u914D%u56FE/%u5C01%u9762.png)",
+    ].join("\\n");
+    const rendered = renderMarkdown(yaml, { baseDir: root });
+    assert.deepEqual(rendered.warnings, []);
+    assert.equal(rendered.cover, actual);
+    assert.deepEqual(rendered.attachments.map((a) => a.path), [actual]);
+  });
+});
+
+test("Typora local URL decoding does not recursively turn an encoded slash into a new folder", () => {
+  fixture((root) => {
+    const literal = put(root, "assets/a%2Fb.png");
+    put(root, "assets/a/b.png");
+    assert.equal(decodeTyporaImagePath("assets/a%252Fb.png"), "assets/a%2Fb.png");
+    assert.equal(resolveEditorAsset("assets/a%252Fb.png", { baseDir: root }), literal);
+    assert.equal(resolveEditorAsset("https%3A%2F%2Fexample.test%2Fsecret.png", { baseDir: root }), null);
+  });
+});
+
+test("literal percent signs and malformed URL encoding do not make a real file disappear", () => {
+  fixture((root) => {
+    const name = "assets/Sale 100% free.png";
+    const file = put(root, name);
+    assert.equal(resolveEditorAsset(name, { baseDir: root }), file);
+    assert.equal(resolveEditorAsset("assets/Sale%20100%25%20free.png", { baseDir: root }), file);
   });
 });
