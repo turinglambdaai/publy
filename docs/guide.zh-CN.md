@@ -108,10 +108,10 @@ publy publish article.md
 
 服务端自动把封面中心裁切为公众号要求的 2.35:1。封面三种来源：frontmatter `cover` 字段、`--cover` 参数、正文首图。
 
-### 从 Typora 等任意 Markdown 文件检查后再发
+### 从 Typora 或 Obsidian 检查后再发
 
-Typora、VS Code、Zettlr、MarkText 和纯文件工作流都可以把原始 `.md`
-交给开发版 Publy，不必迁移编辑器。嵌套图片目录和 Typora 本地
+Typora 原始 `.md` 文件和 Obsidian 的 Markdown 笔记都可以交给开发版
+Publy；不必迁移编辑器，也不计划开发其他编辑器插件。嵌套图片目录和 Typora 本地
 `typora-root-url` 均按原文解析；缺图不会静默替换成别的同名文件。
 
 ```bash
