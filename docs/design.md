@@ -2,6 +2,23 @@
 
 > 当前决策：2026-10-23 interaction review。本文件负责产品形态与交互，商业权益以 `PRICING.md` / `PRICING.zh-CN.md` 为准，实际可用性以用户指南和发行/运营证据为准。下述当前范围优先于早期设想；旧里程碑勾选不是公开上线证明。
 
+## Destination scope decision / 发布目的地范围决定 — 2026-10-30
+
+Publy remains **WeChat Official Account draft-first**, not a generic
+multi-platform distribution suite. Accepting Typora/Obsidian/other saved
+Markdown as **inputs** is in scope; new publishing **destinations** are
+separate products with security/permission/maintenance costs. Zhihu is only
+a candidate for post-P0 research and lawful authorized access, not an
+active publishing adapter. Defer WordPress/Ghost/DEV and all other
+destinations until proven user demand and readiness. Do not build a
+speculative provider framework or mass-posting UI. Normative scope:
+[English](platform-strategy.md) · [中文](platform-strategy.zh-CN.md).
+
+Publy 以**微信公众号草稿为唯一当前正式输出**。兼容 Typora、Obsidian
+等多种 Markdown **输入**，不等于做所有平台的**发布**。
+知乎只列为需要官方权限与真实用户需求验证的下一阶段候选，其他目的地
+暂缓；不为假想场景预建庞大的适配器框架。完整决定见上方中英文文档。
+
 ## Current scope and interaction decision / 当前范围与交互决定
 
 The primary task is **write in the existing editor → local preview/copy → explicitly deliver to the selected WeChat account's drafts → inspect the result**. The CLI and Obsidian plugin are both clients; neither an additional desktop editor nor a theme marketplace is required for this loop. Local rendering/copy and the self-host path remain free under the existing licence. Public hosted service is not yet open for sale.
