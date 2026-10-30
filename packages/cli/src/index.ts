@@ -295,18 +295,23 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   const source = path.resolve(file);
   let raw: string;
   let parsed: ReturnType<typeof parseSource>;
+  let sourceRead = false;
   try {
     if (!/\.(?:md|markdown)$/i.test(source)) throw new Error("Not a Markdown file");
     raw = fs.readFileSync(source, "utf8");
+    sourceRead = true;
     parsed = parseSource(raw);
   } catch {
-    const problem = "Choose a readable Markdown (.md or .markdown) file with valid frontmatter.";
+    const problem = sourceRead
+      ? "Cannot parse Markdown frontmatter; review the document syntax."
+      : "Choose a readable Markdown (.md or .markdown) file.";
+    const code = sourceRead ? "RENDER_FAILED" : "INPUT_INVALID";
     if (opts.json) {
-      console.log(JSON.stringify({ schemaVersion: 1, kind: "local-preview", ok: false, code: "INPUT_INVALID", source, problems: [problem], submitted: false, networkUsed: false }));
+      console.log(JSON.stringify({ schemaVersion: 1, kind: "local-preview", ok: false, code, source, problems: [problem], submitted: false, networkUsed: false }));
     } else {
       console.error("publy: " + problem);
     }
-    process.exitCode = 2;
+    process.exitCode = sourceRead ? 3 : 2;
     return;
   }
   const cardsMode = publishType(parsed.meta) === "image_post" && parsed.meta.mode?.toLowerCase() === "cards";
@@ -547,15 +552,17 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 
   let raw: string;
   let parsed: ReturnType<typeof parseSource>;
+  let sourceRead = false;
   try {
     if (!/\.(?:md|markdown)$/i.test(file)) throw new Error("Unsupported file extension");
     raw = fs.readFileSync(file, "utf8");
+    sourceRead = true;
     parsed = parseSource(raw);
   } catch {
-    // YAML parser exceptions can contain excerpts of private note contents.
-    // Never put parser strings in JSON or log them as a raw exception.
+    // YAML parser exceptions may include private note values; never reveal
+    // the raw exception. Distinguish a missing file from invalid source.
     console.error("publy: cannot read or parse Markdown source.");
-    agentFailure("not_submitted", "INPUT_INVALID", 2);
+    agentFailure("not_submitted", sourceRead ? "RENDER_FAILED" : "INPUT_INVALID", sourceRead ? 3 : 2);
     return;
   }
   const baseDir = path.dirname(path.resolve(file));
