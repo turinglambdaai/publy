@@ -6,7 +6,7 @@ Editor-independent Markdown-to-WeChat draft publishing: local rendering and pref
 
 **English** · [中文](README.zh-CN.md)
 
-- **Keep writing in Typora, Obsidian, VS Code, Zettlr, MarkText or any file-based Markdown editor.** Use the same source file; `publy check a.md` reports missing images before any draft is sent. The current CLI remains a developer source build.
+- **Keep writing in Typora or Obsidian.** Use the same source file; `publy check a.md` reports missing images before any draft is sent. The current CLI remains a developer source build.
 - **The Obsidian plugin renders and delivers the current note to WeChat drafts in place**: in-app article preview, image-post card deck preview, rich-text copy, publish progress — no browser needed.
 - **Image posts as a first-class citizen.** `publy card post.md` renders themed 3:4 card PNGs deterministically — pixel-perfect Chinese text, seconds per deck, no AI image generation.
 - **Preview themes without installing registry packages.** Built-in themes and `publy theme preview` work in development; a signed/versioned standalone theme bundle flow is tracked separately in #21 and is not available yet.
@@ -16,7 +16,7 @@ Compliance: Publy only uses official WeChat MP APIs. No account simulation, no b
 
 Status: local rendering and delivery components exist; public hosted onboarding and commercial operation are not open. **Obsidian community-directory publication has not been verified**; the source plugin version and latest published GitHub Release differ. See [directory release readiness](docs/obsidian-submission.md) and [official-install blocker](https://github.com/turlamai/publy/issues/12).
 
-**One document, many writing tools:** [English workflow and acceptance criteria](docs/editor-workflows.md) · [中文](docs/editor-workflows.zh-CN.md). No proprietary editor plugin is needed to consume a saved Markdown file; independent editor integrations still need clean-machine acceptance.
+**One document, two primary writing experiences:** [English workflow and acceptance criteria](docs/editor-workflows.md) · [中文](docs/editor-workflows.zh-CN.md). The shared renderer also reads ordinary Markdown files, but no other editor integration is planned. Typora and Obsidian still require real clean-machine acceptance.
 
 ## Start here
 
