@@ -130,7 +130,7 @@ try {
     '  }',
     '  return originalFetch(...args);',
     '};',
-  ].join("\\n"));
+  ].join("\n"));
   for (const json of [false, true]) {
     fs.rmSync(fetchSentinel, { force: true });
     const listed = spawnSync(process.execPath,
