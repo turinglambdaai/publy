@@ -846,7 +846,7 @@ function reportReadFailure(
     schemaVersion: 1, ok: false, kind, code,
   }));
   console.error("publy: " + code);
-  process.exitCode = 5;
+  process.exitCode = code === "CONFIG_INVALID" ? 1 : 5;
 }
 
 /** Exact invocation examples for machine clients. These are examples,
