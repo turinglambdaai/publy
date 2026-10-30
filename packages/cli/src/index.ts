@@ -780,6 +780,30 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 // ---------------------------------------------------------------------------
 
 
+/** Exact invocation examples for machine clients. These are examples,
+ * not an argv parser or a claim that every legacy command supports JSON.
+ */
+const AGENT_USAGE: Record<string, string> = {
+  capabilities: "publy capabilities --json",
+  check: "publy check <file.md> --json",
+  render: "publy render <file.md> --out <review.html>",
+  preview: "publy preview <file.md> --json [--out <review.html>]",
+  card: "publy card <file.md> --json --out <directory>",
+  publish: "publy publish <file.md> --account <name> --json",
+  "publish-result": "publy publish-result <requestId> --json",
+  "jobs list": "publy jobs list --json",
+  "jobs cancel": "publy jobs cancel <jobId>",
+  "jobs retry": "publy jobs retry <jobId>",
+  history: "publy history --json",
+  quota: "publy quota --json",
+  "account list": "publy account list --json",
+  "account add": "publy account add <name> [--app-id <id>]",
+  "config set": "publy config set <key> <value>",
+  "theme ls": "publy theme ls",
+  "theme preview": "publy theme preview <name>",
+  tunnel: "publy tunnel",
+};
+
 /** Stable agent discovery of implemented operations (not a future roadmap). */
 const AGENT_COMMANDS = [
   { name: "capabilities", json: true, network: false, effect: "read" },
@@ -816,7 +840,17 @@ export function createProgram(): Command {
         inputs: ["markdown-file"],
         firstClassEditors: ["Typora", "Obsidian"],
         noPublicSend: true,
-        commands: AGENT_COMMANDS,
+        commands: AGENT_COMMANDS.map((command) => ({
+          ...command,
+          usage: AGENT_USAGE[command.name],
+          requiresUserApproval: [
+            "create-wechat-draft",
+            "cancel-scheduled-job",
+            "re-admit-job",
+            "write-local-config",
+            "start-ssh-tunnel",
+          ].includes(command.effect),
+        })),
       };
       if (opts.json) {
         console.log(JSON.stringify(result));
