@@ -28,13 +28,16 @@ CLI, default themes, Obsidian and self-hosting remain free under their existing 
 
 ```bash
 publy config set server https://your-server.example
-publy config set api_key <key>
+publy config set api_key "$PUBLY_API_KEY"   # POSIX shell: set the environment variable first
 publy account add me --app-id wx... --theme claude
-publy preview article.md     # see it before you ship it
-publy publish article.md     # typeset draft lands in the WeChat backend
+publy check article.md
+publy preview article.md     # review locally; no draft is submitted
+publy publish article.md --account me  # only after approval: create a WeChat draft, not a public post
 ```
 
-Image-post: write sections (`## cover` / `## point` / `## list` / `## ending`) with `mode: cards` in frontmatter, run `publy card post.md --preview`, then `publy publish post.md`.
+For PowerShell, replace `"$PUBLY_API_KEY"` with `"$env:PUBLY_API_KEY"`. The CLI receives the key as an argument, which may be visible to local process inspection; do not paste credentials into shared logs.
+
+Image-post: write sections (`## cover` / `## point` / `## list` / `## ending`) with `mode: cards` in frontmatter, run `publy card post.md --preview`, then `publy publish post.md --account me` only after confirming the destination and approving draft creation.
 
 Full manual: [English manual](docs/guide.md) · [中文手册](docs/guide.zh-CN.md) · Theme gallery: [themes.publy.jrtx.site](https://themes.publy.jrtx.site/)
 
