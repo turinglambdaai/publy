@@ -25,6 +25,13 @@ ends with a `{"control":"replay-done"}` marker — clients synchronize on
 it. Tests: `raco test racket` (CI job `racket-ws`; the websocket library
 installs from GitHub until it reaches the catalog).
 
+`racket/publy-cli-prototype.rkt` is a **read-only Racket standalone distribution
+probe**, not a substitute for the TypeScript publishing CLI. Do not add network
+publication, payment gates or claims of production equivalence to it before
+parity fixtures, native packaging and real platform tests are complete. User
+installation must not require npm Registry; pnpm remains an internal developer
+build dependency. Track its rollout in `docs/distribution.md` and issue #18.
+
 `racket/publy-stats.rkt` is the read-only operational stats companion —
 same posture (next to the server, `users.db` opened read-only,
 `app_secret`/`api_key` never selected) and zero dependency on `@publy/core`.
