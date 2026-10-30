@@ -114,8 +114,11 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
   let attachments = 0;
   let cardCount: number | undefined;
   let inputError = false;
+  let renderError = false;
 
-  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
+  let readableFile = false;
+  try { readableFile = fs.statSync(source).isFile(); } catch { /* no file or inaccessible */ }
+  if (!readableFile) {
     problems.push("File not found: choose an existing .md file in your editor.");
     inputError = true;
   } else if (!/\.(?:md|markdown)$/i.test(source)) {
@@ -161,8 +164,11 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
           problems.push("No local images found for the image post.");
         }
       }
-    } catch (err) {
-      problems.push("Cannot inspect this document: " + (err as Error).message);
+    } catch {
+      // Avoid echoing the raw YAML/parser exception: it can include snippets
+      // of a private note or an embedded credential.
+      renderError = true;
+      problems.push("Cannot inspect this document. Check its Markdown frontmatter and rendering options.");
     }
   }
 
@@ -182,7 +188,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
     for (const warning of warnings.filter((w) => !problems.includes(w))) console.error("warn: " + warning);
     console.log("Local check only — no draft has been submitted.");
   }
-  if (!ok) process.exitCode = inputError ? 2 : 4;
+  if (!ok) process.exitCode = inputError ? 2 : renderError ? 3 : 4;
 }
 
 async function cmdRender(file: string, opts: Record<string, any>): Promise<void> {
