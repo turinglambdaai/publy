@@ -165,7 +165,7 @@ publy account add --app-id wx... --secret-env WX_SECRET   # 密钥走环境变�
 publy quota                                    # 群发配额余量
 ```
 
-- 所有命令支持 `--json`。退出码：`0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败 / `5` 服务端错误 / `6` 配额不足
+- 当前部分命令支持 `--json`（清单见 `publy capabilities --json`，不要假设所有命令均已支持）。退出码以实际命令及 [Agent CLI 契约](agent-cli.zh-CN.md) 为准：主要路径 `0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败或查询结果未知 / `5` 服务端、网络及限额错误。**原设计中的退出码 6 尚未实现，不能当作已发布接口。**
 - `publish --json` 输出含 `warnings` 数组（渲染期非致命警告，如资源目录缺图）。警告同时打到 stderr，但 agent 消费 `--json` 时以该字段为准——不允许"发布成功但图片静默丢失"只留在 stderr
 - `config set` 支持键：`server` / `api_key` / `default_account` / `media_dirs`（逗号分隔多个目录）；不支持手编 `~/.publy/config.json`
 - 服务端不可达时 stderr 必须带底层原因（`ECONNREFUSED` / TLS 握手 / 超时分类不同），并给出下一步（检查 `--server` 或 `publy tunnel`）
