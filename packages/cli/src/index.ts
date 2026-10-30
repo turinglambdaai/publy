@@ -211,6 +211,21 @@ async function cmdRender(file: string, opts: Record<string, any>): Promise<void>
   }
 }
 
+/** Embed private/local images inside the temporary preview, never sending
+ * bytes to a remote image host or leaving attachment:// references broken.
+ * The actual publish HTML continues to use the server attachment protocol.
+ */
+function inlineLocalPreviewImages(html: string, attachments: readonly { name: string; path: string; contentType: string }[]): string {
+  let output = html;
+  for (const media of attachments) {
+    const ref = `attachment://${media.name}`;
+    if (!output.includes(ref)) continue;
+    const encoded = fs.readFileSync(media.path).toString("base64");
+    output = output.split(ref).join(`data:${media.contentType};base64,${encoded}`);
+  }
+  return output;
+}
+
 async function cmdPreview(file: string, opts: Record<string, any>): Promise<void> {
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
@@ -223,13 +238,14 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     footer: opts.footer,
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
-  const out = path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const preview = inlineLocalPreviewImages(result.html, result.attachments);
   fs.writeFileSync(
     out,
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><div style="max-width:578px;width:100%">${result.html}</div></body></html>`,
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><div style="max-width:578px;width:100%">${preview}</div></body></html>`,
   );
   console.error(`preview → ${out}`);
-  openInBrowser(out);
+  if (opts.open !== false) openInBrowser(out);
 }
 
 async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
@@ -571,7 +587,10 @@ export function createProgram(): Command {
   common(renderCmd);
   renderCmd.action(async (file: string, opts) => cmdRender(file, opts));
 
-  const previewCmd = program.command("preview").description("Render and open a local preview in the browser").argument("<file>");
+  const previewCmd = program.command("preview").description("Render a self-contained local preview with images")
+    .argument("<file>")
+    .option("-o, --out <path>", "write the local preview to a chosen HTML file")
+    .option("--no-open", "do not open a browser after writing the preview");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
 
