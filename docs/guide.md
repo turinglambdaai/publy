@@ -128,6 +128,14 @@ publy history
 
 Client configuration is stored under `~/.publy/config.json`; it contains the server API key. `media_dirs` configures local attachment lookup. Keep credentials out of screenshots and logs. Never send AppSecret through an issue or place it in a URL.
 
+**Server replay conflict:** if a client reuses a key for a different
+account, title, HTML, media bytes, cover or scheduled draft, the Publy
+server now returns `409 IDEMPOTENCY_CONFLICT` instead of pretending the old
+draft is the new one. Inspect the previous result before creating a distinct
+submission. Historical records without full fingerprints retain only their
+original account/title/type compatibility check; new records persist the
+complete body fingerprint.
+
 **Request identity (CLI + Obsidian):** Publy now hashes the complete submitted
 draft, including target account, full HTML, media bytes, cover and schedule.
 Different text of the same length or an updated image with the same filename
