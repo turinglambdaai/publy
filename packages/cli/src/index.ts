@@ -244,7 +244,7 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
   const sourcePath = path.resolve(file);
-  if (opts.out && !/\\.html?$/i.test(String(opts.out))) {
+  if (opts.out && !/\.html?$/i.test(String(opts.out))) {
     console.error("publy: preview output must be an .html file; the Markdown source is never overwritten.");
     process.exitCode = 2;
     return;
