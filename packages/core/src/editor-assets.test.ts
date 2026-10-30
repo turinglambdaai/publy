@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { decodeTyporaImagePath, resolveEditorAsset } from "./editor-assets.js";
 import { renderMarkdown } from "./render.js";
 
@@ -166,5 +167,20 @@ test("a declared Typora root never silently falls back to an unrelated absolute 
     assert.equal(resolveEditorAsset("/assets/not-present.png", { baseDir: root, typoraRootUrl: site }), null);
     assert.equal(resolveEditorAsset("/assets/not-present.png",
       { baseDir: root, typoraRootUrl: "https://example.test/root" }), null);
+  });
+});
+
+test("Typora local file URI image becomes a media attachment, not an unsafe clickable file link", () => {
+  fixture((root) => {
+    const photo = put(root, "assets/插图 名称.png");
+    const uri = pathToFileURL(photo).href;
+    assert.equal(resolveEditorAsset(uri, { baseDir: root }), photo);
+    const rendered = renderMarkdown(`![image](${uri})`, { baseDir: root });
+    assert.deepEqual(rendered.warnings, []);
+    assert.deepEqual(rendered.attachments.map((a) => a.path), [photo]);
+    assert.match(rendered.html, /attachment:\/\//);
+    assert.ok(!rendered.html.includes("file:///"), "the final image should not retain a file URI");
+    const link = renderMarkdown(`[local document](${uri})`, { baseDir: root });
+    assert.ok(!link.html.includes("file:///"), "local file links may not be exported as clickable hrefs");
   });
 });
