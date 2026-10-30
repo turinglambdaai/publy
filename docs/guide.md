@@ -38,6 +38,14 @@ submits a WeChat draft. Typora source-relative image folders and local
 `typora-root-url` are supported. For complete supported/unsupported source
 types and clean-install goals, see [editor-independent workflows](editor-workflows.md).
 
+**Media gate:** `publy check` and `publy publish` both reject a missing
+local image or cover, an unrenderable SVG/formula, or a remote / embedded
+data image that would not be uploaded as WeChat material. Download such
+pictures into the note's local asset folder first. The CLI does not print
+signed remote-image URL query parameters in its errors. A missing article
+cover (unless a local body image exists) or an image post with no images
+also blocks draft submission before any network request.
+
 ## Preview before delivery
 
 ```sh
