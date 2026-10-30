@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,7 @@ const run = (file) => {
   try { report = JSON.parse(result.stdout.trim()); }
   catch { throw new Error("Invalid JSON preflight output: " + result.stdout + " / " + result.stderr); }
   assert.equal(report.kind, "local-preflight");
+  assert.equal(report.schemaVersion, 1);
   assert.equal(report.networkUsed, false);
   assert.equal(report.submitted, false);
   return { code: result.status, report };
@@ -46,6 +47,218 @@ try {
   assert.equal(good.report.attachmentCount, 1);
   assert.equal(good.report.title, "User Article");
   assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource, "preflight must not change source");
+
+  // Agent contract discovery is offline and truthful: don't claim JSON
+  // support for operations that still only offer human-oriented output.
+  const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
+    { encoding: "utf8", timeout: 40000, env: { ...process.env,
+      PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
+  const capabilities = cli("capabilities", "--json");
+  assert.equal(capabilities.status, 0, capabilities.stderr);
+  const contract = JSON.parse(capabilities.stdout);
+  assert.equal(contract.schemaVersion, 1);
+  assert.equal(contract.destination, "wechat-official-account-drafts");
+  assert.equal(contract.noPublicSend, true);
+  assert.deepEqual(contract.firstClassEditors, ["Typora", "Obsidian"]);
+  assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
+  assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
+  assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
+  for (const operation of ["jobs cancel", "jobs retry"]) {
+    const def = contract.commands.find((c) => c.name === operation);
+    assert.equal(def.json, true);
+    assert.equal(def.requiresUserApproval, true);
+    assert.match(def.usage, /--json$/);
+  }
+
+  const sendCommand = contract.commands.find((c) => c.name === "publish");
+  assert.equal(sendCommand.requiresUserApproval, true);
+  assert.match(sendCommand.usage, /publish <file\.md> --account <name> --json/);
+  const checkCommand = contract.commands.find((c) => c.name === "check");
+  assert.equal(checkCommand.requiresUserApproval, false);
+  assert.equal(checkCommand.usage, "publy check <file.md> --json");
+
+  const agentPreview = cli("preview", goodPath, "--json");
+  assert.equal(agentPreview.status, 0, agentPreview.stderr);
+  const previewReport = JSON.parse(agentPreview.stdout);
+  assert.equal(previewReport.schemaVersion, 1);
+  assert.equal(previewReport.kind, "local-preview");
+  assert.equal(previewReport.ok, true);
+  assert.equal(previewReport.type, "article");
+  assert.equal(previewReport.networkUsed, false);
+  assert.equal(previewReport.submitted, false);
+  assert.ok(fs.existsSync(previewReport.output));
+  assert.ok(previewReport.output.endsWith(".html"));
+  assert.equal(fs.readFileSync(goodPath, "utf8"), goodSource);
+  fs.rmSync(path.dirname(previewReport.output), { recursive: true, force: true });
+
+  const badPreview = cli("preview", path.join(project, "absent.md"), "--json");
+  assert.equal(badPreview.status, 2, badPreview.stderr);
+  const badReport = JSON.parse(badPreview.stdout);
+  assert.equal(badReport.ok, false);
+  assert.equal(badReport.code, "INPUT_INVALID");
+  assert.equal(badReport.submitted, false);
+
+  // An Agent needs account aliases to choose a destination, never the
+  // WeChat App ID or the caller's long-lived API key.
+  const aliasesConfig = path.join(dir, "agent-aliases.json");
+  const secretKey = "test-secret-must-not-enter-machine-output";
+  const appId = "wx-internal-app-id";
+  fs.writeFileSync(aliasesConfig, JSON.stringify({
+    server: "https://invalid.local", api_key: secretKey,
+    default_account: "Work",
+    accounts: [{ name: "Work", app_id: appId, theme: "claude" }],
+  }));
+  const aliases = spawnSync(process.execPath,
+    [entrypoint, "account", "list", "--json"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: aliasesConfig } });
+  assert.equal(aliases.status, 0, aliases.stderr);
+  const aliasData = JSON.parse(aliases.stdout);
+  assert.equal(aliasData.kind, "accounts");
+  assert.equal(aliasData.defaultAccount, "Work");
+  assert.deepEqual(aliasData.accounts, [{ name: "Work", theme: "claude" }]);
+  assert.ok(!aliases.stdout.includes(secretKey));
+  assert.ok(!aliases.stdout.includes(appId));
+
+  // Read-only server queries are scriptable even when no credentials have
+  // been configured. One JSON object on stdout, no raw URL exception trace.
+  for (const [args, kind] of [
+    [["jobs", "list", "--json"], "jobs"],
+    [["history", "--json"], "history"],
+    [["quota", "--json"], "quota"],
+    [["publish-result", "test-identity", "--json"], "publish-result"],
+  ]) {
+    const result = cli(...args);
+    assert.equal(result.status, 5, args.join(" ") + " " + result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.ok, false);
+    assert.equal(report.kind, kind);
+    assert.equal(report.code, "SERVER_NOT_CONFIGURED");
+    assert.ok(!result.stderr.includes("TypeError:"));
+    assert.ok(!result.stderr.includes("ERR_INVALID_URL"));
+  }
+
+  // A malformed configuration can contain API secrets in its parser error
+  // context. Nothing from the file should reach stdout or stderr.
+  const privateConfigToken = "private-agent-config-secret-marker";
+  const malformedConfig = path.join(dir, "malformed-agent-config.json");
+  fs.writeFileSync(malformedConfig, '{"api_key":"' + privateConfigToken + '", broken}');
+  for (const [args, kind] of [
+    [["account", "list", "--json"], "accounts"],
+    [["jobs", "list", "--json"], "jobs"],
+    [["history", "--json"], "history"],
+    [["quota", "--json"], "quota"],
+    [["publish-result", "some-id", "--json"], "publish-result"],
+  ]) {
+    const runBadConfig = spawnSync(process.execPath, [entrypoint, ...args], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig },
+    });
+    assert.equal(runBadConfig.status, 1, args.join(" ") + " " + runBadConfig.stderr);
+    const report = JSON.parse(runBadConfig.stdout);
+    assert.equal(report.schemaVersion, 1);
+    assert.equal(report.kind, kind);
+    assert.equal(report.code, "CONFIG_INVALID");
+    assert.equal(report.ok, false);
+    assert.ok(!runBadConfig.stdout.includes(privateConfigToken));
+    assert.ok(!runBadConfig.stderr.includes(privateConfigToken));
+  }
+  const badCfgPublish = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath, "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+  assert.equal(badCfgPublish.status, 1);
+  const pubCfgError = JSON.parse(badCfgPublish.stdout);
+  assert.equal(pubCfgError.code, "CONFIG_INVALID");
+  assert.equal(pubCfgError.submitted, false);
+  assert.ok(!badCfgPublish.stdout.includes(privateConfigToken));
+  assert.ok(!badCfgPublish.stderr.includes(privateConfigToken));
+
+  for (const [operation, kind] of [
+    ["cancel", "job-cancel"],
+    ["retry", "job-retry"],
+  ]) {
+    const invalidJobConfig = spawnSync(process.execPath,
+      [entrypoint, "jobs", operation, "fake-job-id", "--json"],
+      { encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+    assert.equal(invalidJobConfig.status, 1);
+    const invalidJobResult = JSON.parse(invalidJobConfig.stdout);
+    assert.equal(invalidJobResult.kind, kind);
+    assert.equal(invalidJobResult.code, "CONFIG_INVALID");
+    assert.equal(invalidJobResult.status, "rejected");
+    assert.equal(invalidJobResult.jobId, "fake-job-id");
+    assert.ok(!invalidJobConfig.stdout.includes(privateConfigToken));
+    assert.ok(!invalidJobConfig.stderr.includes(privateConfigToken));
+  }
+
+  // Local Markdown preview must still work with damaged global config:
+  // it should not require an account or a repair to private credentials.
+  const damagedPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", goodPath, "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+  assert.equal(damagedPreview.status, 0, damagedPreview.stderr);
+  const damagedPreviewReport = JSON.parse(damagedPreview.stdout);
+  assert.equal(damagedPreviewReport.networkUsed, false);
+  assert.equal(damagedPreviewReport.submitted, false);
+  fs.rmSync(path.dirname(damagedPreviewReport.output), { recursive: true, force: true });
+
+  // An invalid endpoint is a configuration error, not an instruction for
+  // the Agent to retry an unreachable server.
+  const invalidEndpoint = path.join(dir, "invalid-agent-server.json");
+  fs.writeFileSync(invalidEndpoint, JSON.stringify({
+    server: "file:///private/agent-local-note", api_key: privateConfigToken,
+  }));
+  const badEndpointQuery = spawnSync(process.execPath,
+    [entrypoint, "jobs", "list", "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: invalidEndpoint } });
+  assert.equal(badEndpointQuery.status, 1, badEndpointQuery.stderr);
+  const badEndpointReport = JSON.parse(badEndpointQuery.stdout);
+  assert.equal(badEndpointReport.code, "CONFIG_INVALID");
+  assert.ok(!badEndpointQuery.stdout.includes(privateConfigToken));
+  assert.ok(!badEndpointQuery.stderr.includes(privateConfigToken));
+
+  const unreachableConfig = path.join(dir, "unreachable-agent-server.json");
+  fs.writeFileSync(unreachableConfig, JSON.stringify({
+    server: "http://127.0.0.1:9", api_key: privateConfigToken,
+  }));
+  for (const [operation, kind] of [
+    ["cancel", "job-cancel"],
+    ["retry", "job-retry"],
+  ]) {
+    const uncertainJob = spawnSync(process.execPath,
+      [entrypoint, "jobs", operation, "fake-job-id", "--json"],
+      { encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: unreachableConfig } });
+    assert.equal(uncertainJob.status, 5, uncertainJob.stderr);
+    const report = JSON.parse(uncertainJob.stdout);
+    assert.equal(report.kind, kind);
+    assert.equal(report.ok, false);
+    assert.equal(report.status, "unknown", "network outcome may have applied a mutation");
+    assert.equal(report.code, "SERVER_UNREACHABLE");
+    assert.equal(report.jobId, "fake-job-id");
+    assert.ok(!uncertainJob.stdout.includes(privateConfigToken));
+  }
+
+  const readUnreachable = spawnSync(process.execPath,
+    [entrypoint, "quota", "--json"],
+    { encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: unreachableConfig } });
+  assert.equal(readUnreachable.status, 5);
+  const unreachableReport = JSON.parse(readUnreachable.stdout);
+  assert.equal(unreachableReport.code, "SERVER_UNREACHABLE");
+  assert.ok(!readUnreachable.stdout.includes(privateConfigToken));
+  assert.ok(!readUnreachable.stderr.includes(privateConfigToken));
+
+  const missingPublishServer = cli("publish", goodPath, "--json");
+  assert.equal(missingPublishServer.status, 5, missingPublishServer.stderr);
+  const missingServerReport = JSON.parse(missingPublishServer.stdout);
+  assert.equal(missingServerReport.ok, false);
+  assert.equal(missingServerReport.status, "not_submitted");
+  assert.equal(missingServerReport.code, "SERVER_NOT_CONFIGURED");
+  assert.equal(missingServerReport.submitted, false);
 
   // CLI browser preview must resolve local images without any remote server,
   // leaving both the source and the original asset file untouched.
@@ -205,6 +418,13 @@ try {
   const blockedNoCover = publishWith(noCoverArticle);
   assert.equal(blockedNoCover.status, 4, blockedNoCover.stderr);
   assert.match(blockedNoCover.stderr, /Missing cover:/);
+  const noCoverReview = cli("preview", noCoverArticle, "--json");
+  assert.equal(noCoverReview.status, 4, noCoverReview.stderr);
+  const noCoverJson = JSON.parse(noCoverReview.stdout);
+  assert.equal(noCoverJson.ok, false);
+  assert.equal(noCoverJson.submitted, false);
+  assert.ok(noCoverJson.problems.some((p) => p.startsWith("Missing cover:")));
+  fs.rmSync(path.dirname(noCoverJson.output), { recursive: true, force: true });
 
   const emptyImagePost = path.join(project, "empty-image-post.md");
   fs.writeFileSync(emptyImagePost, "---\ntype: image\n---\n\nJust some words");
@@ -223,6 +443,96 @@ try {
   assert.match(brokenHtml, /Missing draft media/);
   assert.ok(brokenHtml.includes("missing/other.jpg"), "preview should list the missing image path");
   assert.match(brokenHtml, /Preview only, not submitted/);
+
+  const blockedJson = spawnSync(process.execPath,
+    [entrypoint, "publish", missingPath, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(blockedJson.status, 4, blockedJson.stderr);
+  const mediaFailure = JSON.parse(blockedJson.stdout);
+  assert.equal(mediaFailure.kind, "publish-result");
+  assert.equal(mediaFailure.status, "not_submitted");
+  assert.equal(mediaFailure.code, "MEDIA_NOT_READY");
+  assert.equal(mediaFailure.submitted, false);
+  assert.ok(mediaFailure.problems.some((p) => p.includes("missing/other.jpg")));
+
+  const unknownJson = spawnSync(process.execPath,
+    [entrypoint, "publish", goodPath, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(unknownJson.status, 5, unknownJson.stderr);
+  const uncertain = JSON.parse(unknownJson.stdout);
+  assert.equal(uncertain.kind, "publish-result");
+  assert.equal(uncertain.status, "unknown");
+  assert.equal(uncertain.submitted, null);
+  assert.match(uncertain.requestId, /^[a-f0-9]{32}$/);
+  assert.ok(!uncertain.problems?.length);
+  
+  // A real loopback HTTP stub catches protocol errors that a missing port
+  // cannot: malformed 200 JSON, explicit 400 denial, and a 500 response.
+  // None may leak the server response body or lose requestId on uncertainty.
+  const responseServerScript = path.join(dir, "agent-response-stub.mjs");
+  const responsePortFile = path.join(dir, "agent-response-port.txt");
+  const privateServerMarker = "remote-secret-never-log";
+  fs.writeFileSync(responseServerScript, `
+import fs from "node:fs";
+import http from "node:http";
+const server = http.createServer((_req, res) => {
+  const key = _req.headers["x-api-key"];
+  res.setHeader("Content-Type", "application/json");
+  if (key === "bad-response") {
+    res.writeHead(200); res.end('{"mediaId":'); return;
+  }
+  if (key === "denied-response") {
+    res.writeHead(400); res.end(JSON.stringify({
+      code: "BAD_ARGUMENT", message: "${privateServerMarker}",
+    })); return;
+  }
+  res.writeHead(500); res.end(JSON.stringify({
+    code: "UPSTREAM_FAILED", message: "${privateServerMarker}",
+  }));
+});
+server.listen(0, "127.0.0.1", () => {
+  fs.writeFileSync(process.argv[2], String(server.address().port));
+});
+`);
+  const responseServer = spawn(process.execPath,
+    [responseServerScript, responsePortFile],
+    { stdio: "ignore", windowsHide: true });
+  try {
+    const clock = new Int32Array(new SharedArrayBuffer(4));
+    for (let attempt = 0; attempt < 100 && !fs.existsSync(responsePortFile); attempt++) {
+      Atomics.wait(clock, 0, 0, 50);
+    }
+    assert.ok(fs.existsSync(responsePortFile), "local protocol mock must start");
+    const responseConfig = path.join(dir, "response-server-config.json");
+    const responsePort = fs.readFileSync(responsePortFile, "utf8").trim();
+    fs.writeFileSync(responseConfig, JSON.stringify({
+      server: "http://127.0.0.1:" + responsePort,
+      api_key: "bad-response", default_account: "fixture",
+      accounts: [{ name: "fixture" }],
+    }));
+    for (const [key, expectedStatus, expectedCode] of [
+      ["bad-response", "unknown", "NETWORK_OUTCOME_UNKNOWN"],
+      ["denied-response", "rejected", "BAD_ARGUMENT"],
+      ["failed-response", "unknown", "UPSTREAM_FAILED"],
+    ]) {
+      const runReply = spawnSync(process.execPath,
+        [entrypoint, "publish", goodPath, "--json", "--account", "fixture",
+          "--api-key", key],
+        { encoding: "utf8", timeout: 25000,
+          env: { ...process.env, PUBLY_CONFIG: responseConfig } });
+      assert.equal(runReply.status, 5, key + " " + runReply.stderr);
+      const report = JSON.parse(runReply.stdout);
+      assert.equal(report.kind, "publish-result");
+      assert.equal(report.status, expectedStatus);
+      assert.equal(report.code, expectedCode);
+      assert.match(report.requestId, /^[a-f0-9]{32}$/);
+      assert.ok(!runReply.stdout.includes(privateServerMarker));
+      assert.ok(!runReply.stderr.includes(privateServerMarker));
+      assert.ok(!runReply.stderr.includes("SyntaxError:"));
+    }
+  } finally {
+    responseServer.kill();
+  }
 
   // The local cover is valid, but external body images still must NOT
   // silently enter an incomplete WeChat draft. Query tokens are private.
@@ -251,6 +561,16 @@ try {
 
   // The image-post preview must show the same rasterized PNG cards as
   // publish, never ordinary Markdown/HTML pretending to be card output.
+  const cardAgentOut = path.join(dir, "agent-cards.html");
+  const cardAgentPreview = cli("preview", cardsPath, "--json", "--out", cardAgentOut);
+  assert.equal(cardAgentPreview.status, 0, cardAgentPreview.stderr);
+  const cardAgent = JSON.parse(cardAgentPreview.stdout);
+  assert.equal(cardAgent.kind, "local-preview");
+  assert.equal(cardAgent.type, "image_post");
+  assert.equal(cardAgent.mode, "cards");
+  assert.equal(cardAgent.submitted, false);
+  assert.ok(fs.readFileSync(cardAgent.output, "utf8").includes("data:image/png;base64,"));
+
   const cardsOut = path.join(dir, "card-review.html");
   const cardPreview = spawnSync(process.execPath,
     [entrypoint, "preview", cardsPath, "--no-open", "--out", cardsOut],
@@ -286,6 +606,23 @@ try {
   const secret = "synthetic-secret-marker-do-not-print";
   const corrupt = path.join(project, "malformed.md");
   fs.writeFileSync(corrupt, "---\nprivate_key: " + secret + "\nunsupported: [broken\n---\n# hi");
+  const corruptPublish = spawnSync(process.execPath,
+    [entrypoint, "publish", corrupt, "--json", "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(corruptPublish.status, 3, corruptPublish.stderr);
+  const corruptResult = JSON.parse(corruptPublish.stdout);
+  assert.equal(corruptResult.code, "RENDER_FAILED");
+  assert.equal(corruptResult.submitted, false);
+  assert.ok(!corruptPublish.stderr.includes(secret), "private frontmatter should not leak to stderr");
+  assert.ok(!corruptPublish.stdout.includes(secret), "private frontmatter should not leak to JSON");
+  const corruptPreviewRun = cli("preview", corrupt, "--json");
+  assert.equal(corruptPreviewRun.status, 3);
+  const corruptPreviewReport = JSON.parse(corruptPreviewRun.stdout);
+  assert.equal(corruptPreviewReport.code, "RENDER_FAILED");
+  assert.equal(corruptPreviewReport.submitted, false);
+  assert.ok(!corruptPreviewRun.stdout.includes(secret));
+  assert.ok(!corruptPreviewRun.stderr.includes(secret));
+
   const malformed = run(corrupt);
   assert.equal(malformed.code, 3);
   assert.equal(malformed.report.ok, false);

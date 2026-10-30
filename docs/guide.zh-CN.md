@@ -2,7 +2,7 @@
 
 [English](guide.md) · **简体中文**
 
-> 面向使用者（人和 agent 皆可）的完整操作手册。设计理念见 [design.md](design.md)，部署架构见仓库 roadmap。
+> 面向使用者（人和 agent 皆可）的完整操作手册。Agent 优先阅读 [CLI 机器调用契约](agent-cli.zh-CN.md)，使用 `publy capabilities --json` 探测能力，不要解析人工输出；设计理念见 [design.md](design.md)，部署架构见仓库 roadmap。
 
 ## 它是什么
 

@@ -8,7 +8,7 @@ Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the se
 - 当前阶段：渲染/发布管线已实现并自用，公开托管商业交付仍有门禁，进度见 `docs/roadmap.md`
 - 动代码前必读 design.md 第 3 节（CLI 契约）与第 4 节（图片消息管线）
 - Public user documentation is English with a complete Chinese path; historical internal design notes may remain Chinese. Code comments use English.
-- 退出码与 `--json` 输出是对外契约，变更需同步 design.md 第 3 节
+- 退出码与 `--json` 输出是对外契约，变更需同步 design.md 第 3 节和 docs/agent-cli.md / docs/agent-cli.zh-CN.md。使用 `publy capabilities --json` 发现实际支持的命令；不要把目标文档里的“所有命令 JSON”当作当前代码事实。Agent 不可自动创建草稿、取消/重试服务端任务或公开发布，除非用户对该副作用做了明确授权。CLI 不依赖某个编辑器，而发布目标只限公众号草稿箱。
 
 ## Editor-independent product contract (2026-10-30)
 

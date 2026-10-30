@@ -150,7 +150,7 @@ wenyan（文颜）验证了 CLI + server 路线可行（tlai-wechat-publish 技�
 
 
 
-设计原则：一切命令非交互可完成；`--json` 输出机器可读结果；退出码稳定；破坏性操作显式确认。
+设计原则：CLI 是编辑器无关的通用接口；Agent 通过版本化能力发现、结构化 JSON、稳定退出码与明确的副作用分类调用，不必模拟 GUI。**这是目标和逐步验收的契约，不代表所有历史命令都已经做到。** 当前已有 `capabilities --json`、`check --json`、`preview --json`、`card --json`、`publish --json`、`publish-result --json`、`account list --json`、`jobs list --json`、`history --json`、`quota --json`；其余命令以 `capabilities` 报告的真实 `json:false` 为准。发布/取消/重试应由 Agent 在用户明确授权后调用。完整实例和风险边界见 [Agent CLI 契约](agent-cli.zh-CN.md)。
 
 ```bash
 publy render a.md --theme claude -o out.html   # Markdown → 公众号 HTML（免费路径，可贴入后台）
@@ -165,7 +165,7 @@ publy account add --app-id wx... --secret-env WX_SECRET   # 密钥走环境变�
 publy quota                                    # 群发配额余量
 ```
 
-- 所有命令支持 `--json`。退出码：`0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败 / `5` 服务端错误 / `6` 配额不足
+- 当前部分命令支持 `--json`（清单见 `publy capabilities --json`，不要假设所有命令均已支持）。退出码以实际命令及 [Agent CLI 契约](agent-cli.zh-CN.md) 为准：主要路径 `0` 成功 / `1` 用法错误 / `2` 输入文件错误 / `3` 渲染失败 / `4` 校验失败或查询结果未知 / `5` 服务端、网络及限额错误。**原设计中的退出码 6 尚未实现，不能当作已发布接口。**
 - `publish --json` 输出含 `warnings` 数组（渲染期非致命警告，如资源目录缺图）。警告同时打到 stderr，但 agent 消费 `--json` 时以该字段为准——不允许"发布成功但图片静默丢失"只留在 stderr
 - `config set` 支持键：`server` / `api_key` / `default_account` / `media_dirs`（逗号分隔多个目录）；不支持手编 `~/.publy/config.json`
 - 服务端不可达时 stderr 必须带底层原因（`ECONNREFUSED` / TLS 握手 / 超时分类不同），并给出下一步（检查 `--server` 或 `publy tunnel`）

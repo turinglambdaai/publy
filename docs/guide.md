@@ -1,6 +1,6 @@
 # Publy CLI and self-hosting manual
 
-**English** · [简体中文](guide.zh-CN.md)
+**English** · [简体中文](guide.zh-CN.md) · [Agent CLI contract](agent-cli.md)
 
 Publy renders Markdown locally and delivers article drafts or image-post cards through a server to official WeChat APIs. A successful draft delivery is not a public post or mass-send. Available APIs depend on your actual account permissions.
 

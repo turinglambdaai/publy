@@ -37,7 +37,17 @@ export interface CliConfig {
 
 export function loadConfig(): CliConfig {
   if (!fs.existsSync(CONFIG_PATH)) return {};
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  // Node JSON SyntaxError can include a slice of the original config (API
+  // key/AppSecret). Keep parser diagnostics out of CLI and Agent logs.
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Config must be an object");
+    }
+    return parsed as CliConfig;
+  } catch {
+    throw new Error("PUBLY_CONFIG_INVALID");
+  }
 }
 
 function saveConfig(config: CliConfig): void {
@@ -212,7 +222,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
 
   const ok = problems.length === 0;
   const report = {
-    ok, kind: "local-preflight", source, title, type,
+    schemaVersion: 1, ok, kind: "local-preflight", source, title, type,
     attachmentCount: attachments, ...(cardCount === undefined ? {} : { cardCount }),
     problems, warnings, networkUsed: false, submitted: false,
   };
@@ -293,13 +303,39 @@ function inlineLocalPreviewImages(html: string, attachments: readonly { name: st
 
 async function cmdPreview(file: string, opts: Record<string, any>): Promise<void> {
   const source = path.resolve(file);
-  const raw = fs.readFileSync(source, "utf8");
-  const parsed = parseSource(raw);
+  let raw: string;
+  let parsed: ReturnType<typeof parseSource>;
+  let sourceRead = false;
+  try {
+    if (!/\.(?:md|markdown)$/i.test(source)) throw new Error("Not a Markdown file");
+    raw = fs.readFileSync(source, "utf8");
+    sourceRead = true;
+    parsed = parseSource(raw);
+  } catch {
+    const problem = sourceRead
+      ? "Cannot parse Markdown frontmatter; review the document syntax."
+      : "Choose a readable Markdown (.md or .markdown) file.";
+    const code = sourceRead ? "RENDER_FAILED" : "INPUT_INVALID";
+    if (opts.json) {
+      console.log(JSON.stringify({ schemaVersion: 1, kind: "local-preview", ok: false, code, source, problems: [problem], submitted: false, networkUsed: false }));
+    } else {
+      console.error("publy: " + problem);
+    }
+    process.exitCode = sourceRead ? 3 : 2;
+    return;
+  }
   const cardsMode = publishType(parsed.meta) === "image_post" && parsed.meta.mode?.toLowerCase() === "cards";
   const out = opts.out
     ? path.resolve(opts.out)
     : path.join(fs.mkdtempSync(path.join(os.tmpdir(), "publy-preview-")), "index.html");
-  if (!allowHtmlOutput(source, out, opts.force === true)) return;
+  if (!allowHtmlOutput(source, out, opts.force === true)) {
+    if (opts.json) console.log(JSON.stringify({
+      schemaVersion: 1, kind: "local-preview", ok: false, code: "OUTPUT_INVALID",
+      source, problems: ["Choose a new .html output path or explicitly use --force."],
+      submitted: false, networkUsed: false,
+    }));
+    return;
+  }
 
   let preview = "";
   let problems: string[] = [];
@@ -329,6 +365,11 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
       // Some glyphs are not in the bundled subset. The offline preview must
       // fail visibly, not secretly download fonts or claim readiness.
       console.error("publy: offline card preview unavailable; check bundled fonts or unsupported glyphs. No draft was sent.");
+      if (opts.json) console.log(JSON.stringify({
+        schemaVersion: 1, kind: "local-preview", ok: false, code: "CARD_RENDER_FAILED",
+        source, problems: ["Cannot render cards with offline fonts; inspect locally."],
+        submitted: false, networkUsed: false,
+      }));
       process.exitCode = 3;
       return;
     } finally {
@@ -339,7 +380,9 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
       theme: opts.theme,
       customThemePath: opts.customTheme,
       highlight: opts.highlight,
-      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
+      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], (() => {
+        try { return loadConfig(); } catch { return {}; }
+      })()),
       baseDir: path.dirname(source),
       footnote: opts.footnote !== false,
       footer: opts.footer,
@@ -347,6 +390,14 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     for (const warning of result.warnings) console.error("warn: " + warning);
     preview = inlineLocalPreviewImages(result.html, result.attachments);
     problems = result.warnings.filter(blockingMediaWarning);
+    // Preview readiness should not contradict the separate local check:
+    // WeChat articles need a cover or a body image; image posts need media.
+    if (publishType(parsed.meta) === "article" &&
+        !result.cover && result.attachments.length === 0) {
+      problems.push("Missing cover: add a local image or a cover: path before submitting a draft.");
+    } else if (publishType(parsed.meta) === "image_post" && result.attachments.length === 0) {
+      problems.push("No local images found for the image post.");
+    }
   }
 
   const warningPanel = problems.length
@@ -359,8 +410,20 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     { flag: opts.force ? "w" : "wx", mode: 0o600 },
   );
   if (process.platform !== "win32") fs.chmodSync(out, 0o600);
-  console.error(`preview → ${out}`);
-  if (opts.open !== false) openInBrowser(out);
+  if (opts.json) {
+    console.log(JSON.stringify({
+      schemaVersion: 1, kind: "local-preview", ok: problems.length === 0,
+      source, output: out, title,
+      type: publishType(parsed.meta),
+      mode: cardsMode ? "cards" : "article",
+      problems, contentType: "text/html",
+      networkUsed: false, submitted: false,
+    }));
+    if (problems.length) process.exitCode = 4;
+  } else {
+    console.error(`preview → ${out}`);
+    if (opts.open !== false) openInBrowser(out);
+  }
 }
 
 async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
@@ -476,17 +539,52 @@ function textModePayload(rendered: ReturnType<typeof renderMarkdown>, raw: strin
 }
 
 async function cmdPublish(file: string, opts: Record<string, any>): Promise<void> {
-  const config = loadConfig();
+  const agentFailure = (
+    status: "not_submitted" | "unknown" | "rejected",
+    code: string, exitCode: number,
+    requestId?: string, problems: string[] = [],
+  ): void => {
+    if (opts.json) {
+      console.log(JSON.stringify({
+        schemaVersion: 1, ok: false, kind: "publish-result",
+        status, code, requestId: requestId ?? null, problems,
+        submitted: status === "unknown" ? null : false,
+      }));
+    }
+    process.exitCode = exitCode;
+  };
+  let config: CliConfig;
+  try {
+    config = loadConfig();
+  } catch {
+    console.error("publy: invalid local configuration; check JSON syntax.");
+    agentFailure("not_submitted", "CONFIG_INVALID", 1);
+    return;
+  }
   const server = opts.server ?? config.server;
   const apiKey = opts.apiKey ?? config.api_key;
   if (!server || !apiKey) {
     console.error("publy: server/api_key not configured. Run `publy config set server <url>` / `config set api_key <key>` or pass --server/--api-key.");
-    process.exit(5);
+    agentFailure("not_submitted", "SERVER_NOT_CONFIGURED", 5);
+    return;
   }
 
-  const raw = fs.readFileSync(file, "utf-8");
+  let raw: string;
+  let parsed: ReturnType<typeof parseSource>;
+  let sourceRead = false;
+  try {
+    if (!/\.(?:md|markdown)$/i.test(file)) throw new Error("Unsupported file extension");
+    raw = fs.readFileSync(file, "utf8");
+    sourceRead = true;
+    parsed = parseSource(raw);
+  } catch {
+    // YAML parser exceptions may include private note values; never reveal
+    // the raw exception. Distinguish a missing file from invalid source.
+    console.error("publy: cannot read or parse Markdown source.");
+    agentFailure("not_submitted", sourceRead ? "RENDER_FAILED" : "INPUT_INVALID", sourceRead ? 3 : 2);
+    return;
+  }
   const baseDir = path.dirname(path.resolve(file));
-  const parsed = parseSource(raw);
   const type = publishType(parsed.meta);
 
   let html: string;
@@ -510,7 +608,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       const cardResult = await renderCards(raw, { theme: opts.theme, outDir });
       if (!cardResult.lint.ok) {
         for (const p of cardResult.lint.problems) console.error(`lint: ${p}`);
-        process.exit(4);
+        agentFailure("not_submitted", "CARD_LINT_FAILED", 4, undefined, cardResult.lint.problems);
+        return;
       }
       images = cardResult.cards.map((c) => ({
         name: c.name,
@@ -554,7 +653,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       const resolved = path.isAbsolute(coverPath) ? coverPath : path.resolve(baseDir, coverPath);
       if (!fs.existsSync(resolved)) {
         console.error(`publy: cover not found: ${resolved}`);
-        process.exit(2);
+        agentFailure("not_submitted", "COVER_NOT_FOUND", 2);
+        return;
       }
       const existing = rendered.attachments.find((a) => a.path === resolved);
       if (existing) {
@@ -594,14 +694,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     console.error("publy: draft NOT sent; fix the missing or unrenderable media first:");
     for (const warning of blockers) console.error("fix: " + warning);
     console.error("Run `publy check <file>` to inspect local problems, then preview before retrying.");
-    process.exitCode = 4;
+    agentFailure("not_submitted", "MEDIA_NOT_READY", 4, undefined, blockers);
     return;
   }
 
   const accountName = opts.account ?? config.default_account ?? config.accounts?.[0]?.name;
   if (!accountName) {
     console.error("publy: no account specified (--account or default_account in config)");
-    process.exit(1);
+    agentFailure("not_submitted", "ACCOUNT_NOT_CONFIGURED", 1);
+    return;
   }
   const account = config.accounts?.find((a) => a.name === accountName);
 
@@ -629,7 +730,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     const d = new Date(opts.at);
     if (Number.isNaN(d.getTime())) {
       console.error(`publy: invalid --at datetime "${opts.at}"`);
-      process.exit(1);
+      agentFailure("not_submitted", "INVALID_SCHEDULE", 1);
+      return;
     }
     payload.publishAt = d.toISOString();
   }
@@ -645,8 +747,23 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": apiKey },
       body: JSON.stringify(payload),
+      // A lost response is an unknown outcome, not permission to post again.
+      signal: AbortSignal.timeout(120_000),
     });
-    return { res, body: (await res.json()) as PublishResult };
+    let rawResponse: unknown;
+    try {
+      rawResponse = await res.json();
+    } catch {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    if (!rawResponse || typeof rawResponse !== "object" || Array.isArray(rawResponse)) {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    const body = rawResponse as PublishResult;
+    if (res.ok && !body.mediaId && !body.jobId) {
+      throw new Error("PUBLY_SERVER_RESPONSE_INVALID");
+    }
+    return { res, body };
   }
 
   let result: { res: Response; body: PublishResult } | null = null;
@@ -661,7 +778,13 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     console.error("publy: server unreachable, bringing up the SSH tunnel…");
     if (await ensureTunnel(config)) {
       const tunnelServer = config.tunnel.server ?? `http://127.0.0.1:${config.tunnel.local_port}`;
-      result = await postPublish(tunnelServer);
+      try {
+        result = await postPublish(tunnelServer);
+      } catch (error) {
+        // Tunnel request may also have reached the remote server. Preserve
+        // the original draft identity and report an unknown outcome.
+        netErr = error;
+      }
     }
   }
   if (!result) {
@@ -669,21 +792,28 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     // draft — outcome unknown, never treated as permission to re-send (#7).
     // Surface the underlying cause and the request identity so an agent can
     // reconcile with `publy publish-result <key>` instead of re-publishing.
-    const cause = (netErr as Error | null)?.cause as { code?: string; message?: string } | undefined;
-    const detail = cause?.code ?? cause?.message ?? (netErr as Error | null)?.message ?? "";
-    console.error(`publy: cannot reach server ${server}${detail ? ` (${detail})` : ""}`);
+    const detail = netErr instanceof Error && netErr.message === "PUBLY_SERVER_RESPONSE_INVALID"
+      ? "server response was not valid confirmation JSON"
+      : "network failed or timed out";
+    console.error(`publy: cannot confirm draft delivery (${detail})`);
     console.error(`publy: check --server / config server, or run \`publy tunnel\` when a tunnel is configured (e.g. TLS failures on the public domain)`);
     console.error(`publy: outcome UNKNOWN — the draft may already exist. Query before retrying: publy publish-result ${idempotencyKey}`);
-    process.exit(5);
+    agentFailure("unknown", "NETWORK_OUTCOME_UNKNOWN", 5, idempotencyKey);
+    return;
   }
   const { res, body } = result;
   if (!res.ok) {
-    console.error(`publy: publish failed (${res.status}) ${body.code ?? ""}: ${body.message ?? "unknown error"}`);
-    process.exit(5);
+    // Remote error message bodies are untrusted and may include secrets.
+    // Only emit a bounded, machine-safe server error code.
+    const code = typeof body.code === "string" && /^[A-Z0-9_]{1,64}$/.test(body.code)
+      ? body.code : "SERVER_REJECTED";
+    console.error(`publy: draft API returned HTTP ${res.status} (${code})`);
+    agentFailure(res.status >= 500 ? "unknown" : "rejected", code, 5, idempotencyKey);
+    return;
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, requestId: body.requestId ?? idempotencyKey, warnings }));
+    console.log(JSON.stringify({ schemaVersion: 1, kind: "publish-result", ok: true, status: body.jobId ? "scheduled" : "confirmed", account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, requestId: body.requestId ?? idempotencyKey, warnings }));
   } else if (body.jobId) {
     console.log(`已创建定时任务 ${body.jobId}，将在 ${body.runAt} 自动发布到 ${accountName}（publy jobs 查看状态）`);
   } else {
@@ -694,9 +824,175 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
 
 // ---------------------------------------------------------------------------
 
+
+/** Read-only Agent requests must never throw a raw URL/fetch/JSON error
+ * to stdout. Remote status codes are not private diagnostics, while server
+ * URLs, API keys and response bodies may contain sensitive information.
+ */
+async function requestServerJson(
+  config: CliConfig,
+  endpoint: string,
+  method: "GET" | "POST" | "DELETE" = "GET",
+): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; code: string }> {
+  if (!config.server || !config.api_key) return { ok: false, code: "SERVER_NOT_CONFIGURED" };
+  let target: URL;
+  try {
+    target = new URL(endpoint, config.server);
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return { ok: false, code: "CONFIG_INVALID" };
+    }
+  } catch {
+    return { ok: false, code: "CONFIG_INVALID" };
+  }
+  let response: Response;
+  try {
+    response = await fetch(target.toString(), {
+      method,
+      headers: { "x-api-key": config.api_key },
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return { ok: false, code: "SERVER_UNREACHABLE" };
+  }
+  if (!response.ok) {
+    return { ok: false, code: response.status === 401 || response.status === 403
+      ? "UNAUTHORIZED" : response.status === 429 ? "RATE_LIMITED"
+        : response.status >= 500 ? "SERVER_ERROR" : "SERVER_REJECTED" };
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { ok: false, code: "INVALID_SERVER_RESPONSE" };
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, code: "INVALID_SERVER_RESPONSE" };
+  }
+  return { ok: true, body: body as Record<string, unknown> };
+}
+/** A remote job mutation can have occurred before a response was lost.
+ * Preserve the job ID and mark uncertain outcomes explicitly for agents.
+ */
+function reportJobMutationFailure(
+  opts: { json?: boolean },
+  kind: "job-cancel" | "job-retry",
+  jobId: string,
+  code: string,
+): void {
+  const uncertain = ["SERVER_UNREACHABLE", "SERVER_ERROR", "INVALID_SERVER_RESPONSE"].includes(code);
+  if (opts.json) console.log(JSON.stringify({
+    schemaVersion: 1, ok: false, kind, jobId, code,
+    status: uncertain ? "unknown" : "rejected",
+  }));
+  console.error("publy: " + code);
+  process.exitCode = code === "CONFIG_INVALID" ? 1 : 5;
+}
+function readAgentConfig(
+  opts: { json?: boolean },
+  kind: string,
+): CliConfig | null {
+  try {
+    return loadConfig();
+  } catch {
+    reportReadFailure(opts, kind, "CONFIG_INVALID");
+    return null;
+  }
+}
+function reportReadFailure(
+  opts: { json?: boolean },
+  kind: string,
+  code: string,
+): void {
+  if (opts.json) console.log(JSON.stringify({
+    schemaVersion: 1, ok: false, kind, code,
+  }));
+  console.error("publy: " + code);
+  process.exitCode = code === "CONFIG_INVALID" ? 1 : 5;
+}
+
+/** Exact invocation examples for machine clients. These are examples,
+ * not an argv parser or a claim that every legacy command supports JSON.
+ */
+const AGENT_USAGE: Record<string, string> = {
+  capabilities: "publy capabilities --json",
+  check: "publy check <file.md> --json",
+  render: "publy render <file.md> --out <review.html>",
+  preview: "publy preview <file.md> --json [--out <review.html>]",
+  card: "publy card <file.md> --json --out <directory>",
+  publish: "publy publish <file.md> --account <name> --json",
+  "publish-result": "publy publish-result <requestId> --json",
+  "jobs list": "publy jobs list --json",
+  "jobs cancel": "publy jobs cancel <jobId> --json",
+  "jobs retry": "publy jobs retry <jobId> --json",
+  history: "publy history --json",
+  quota: "publy quota --json",
+  "account list": "publy account list --json",
+  "account add": "publy account add <name> [--app-id <id>]",
+  "config set": "publy config set <key> <value>",
+  "theme ls": "publy theme ls",
+  "theme preview": "publy theme preview <name>",
+  tunnel: "publy tunnel",
+};
+
+/** Stable agent discovery of implemented operations (not a future roadmap). */
+const AGENT_COMMANDS = [
+  { name: "capabilities", json: true, network: false, effect: "read" },
+  { name: "check", json: true, network: false, effect: "read" },
+  { name: "render", json: false, network: false, effect: "write-html-if-out" },
+  { name: "preview", json: true, network: false, effect: "write-private-html" },
+  { name: "card", json: true, network: "font-fallback-may-download", effect: "write-png" },
+  { name: "publish", json: true, network: true, effect: "create-wechat-draft" },
+  { name: "publish-result", json: true, network: true, effect: "read" },
+  { name: "jobs list", json: true, network: true, effect: "read" },
+  { name: "jobs cancel", json: true, network: true, effect: "cancel-scheduled-job" },
+  { name: "jobs retry", json: true, network: true, effect: "re-admit-job" },
+  { name: "history", json: true, network: true, effect: "read" },
+  { name: "quota", json: true, network: true, effect: "read" },
+  { name: "account list", json: true, network: false, effect: "read-local-config" },
+  { name: "account add", json: false, network: false, effect: "write-local-config" },
+  { name: "config set", json: false, network: false, effect: "write-local-config" },
+  { name: "theme ls", json: false, network: "registry-may-be-fetched", effect: "read" },
+  { name: "theme preview", json: false, network: "font-fallback-may-download", effect: "write-preview-and-open-browser" },
+  { name: "tunnel", json: false, network: true, effect: "start-ssh-tunnel" },
+] as const;
+
 export function createProgram(): Command {
   const program = new Command();
   program.name("publy").description("Publish Markdown to WeChat Official Accounts").version(pkg.version);
+  program.command("capabilities")
+    .description("Discover supported CLI operations without login, network or local mutation")
+    .option("--json", "versioned machine-readable operations")
+    .action((opts: { json?: boolean }) => {
+      const result = {
+        schemaVersion: 1,
+        tool: "publy", version: pkg.version,
+        destination: "wechat-official-account-drafts",
+        inputs: ["markdown-file"],
+        firstClassEditors: ["Typora", "Obsidian"],
+        noPublicSend: true,
+        commands: AGENT_COMMANDS.map((command) => ({
+          ...command,
+          usage: AGENT_USAGE[command.name],
+          requiresUserApproval: [
+            "create-wechat-draft",
+            "cancel-scheduled-job",
+            "re-admit-job",
+            "write-local-config",
+            "start-ssh-tunnel",
+          ].includes(command.effect),
+        })),
+      };
+      if (opts.json) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log("Publy CLI — WeChat Official Account drafts only");
+        console.log("Use publy capabilities --json for versioned agent metadata.");
+        for (const item of AGENT_COMMANDS) {
+          console.log(item.name.padEnd(17) + " JSON=" + (item.json ? "yes" : "no") + " effect=" + item.effect);
+        }
+      }
+    });
+
 
   const common = (cmd: Command) =>
     cmd
@@ -722,6 +1018,7 @@ export function createProgram(): Command {
     .argument("<file>")
     .option("-o, --out <path>", "write the local preview to a chosen HTML file")
     .option("--no-open", "do not open a browser after writing the preview")
+    .option("--json", "single JSON result; do not open browser")
     .option("--force", "explicitly replace an existing .html preview output");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
@@ -763,23 +1060,18 @@ export function createProgram(): Command {
     .option("--api-key <key>", "server api key")
     .option("--json", "machine-readable output")
     .action(async (key: string, opts: Record<string, any>) => {
-      const config = loadConfig();
-      const server = opts.server ?? config.server;
-      const apiKey = opts.apiKey ?? config.api_key;
-      if (!server || !apiKey) {
-        console.error("publy: server/api_key not configured.");
-        process.exit(5);
-      }
-      const res = await fetch(new URL(`/v1/publish-result/${encodeURIComponent(key)}`, server).toString(), {
-        headers: { "x-api-key": apiKey },
-      });
-      const body = (await res.json()) as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
-        process.exit(5);
-      }
+      const config = readAgentConfig(opts, "publish-result");
+      if (!config) return;
+      const requestConfig = {
+        ...config, server: opts.server ?? config.server,
+        api_key: opts.apiKey ?? config.api_key,
+      };
+      const reply = await requestServerJson(requestConfig, `/v1/publish-result/${encodeURIComponent(key)}`);
+      if (!reply.ok) { reportReadFailure(opts, "publish-result", reply.code); return; }
+      const body = reply.body as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
       if (opts.json) {
-        console.log(JSON.stringify(body));
+        console.log(JSON.stringify({ schemaVersion: 1, ok: body.status === "confirmed", kind: "publish-result", ...body }));
+        if (body.status !== "confirmed") process.exitCode = 4;
       } else if (body.status === "confirmed") {
         console.log(`已确认：《${body.title ?? "?"}》在 ${body.account ?? "?"} 草稿箱，Media ID: ${body.mediaId}`);
       } else {
@@ -806,32 +1098,41 @@ export function createProgram(): Command {
     });
 
   const jobsCmd = program.command("jobs").description("manage scheduled publishes");
-  jobsCmd.command("list").description("list scheduled jobs").action(async () => {
-    const config = loadConfig();
-    const res = await fetch(new URL("/v1/jobs", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-    const body = (await res.json()) as { jobs?: JobInfo[] } & { code?: string; message?: string };
-    if (!res.ok) {
-      console.error(`publy: ${body.code ?? res.status}: ${body.message ?? ""}`);
-      process.exit(5);
+  jobsCmd.command("list").description("list scheduled jobs").option("--json", "machine-readable job list").action(async (opts: {json?: boolean}) => {
+    const config = readAgentConfig(opts, "jobs");
+    if (!config) return;
+    const reply = await requestServerJson(config, "/v1/jobs");
+    if (!reply.ok) { reportReadFailure(opts, "jobs", reply.code); return; }
+    const body = reply.body as { jobs?: JobInfo[] };
+    if (opts.json) {
+      console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "jobs", jobs: body.jobs ?? [] }));
+    } else {
+      for (const j of body.jobs ?? []) {
+        console.log(`${j.id.slice(0, 8)}  ${j.status.padEnd(8)} ${j.runAt}  ${j.title}${j.error ? ` — ${j.error}` : ""}`);
+      }
+      if (!body.jobs?.length) console.log("(no jobs)");
     }
-    for (const j of body.jobs ?? []) {
-      console.log(`${j.id.slice(0, 8)}  ${j.status.padEnd(8)} ${j.runAt}  ${j.title}${j.error ? ` — ${j.error}` : ""}`);
-    }
-    if (!body.jobs?.length) console.log("(no jobs)");
   });
   jobsCmd
     .command("cancel")
     .argument("<id>")
     .description("cancel a pending job")
-    .action(async (id: string) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}`, config.server!).toString(), {
-        method: "DELETE",
-        headers: { "x-api-key": config.api_key! },
-      });
-      const body = (await res.json()) as { ok?: boolean } & { code?: string; message?: string };
-      console.log(res.ok && body.ok ? "cancelled" : `failed: ${body.code ?? res.status} ${body.message ?? ""}`);
-      process.exit(res.ok && body.ok ? 0 : 5);
+    .option("--json", "machine-readable cancellation outcome (changes server state)")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      let config: CliConfig;
+      try { config = loadConfig(); }
+      catch { reportJobMutationFailure(opts, "job-cancel", id, "CONFIG_INVALID"); return; }
+      const reply = await requestServerJson(config, `/v1/jobs/${encodeURIComponent(id)}`, "DELETE");
+      if (!reply.ok) { reportJobMutationFailure(opts, "job-cancel", id, reply.code); return; }
+      if (reply.body.ok !== true) {
+        reportJobMutationFailure(opts, "job-cancel", id, "SERVER_REJECTED");
+        return;
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "job-cancel", status: "cancelled", jobId: id }));
+      } else {
+        console.log("cancelled");
+      }
     });
   // interrupted jobs never auto-rerun after a crash (#8); the owner retries
   // explicitly — the original idempotency key rides along, so a lost run that
@@ -840,18 +1141,29 @@ export function createProgram(): Command {
     .command("retry")
     .argument("<id>")
     .description("re-admit an interrupted/failed job (idempotency-checked)")
-    .action(async (id: string) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}/retry`, config.server!).toString(), {
-        method: "POST",
-        headers: { "x-api-key": config.api_key! },
-      });
-      const body = (await res.json()) as { ok?: boolean; job?: JobInfo } & { code?: string; message?: string };
-      if (res.ok && body.ok) {
-        console.log(`job ${body.job?.id.slice(0, 8)} re-admitted (${body.job?.status})`);
+    .option("--json", "machine-readable retry outcome (changes server state)")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      let config: CliConfig;
+      try { config = loadConfig(); }
+      catch { reportJobMutationFailure(opts, "job-retry", id, "CONFIG_INVALID"); return; }
+      const reply = await requestServerJson(config, `/v1/jobs/${encodeURIComponent(id)}/retry`, "POST");
+      if (!reply.ok) { reportJobMutationFailure(opts, "job-retry", id, reply.code); return; }
+      const body = reply.body as { ok?: boolean; job?: JobInfo };
+      if (body.ok !== true) {
+        reportJobMutationFailure(opts, "job-retry", id, "SERVER_REJECTED");
+        return;
+      }
+      if (!body.job?.id) {
+        reportJobMutationFailure(opts, "job-retry", id, "INVALID_SERVER_RESPONSE");
+        return;
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({
+          schemaVersion: 1, ok: true, kind: "job-retry",
+          status: body.job.status, jobId: body.job.id,
+        }));
       } else {
-        console.error(`failed: ${body.code ?? res.status} ${body.message ?? ""}`);
-        process.exit(5);
+        console.log(`job ${body.job.id.slice(0, 8)} re-admitted (${body.job.status})`);
       }
     });
 
@@ -859,31 +1171,35 @@ export function createProgram(): Command {
     .command("history")
     .description("show recent publish history from the server audit log")
     .option("-n, --limit <count>", "number of entries", "20")
+    .option("--json", "machine-readable history")
     .action(async (opts) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/history?limit=${encodeURIComponent(opts.limit)}`, config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-      const body = (await res.json()) as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] } & { code?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}`);
-        process.exit(5);
-      }
-      for (const h of body.history ?? []) {
-        console.log(`${h.ts}  ${h.event.padEnd(9)} ${(h.account ?? "").padEnd(16)} ${h.title ?? h.error ?? ""} ${h.mediaId ?? ""}`);
+      const config = readAgentConfig(opts, "history");
+      if (!config) return;
+      const reply = await requestServerJson(config, `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
+      if (!reply.ok) { reportReadFailure(opts, "history", reply.code); return; }
+      const body = reply.body as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] };
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "history", history: body.history ?? [] }));
+      } else {
+        for (const h of body.history ?? []) {
+          console.log(`${h.ts}  ${h.event.padEnd(9)} ${(h.account ?? "").padEnd(16)} ${h.title ?? h.error ?? ""} ${h.mediaId ?? ""}`);
+        }
       }
     });
 
   program
     .command("quota")
     .description("show your plan and this month's usage")
-    .action(async () => {
-      const config = loadConfig();
-      const res = await fetch(new URL("/v1/quota", config.server!).toString(), { headers: { "x-api-key": config.api_key! } });
-      const body = (await res.json()) as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean } & { code?: string };
-      if (!res.ok) {
-        console.error(`publy: ${body.code ?? res.status}`);
-        process.exit(5);
-      }
-      if (body.unlimited) {
+    .option("--json", "machine-readable quota")
+    .action(async (opts: {json?: boolean}) => {
+      const config = readAgentConfig(opts, "quota");
+      if (!config) return;
+      const reply = await requestServerJson(config, "/v1/quota");
+      if (!reply.ok) { reportReadFailure(opts, "quota", reply.code); return; }
+      const body = reply.body as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean };
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "quota", ...body }));
+      } else if (body.unlimited) {
         console.log("admin key：无配额限制");
       } else {
         const expiry = body.expiresAt ? `，Pro 到期 ${new Date(body.expiresAt).toLocaleDateString()}` : "";
@@ -909,10 +1225,19 @@ export function createProgram(): Command {
     .option("--theme <id>")
     .description("add or update an account")
     .action(async (name: string, opts) => cmdAccountAdd(name, opts));
-  accountCmd.command("list").description("list accounts").action(async () => {
-    const config = loadConfig();
-    for (const a of config.accounts ?? []) {
-      console.log(`${a.name === config.default_account ? "*" : " "} ${a.name}  ${a.app_id ?? ""}  theme=${a.theme ?? "-"}`);
+  accountCmd.command("list").description("list accounts").option("--json", "machine-readable account aliases (no secrets)").action(async (opts: {json?: boolean}) => {
+    const config = readAgentConfig(opts, "accounts");
+    if (!config) return;
+    if (opts.json) {
+      console.log(JSON.stringify({
+        schemaVersion: 1, ok: true, kind: "accounts",
+        defaultAccount: config.default_account ?? null,
+        accounts: (config.accounts ?? []).map(({ name, theme }) => ({ name, theme: theme ?? null })),
+      }));
+    } else {
+      for (const a of config.accounts ?? []) {
+        console.log(`${a.name === config.default_account ? "*" : " "} ${a.name}  ${a.app_id ?? ""}  theme=${a.theme ?? "-"}`);
+      }
     }
   });
 
