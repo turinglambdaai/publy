@@ -16,6 +16,8 @@ export interface SourceMeta {
   tags?: string[];
   /** image-post card mode: "cards" implies an image post */
   mode?: string;
+  /** Typora local image root for Markdown references such as /images/photo.png. */
+  "typora-root-url"?: string;
 }
 
 export interface ParsedSource {

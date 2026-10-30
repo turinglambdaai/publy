@@ -27,6 +27,22 @@ WeChat draft delivery and restart, scheduling, quotas, credential/key rotation,
 backup/restore and logs on a controlled deployment. Historic checkmarks below
 are **implementation history**, not acceptance of current production gates.
 
+## Editor-neutral customer experience / 跨编辑器客户体验 — 2026-10-30
+
+Publy must earn a real-user subscription via an excellent **existing editor
+→ original Markdown → preflight → preview/copy → explicit selected WeChat
+draft → verified outcome** journey, not a larger list of unverified editor
+plugins. Typora, VS Code, Zettlr, MarkText and plain Markdown are first-class
+file sources alongside Obsidian; cloud-document adapters and a native
+file-picker companion remain staged, **not delivered**. The first developer
+slice is source-relative/Typora image-path fidelity and an offline
+`publy check` command; retain exact image identity and file immutability.
+See [product UX #25](https://github.com/turlamai/publy/issues/25),
+[interop/format evidence #26](https://github.com/turlamai/publy/issues/26),
+[EN](editor-workflows.md) and [中文](editor-workflows.zh-CN.md).
+Native no-npm clean-install, real editors/OS tests and hosted billing are still
+explicit gates.
+
 ## Current execution boundary / 当前执行边界 — 2026-10-23
 
 Read [the current product/interaction decision](design.md#current-scope-and-interaction-decision--当前范围与交互决定), [pricing policy](../PRICING.md) and [issue #7](https://github.com/turlamai/publy/issues/7) before implementation. First qualify local preview/copy and explicit delivery to a selected account's drafts, including unknown outcomes, retries and source/account identity. Hosted readiness belongs to [pilot #8](https://github.com/turlamai/publy/issues/8). Public hosting is not on sale. Historical checkmarks below describe earlier work, not current merchant approval, live availability or runtime acceptance; old quotas, payment onboarding assumptions and theme-marketplace expansion are superseded by current policy. No new public-send capability is authorized by this roadmap.

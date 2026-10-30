@@ -1,19 +1,21 @@
 # Publy
 
-agent 时代的微信公众号发布管线：一个 CLI 负责排版与图片消息渲染，一个自托管服务负责草稿投递，一个主题商店负责排版资产分发。
+不绑定写作软件的 Markdown → 微信公众号草稿工具：本地检查与排版、Obsidian 集成、自托管草稿投递。公开托管订阅与普通用户独立安装器尚未交付。
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) ![status](https://img.shields.io/badge/status-pipeline%20implemented-blue)
 
 [English](README.md) · **中文**
 
-- **写作留在 Obsidian，发布交给 agent。** `publy publish a.md` ——没有 GUI，没有「复制粘贴进公众号后台」。
+- **写作留在 Typora、Obsidian、VS Code、Zettlr、MarkText 或任意 Markdown 编辑器。** 用原始文件做 `publy check a.md` 检查图片与封面，再决定是否预览和投递草稿。当前 CLI 仍是开发者源码构建版本。
 - **图片消息是一等公民。** `publy card post.md` 确定性渲染主题化 3:4 卡片——像素级正确的汉字，秒级出图，不靠 AI 生图。
-- **主题商店告别 gist。** 主题即 npm 包，带渲染预览；`publy theme add` 一条命令安装，装前可预览。
+- **无需 npm 主题发布。** 内置主题可直接预览；独立签名/版本化主题包仍在规划，不能把 `theme add` 当作已经交付的功能。
 - **开源核心，不做锁定。** CLI 与自托管 server 开源（AGPL-3.0），与云服务同一协议。未来托管服务的价值是：IP 白名单稳定出口、AppSecret 托管、token 生命周期、定时、多账号。
 
 合规：只走微信公众号官方 API，不做账号模拟，不做浏览器自动化。
 
 状态：本地渲染与投递组件已存在；公开托管开通与商业运营尚未开放。
+
+**一个文件、多种写作工具：** [跨编辑器使用与商业级验收](docs/editor-workflows.zh-CN.md) · [English](docs/editor-workflows.md)。读取原始 Markdown 不要求某款编辑器插件；尚需真实干净电脑验收。
 
 ## 开始使用
 

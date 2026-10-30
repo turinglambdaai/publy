@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && node esbuild.mjs",
-    "test": "node -e \"0\""
+    "test": "node scripts/verify-preflight.mjs"
   },
   "keywords": [
     "wechat",

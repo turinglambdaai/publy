@@ -20,10 +20,29 @@ node packages/cli/dist/index.js --help
 
 The commands below use `publy` as shorthand for the source-built CLI entry. **Publy no longer distributes new CLI versions via the npm Registry.** The standalone installer is not available yet; see the [no-npm distribution plan](distribution.md). Until it passes platform acceptance, this is a developer source-build workflow and requires Node.js/pnpm on the build machine, not a recommended end-user install.
 
+## Check any saved Markdown before delivery
+
+Works on original files from Typora, Obsidian, VS Code, Zettlr, MarkText and
+other compatible Markdown editors; a proprietary editor plugin is not
+required. In the development CLI:
+
+```sh
+publy check "/path/to/article.md"
+publy check "/path/to/article.md" --json
+```
+
+This is an **offline, read-only-source** check: image/cover path validation,
+card-section lint, and a JSON result for agents. Input errors exit 2,
+preflight problems exit 4, success exits 0. It never contacts the server or
+submits a WeChat draft. Typora source-relative image folders and local
+`typora-root-url` are supported. For complete supported/unsupported source
+types and clean-install goals, see [editor-independent workflows](editor-workflows.md).
+
 ## Preview before delivery
 
 ```sh
 publy preview article.md
+publy preview article.md --no-open --out preview.html  # offline, images embedded
 publy render article.md -o out.html
 publy theme ls
 publy theme preview claude

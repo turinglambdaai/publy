@@ -10,7 +10,7 @@ import { exec, execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
-import { captionToHtml, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
+import { captionToHtml, lintCards, parseCardSource, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
 
 const pkg = JSON.parse(
   fs.readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -101,6 +101,96 @@ function escapeHtml(s: string): string {
 
 // ---------------------------------------------------------------------------
 
+/** Offline safety-first preflight for any file-based Markdown editor.
+ * The source document remains where it is. This function makes no server
+ * calls, and does not publish or alter the source file.
+ */
+async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> {
+  const source = path.resolve(file);
+  const problems: string[] = [];
+  const warnings: string[] = [];
+  let title = path.basename(source, path.extname(source));
+  let type: "article" | "image_post" = "article";
+  let attachments = 0;
+  let cardCount: number | undefined;
+  let inputError = false;
+  let renderError = false;
+
+  let readableFile = false;
+  try { readableFile = fs.statSync(source).isFile(); } catch { /* no file or inaccessible */ }
+  if (!readableFile) {
+    problems.push("File not found: choose an existing .md file in your editor.");
+    inputError = true;
+  } else if (!/\.(?:md|markdown)$/i.test(source)) {
+    problems.push("Unsupported file: select a Markdown (.md or .markdown) document.");
+    inputError = true;
+  } else {
+    try {
+      const raw = fs.readFileSync(source, "utf8");
+      const parsed = parseSource(raw);
+      type = publishType(parsed.meta);
+      title = parsed.meta.title?.trim() || title;
+      if (type === "image_post" && parsed.meta.mode?.toLowerCase() === "cards") {
+        const cards = parseCardSource(raw);
+        const lint = lintCards(cards.sections, cards.caption);
+        cardCount = cards.sections.length;
+        problems.push(...lint.problems);
+      } else {
+        // Local rendering shares the same asset resolution as real publish.
+        // Check does not require login, an API key or a running server.
+        let mediaDirs: string[] = [];
+        try { mediaDirs = resolveMediaDirs(opts.mediaDir ?? [], loadConfig()); }
+        catch { warnings.push("Local config could not be read; checking source-relative images only."); }
+        const rendered = renderMarkdown(raw, {
+          baseDir: path.dirname(source),
+          mediaDirs,
+          theme: opts.theme,
+          customThemePath: opts.customTheme,
+          highlight: opts.highlight,
+          footnote: opts.footnote !== false,
+          footer: opts.footer,
+        });
+        attachments = rendered.attachments.length;
+        warnings.push(...rendered.warnings);
+        for (const warning of rendered.warnings) {
+          if (/^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered)/i.test(warning)) {
+            problems.push(warning);
+          }
+        }
+        if (type === "article" && !rendered.cover && attachments === 0) {
+          problems.push("Missing cover: add a local image or a cover: path before submitting a draft.");
+        }
+        if (type === "image_post" && attachments === 0) {
+          problems.push("No local images found for the image post.");
+        }
+      }
+    } catch {
+      // Avoid echoing the raw YAML/parser exception: it can include snippets
+      // of a private note or an embedded credential.
+      renderError = true;
+      problems.push("Cannot inspect this document. Check its Markdown frontmatter and rendering options.");
+    }
+  }
+
+  const ok = problems.length === 0;
+  const report = {
+    ok, kind: "local-preflight", source, title, type,
+    attachmentCount: attachments, ...(cardCount === undefined ? {} : { cardCount }),
+    problems, warnings, networkUsed: false, submitted: false,
+  };
+  if (opts.json) {
+    console.log(JSON.stringify(report));
+  } else {
+    console.log((ok ? "✓ Ready for manual review" : "✗ Fix before submitting") + ": " + title);
+    console.log("Source: " + source);
+    console.log("Content: " + type + (cardCount === undefined ? ` | local attachments: ${attachments}` : ` | cards: ${cardCount}`));
+    for (const problem of problems) console.error("fix: " + problem);
+    for (const warning of warnings.filter((w) => !problems.includes(w))) console.error("warn: " + warning);
+    console.log("Local check only — no draft has been submitted.");
+  }
+  if (!ok) process.exitCode = inputError ? 2 : renderError ? 3 : 4;
+}
+
 async function cmdRender(file: string, opts: Record<string, any>): Promise<void> {
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
@@ -121,6 +211,21 @@ async function cmdRender(file: string, opts: Record<string, any>): Promise<void>
   }
 }
 
+/** Embed private/local images inside the temporary preview, never sending
+ * bytes to a remote image host or leaving attachment:// references broken.
+ * The actual publish HTML continues to use the server attachment protocol.
+ */
+function inlineLocalPreviewImages(html: string, attachments: readonly { name: string; path: string; contentType: string }[]): string {
+  let output = html;
+  for (const media of attachments) {
+    const ref = `attachment://${media.name}`;
+    if (!output.includes(ref)) continue;
+    const encoded = fs.readFileSync(media.path).toString("base64");
+    output = output.split(ref).join(`data:${media.contentType};base64,${encoded}`);
+  }
+  return output;
+}
+
 async function cmdPreview(file: string, opts: Record<string, any>): Promise<void> {
   const raw = fs.readFileSync(file, "utf-8");
   const result = renderMarkdown(raw, {
@@ -133,13 +238,14 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
     footer: opts.footer,
   });
   for (const w of result.warnings) console.error(`warn: ${w}`);
-  const out = path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
+  const preview = inlineLocalPreviewImages(result.html, result.attachments);
   fs.writeFileSync(
     out,
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><div style="max-width:578px;width:100%">${result.html}</div></body></html>`,
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><div style="max-width:578px;width:100%">${preview}</div></body></html>`,
   );
   console.error(`preview → ${out}`);
-  openInBrowser(out);
+  if (opts.open !== false) openInBrowser(out);
 }
 
 async function cmdCard(file: string, opts: Record<string, any>): Promise<void> {
@@ -470,11 +576,21 @@ export function createProgram(): Command {
       .option("--footer <text>", "footer text appended after the body")
       .option("--no-footnote", "disable link-to-footnote conversion");
 
+  const checkCmd = program.command("check")
+    .description("Check a Markdown document and local media before publishing (offline; no server required)")
+    .argument("<file>")
+    .option("--json", "machine-readable preflight result");
+  common(checkCmd);
+  checkCmd.action(async (file: string, opts) => cmdCheck(file, opts));
+
   const renderCmd = program.command("render").description("Render markdown to inline-styled WeChat HTML").argument("<file>").option("-o, --out <path>", "write html to file instead of stdout");
   common(renderCmd);
   renderCmd.action(async (file: string, opts) => cmdRender(file, opts));
 
-  const previewCmd = program.command("preview").description("Render and open a local preview in the browser").argument("<file>");
+  const previewCmd = program.command("preview").description("Render a self-contained local preview with images")
+    .argument("<file>")
+    .option("-o, --out <path>", "write the local preview to a chosen HTML file")
+    .option("--no-open", "do not open a browser after writing the preview");
   common(previewCmd);
   previewCmd.action(async (file: string, opts) => cmdPreview(file, opts));
 

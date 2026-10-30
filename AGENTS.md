@@ -10,6 +10,28 @@ Decision `2026-10-auth-1`: Online hosted-service entitlement, verified on the se
 - Public user documentation is English with a complete Chinese path; historical internal design notes may remain Chinese. Code comments use English.
 - 退出码与 `--json` 输出是对外契约，变更需同步 design.md 第 3 节
 
+## Editor-independent product contract (2026-10-30)
+
+**Obsidian is a client integration, not the product boundary.** Publy
+must accept existing Markdown files from Typora, VS Code, Zettlr, MarkText,
+Obsidian and plain-file workflows through the same source-neutral render,
+preflight, preview and draft protocol. A future slim publishing companion
+may accept drag/drop or open-with, but must not become a second editor or
+copy/index the user's notebook by default. The original Markdown/assets stay
+in place; local preview/check must not call a hosted service or require an
+account. Keep exact nested media paths and covers; never silently substitute
+same-name images. Capture missing assets in a preflight report. Obsidian's
+special syntax remains an optional adapter, not a dependency of common
+Markdown. See [English](docs/editor-workflows.md) and
+[中文](docs/editor-workflows.zh-CN.md) acceptance criteria, and #25/#26.
+Do not claim tested compatibility with proprietary editors or a native
+installer until real sample/clean-machine evidence exists.
+
+The customer pays, if at all, for **proven hosted delivery, operational
+reliability and recovery**, never for moving content between editors.
+Public checkout stays closed until Commerce/Permit and merchant gates pass.
+Preserve the family authorization decision `2026-10-auth-1`.
+
 ## Scope discipline for an independent developer (2026-10-30)
 
 WeChat Official Account **draft delivery is the only current publishing

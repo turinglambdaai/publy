@@ -10,7 +10,8 @@ import * as cheerio from "cheerio";
 import juice from "juice";
 import { ATTACHMENT_SCHEME } from "@publy/shared";
 import { parseSource, publishType, type SourceMeta } from "./frontmatter.js";
-import { preprocessObsidian, resolveAsset } from "./obsidian.js";
+import { preprocessObsidian } from "./obsidian.js";
+import { resolveEditorAsset } from "./editor-assets.js";
 import { loadTheme, loadThemeFromCss, loadHighlightCss, resolveVars } from "./theme.js";
 import { svgToPng } from "./svg.js";
 import { texToPng } from "./math.js";
@@ -273,17 +274,15 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   $("img").each((_, el) => {
     const src = $(el).attr("src");
     if (!src || src.startsWith("http") || src.startsWith("data:") || src.startsWith(ATTACHMENT_SCHEME)) return;
-    let filePath = decodeURIComponent(src);
-    if (!path.isAbsolute(filePath)) {
-      const resolved = resolveAsset(path.basename(filePath), mediaDirs);
-      if (!resolved) {
-        warnings.push(`Image not found: ${src}`);
-        return;
-      }
-      filePath = resolved;
-    }
-    if (!fs.existsSync(filePath)) {
-      warnings.push(`Image not found: ${filePath}`);
+    // Preserve relative directories from Typora, Zettlr, MarkText, VS Code
+    // and plain Markdown. Never pick a same-name asset from another folder.
+    let filePath = resolveEditorAsset(src, {
+      baseDir,
+      mediaDirs: opts.mediaDirs,
+      typoraRootUrl: meta["typora-root-url"],
+    });
+    if (!filePath) {
+      warnings.push(`Image not found: ${src}`);
       return;
     }
     if (filePath.toLowerCase().endsWith(".svg")) {
@@ -329,13 +328,12 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 5. cover resolution (frontmatter only; CLI/plugin may override)
   let cover: string | undefined;
   if (meta.cover) {
-    if (path.isAbsolute(meta.cover) && fs.existsSync(meta.cover)) {
-      cover = meta.cover;
-    } else {
-      const name = path.basename(meta.cover);
-      cover = resolveAsset(name, mediaDirs) ?? undefined;
-      if (!cover) warnings.push(`Cover not found: ${meta.cover}`);
-    }
+    cover = resolveEditorAsset(meta.cover, {
+      baseDir,
+      mediaDirs: opts.mediaDirs,
+      typoraRootUrl: meta["typora-root-url"],
+    }) ?? undefined;
+    if (!cover) warnings.push(`Cover not found: ${meta.cover}`);
   }
 
   return {
