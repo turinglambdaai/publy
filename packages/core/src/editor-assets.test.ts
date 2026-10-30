@@ -115,13 +115,13 @@ test("Typora roots support escaped non-ASCII filenames and covers", () => {
     const actual = put(root, "site/blog/配图/封面.png");
     const yaml = [
       "---",
-      `typora-root-url: "${path.join(root, "site").replaceAll("\\\\", "/")}"`,
+      `typora-root-url: "${path.join(root, "site").split(path.sep).join("/")}"`,
       "cover: /blog/%u914D%u56FE/%u5C01%u9762.png",
       "typora-copy-images-to: assets/pasted",
       "---",
       "",
       "![img](/blog/%u914D%u56FE/%u5C01%u9762.png)",
-    ].join("\\n");
+    ].join("\n");
     const rendered = renderMarkdown(yaml, { baseDir: root });
     assert.deepEqual(rendered.warnings, []);
     assert.equal(rendered.cover, actual);
