@@ -37,7 +37,17 @@ export interface CliConfig {
 
 export function loadConfig(): CliConfig {
   if (!fs.existsSync(CONFIG_PATH)) return {};
-  return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+  // Node JSON SyntaxError can include a slice of the original config (API
+  // key/AppSecret). Keep parser diagnostics out of CLI and Agent logs.
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Config must be an object");
+    }
+    return parsed as CliConfig;
+  } catch {
+    throw new Error("PUBLY_CONFIG_INVALID");
+  }
 }
 
 function saveConfig(config: CliConfig): void {
@@ -212,7 +222,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
 
   const ok = problems.length === 0;
   const report = {
-    ok, kind: "local-preflight", source, title, type,
+    schemaVersion: 1, ok, kind: "local-preflight", source, title, type,
     attachmentCount: attachments, ...(cardCount === undefined ? {} : { cardCount }),
     problems, warnings, networkUsed: false, submitted: false,
   };
@@ -370,7 +380,9 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
       theme: opts.theme,
       customThemePath: opts.customTheme,
       highlight: opts.highlight,
-      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], loadConfig()),
+      mediaDirs: resolveMediaDirs(opts.mediaDir ?? [], (() => {
+        try { return loadConfig(); } catch { return {}; }
+      })()),
       baseDir: path.dirname(source),
       footnote: opts.footnote !== false,
       footer: opts.footer,
@@ -541,7 +553,14 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     }
     process.exitCode = exitCode;
   };
-  const config = loadConfig();
+  let config: CliConfig;
+  try {
+    config = loadConfig();
+  } catch {
+    console.error("publy: invalid local configuration; check JSON syntax.");
+    agentFailure("not_submitted", "CONFIG_INVALID", 1);
+    return;
+  }
   const server = opts.server ?? config.server;
   const apiKey = opts.apiKey ?? config.api_key;
   if (!server || !apiKey) {
@@ -792,6 +811,7 @@ async function readServerJson(
   try {
     const response = await fetch(new URL(endpoint, config.server).toString(), {
       headers: { "x-api-key": config.api_key },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
       return { ok: false, code: response.status === 401 || response.status === 403
@@ -804,6 +824,17 @@ async function readServerJson(
     return { ok: true, body: body as Record<string, unknown> };
   } catch {
     return { ok: false, code: "SERVER_UNREACHABLE" };
+  }
+}
+function readAgentConfig(
+  opts: { json?: boolean },
+  kind: string,
+): CliConfig | null {
+  try {
+    return loadConfig();
+  } catch {
+    reportReadFailure(opts, kind, "CONFIG_INVALID");
+    return null;
   }
 }
 function reportReadFailure(
@@ -968,7 +999,8 @@ export function createProgram(): Command {
     .option("--api-key <key>", "server api key")
     .option("--json", "machine-readable output")
     .action(async (key: string, opts: Record<string, any>) => {
-      const config = loadConfig();
+      const config = readAgentConfig(opts, "publish-result");
+      if (!config) return;
       const requestConfig = {
         ...config, server: opts.server ?? config.server,
         api_key: opts.apiKey ?? config.api_key,
@@ -1006,7 +1038,9 @@ export function createProgram(): Command {
 
   const jobsCmd = program.command("jobs").description("manage scheduled publishes");
   jobsCmd.command("list").description("list scheduled jobs").option("--json", "machine-readable job list").action(async (opts: {json?: boolean}) => {
-    const reply = await readServerJson(loadConfig(), "/v1/jobs");
+    const config = readAgentConfig(opts, "jobs");
+    if (!config) return;
+    const reply = await readServerJson(config, "/v1/jobs");
     if (!reply.ok) { reportReadFailure(opts, "jobs", reply.code); return; }
     const body = reply.body as { jobs?: JobInfo[] };
     if (opts.json) {
@@ -1060,7 +1094,9 @@ export function createProgram(): Command {
     .option("-n, --limit <count>", "number of entries", "20")
     .option("--json", "machine-readable history")
     .action(async (opts) => {
-      const reply = await readServerJson(loadConfig(), `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
+      const config = readAgentConfig(opts, "history");
+      if (!config) return;
+      const reply = await readServerJson(config, `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
       if (!reply.ok) { reportReadFailure(opts, "history", reply.code); return; }
       const body = reply.body as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] };
       if (opts.json) {
@@ -1077,7 +1113,8 @@ export function createProgram(): Command {
     .description("show your plan and this month's usage")
     .option("--json", "machine-readable quota")
     .action(async (opts: {json?: boolean}) => {
-      const config = loadConfig();
+      const config = readAgentConfig(opts, "quota");
+      if (!config) return;
       const reply = await readServerJson(config, "/v1/quota");
       if (!reply.ok) { reportReadFailure(opts, "quota", reply.code); return; }
       const body = reply.body as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean };
@@ -1110,7 +1147,8 @@ export function createProgram(): Command {
     .description("add or update an account")
     .action(async (name: string, opts) => cmdAccountAdd(name, opts));
   accountCmd.command("list").description("list accounts").option("--json", "machine-readable account aliases (no secrets)").action(async (opts: {json?: boolean}) => {
-    const config = loadConfig();
+    const config = readAgentConfig(opts, "accounts");
+    if (!config) return;
     if (opts.json) {
       console.log(JSON.stringify({
         schemaVersion: 1, ok: true, kind: "accounts",
