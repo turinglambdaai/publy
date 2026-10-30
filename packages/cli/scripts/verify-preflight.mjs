@@ -247,6 +247,34 @@ try {
   assert.equal(cards.report.type, "image_post");
   assert.equal(cards.report.cardCount, 3);
 
+  // The image-post preview must show the same rasterized PNG cards as
+  // publish, never ordinary Markdown/HTML pretending to be card output.
+  const cardsOut = path.join(dir, "card-review.html");
+  const cardPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", cardsPath, "--no-open", "--out", cardsOut],
+    { encoding: "utf8", timeout: 40000,
+      env: { ...process.env, PUBLY_CONFIG: path.join(dir, "no-such-config.json") } });
+  assert.equal(cardPreview.status, 0, cardPreview.stderr);
+  const cardsHtml = fs.readFileSync(cardsOut, "utf8");
+  assert.match(cardsHtml, /WeChat image post card preview/);
+  assert.equal((cardsHtml.match(/data:image\/png;base64,/g) ?? []).length, 3);
+  assert.ok(cardsHtml.includes("synthetic test"), "preview must show image-post caption");
+  assert.ok(cardsHtml.includes("Preview only, not submitted"));
+  assert.ok(cardsHtml.includes("Content-Security-Policy"));
+  assert.equal(fs.readFileSync(cardsPath, "utf8").includes("## cover"), true);
+
+  const invalidCards = path.join(project, "invalid-cards.md");
+  fs.writeFileSync(invalidCards,
+    "---\nmode: cards\ncaption: invalid deck\n---\n\n## cover\nFirst only\n\n## ending\nSecond");
+  const invalidOut = path.join(dir, "invalid-card-preview.html");
+  const invalidPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", invalidCards, "--no-open", "--out", invalidOut],
+    { encoding: "utf8", timeout: 40000 });
+  assert.equal(invalidPreview.status, 0, invalidPreview.stderr);
+  const invalidHtml = fs.readFileSync(invalidOut, "utf8");
+  assert.match(invalidHtml, /Draft not ready/);
+  assert.match(invalidHtml, /图片数量须为 3/);
+
   // Do not leak private YAML values or parser internals into an agent JSON
   // preflight response; malformed sources are safely recoverable errors.
   const secret = "synthetic-secret-marker-do-not-print";
