@@ -10,7 +10,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import type { Attachment, JobInfo, PublishRequest, PublishResponse } from "@publy/shared";
-import { blockingMediaWarning, captionToHtml, lintCards, parseCardSource, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
+import { blockingMediaWarning, captionToHtml, draftIdempotencyKey, lintCards, parseCardSource, parseSource, publishType, renderCards, renderMarkdown, stripMarkdown } from "@publy/core";
 
 const pkg = JSON.parse(
   fs.readFileSync(new URL("../package.json", import.meta.url), "utf-8"),
@@ -538,18 +538,6 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
   }
   const account = config.accounts?.find((a) => a.name === accountName);
 
-  // content-addressed idempotency key: stable across retries of the same
-  // publish, changes when content changes
-  const idempotencyKey = crypto
-    .createHash("sha256")
-    .update(accountName)
-    .update(type)
-    .update(title)
-    .update(String(html.length))
-    .update(images.map((i) => i.name).join(","))
-    .digest("hex")
-    .slice(0, 32);
-
   // digest: explicit frontmatter, else derived from the first body paragraph
   let digest = parsed.meta.digest;
   if (!digest) {
@@ -569,7 +557,6 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     author: opts.author ?? parsed.meta.author ?? account?.author,
     digest,
     needOpenComment: true,
-    idempotencyKey,
   };
   if (opts.at) {
     const d = new Date(opts.at);
@@ -579,6 +566,10 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     }
     payload.publishAt = d.toISOString();
   }
+
+  // Fingerprint the final request, including image bytes and schedule.
+  // Computing this earlier would miss publishAt/digest/author or cover data.
+  payload.idempotencyKey = draftIdempotencyKey(payload);
 
   type PublishResult = Partial<PublishResponse> & { code?: string; message?: string; deduped?: boolean; jobId?: string; runAt?: string };
   async function postPublish(serverUrl: string): Promise<{ res: Response; body: PublishResult }> {
