@@ -81,7 +81,7 @@ try {
   if (process.platform !== "win32") {
     const target = path.join(dir, "unrelated-target.json");
     const link = path.join(dir, "symlink-config.json");
-    fs.writeFileSync(target, "{}\\n");
+    fs.writeFileSync(target, "{}\n");
     fs.symlinkSync(target, link);
     const throughLink = spawnSync(process.execPath,
       [entrypoint, "config", "set", "api_key", "symlink-safe-secret"], {
@@ -89,7 +89,7 @@ try {
         env: { ...process.env, PUBLY_CONFIG: link },
       });
     assert.equal(throughLink.status, 0, throughLink.stderr);
-    assert.equal(fs.readFileSync(target, "utf8"), "{}\\n",
+    assert.equal(fs.readFileSync(target, "utf8"), "{}\n",
       "config update must not overwrite a symlink target");
     assert.equal(fs.lstatSync(link).isSymbolicLink(), false);
     assert.equal(fs.statSync(link).mode & 0o777, 0o600);
