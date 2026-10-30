@@ -41,7 +41,9 @@ types and clean-install goals, see [editor-independent workflows](editor-workflo
 **Media gate:** `publy check` and `publy publish` both reject a missing
 local image or cover, an unrenderable SVG/formula, or a remote / embedded
 data image that would not be uploaded as WeChat material. Download such
-pictures into the note's local asset folder first. The CLI does not print
+pictures into the note's local asset folder first. Browser HTML previews
+use a restrictive CSP blocking automatic remote image/script/network loads;
+local images display as embedded data. Links navigate only on user action. The CLI does not print
 signed remote-image URL query parameters in its errors. A missing article
 cover (unless a local body image exists) or an image post with no images
 also blocks draft submission before any network request.
