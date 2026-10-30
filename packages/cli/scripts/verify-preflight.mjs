@@ -76,6 +76,28 @@ try {
     assert.equal(fs.statSync(path.dirname(newCredentialConfig)).mode & 0o777, 0o700);
   }
 
+  // A symlink at the config path must be replaced, not followed: an old
+  // symlink should never cause a credential write into an unrelated file.
+  if (process.platform !== "win32") {
+    const target = path.join(dir, "unrelated-target.json");
+    const link = path.join(dir, "symlink-config.json");
+    fs.writeFileSync(target, "{}\\n");
+    fs.symlinkSync(target, link);
+    const throughLink = spawnSync(process.execPath,
+      [entrypoint, "config", "set", "api_key", "symlink-safe-secret"], {
+        encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: link },
+      });
+    assert.equal(throughLink.status, 0, throughLink.stderr);
+    assert.equal(fs.readFileSync(target, "utf8"), "{}\\n",
+      "config update must not overwrite a symlink target");
+    assert.equal(fs.lstatSync(link).isSymbolicLink(), false);
+    assert.equal(fs.statSync(link).mode & 0o777, 0o600);
+    assert.equal(JSON.parse(fs.readFileSync(link, "utf8")).api_key, "symlink-safe-secret");
+    assert.deepEqual(fs.readdirSync(dir).filter((name) => name.startsWith(".publy-config-")), [],
+      "temporary credential files must be cleaned up after atomic rename");
+  }
+
   // Agent contract discovery is offline and truthful: don't claim JSON
   // support for operations that still only offer human-oriented output.
   const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
