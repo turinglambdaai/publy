@@ -514,12 +514,27 @@ function textModePayload(rendered: ReturnType<typeof renderMarkdown>, raw: strin
 }
 
 async function cmdPublish(file: string, opts: Record<string, any>): Promise<void> {
+  const agentFailure = (
+    status: "not_submitted" | "unknown" | "rejected",
+    code: string, exitCode: number,
+    requestId?: string, problems: string[] = [],
+  ): void => {
+    if (opts.json) {
+      console.log(JSON.stringify({
+        schemaVersion: 1, ok: false, kind: "publish-result",
+        status, code, requestId: requestId ?? null, problems,
+        submitted: status === "unknown" ? null : false,
+      }));
+    }
+    process.exitCode = exitCode;
+  };
   const config = loadConfig();
   const server = opts.server ?? config.server;
   const apiKey = opts.apiKey ?? config.api_key;
   if (!server || !apiKey) {
     console.error("publy: server/api_key not configured. Run `publy config set server <url>` / `config set api_key <key>` or pass --server/--api-key.");
-    process.exit(5);
+    agentFailure("not_submitted", "SERVER_NOT_CONFIGURED", 5);
+    return;
   }
 
   const raw = fs.readFileSync(file, "utf-8");
@@ -548,7 +563,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       const cardResult = await renderCards(raw, { theme: opts.theme, outDir });
       if (!cardResult.lint.ok) {
         for (const p of cardResult.lint.problems) console.error(`lint: ${p}`);
-        process.exit(4);
+        agentFailure("not_submitted", "CARD_LINT_FAILED", 4, undefined, cardResult.lint.problems);
+        return;
       }
       images = cardResult.cards.map((c) => ({
         name: c.name,
@@ -592,7 +608,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
       const resolved = path.isAbsolute(coverPath) ? coverPath : path.resolve(baseDir, coverPath);
       if (!fs.existsSync(resolved)) {
         console.error(`publy: cover not found: ${resolved}`);
-        process.exit(2);
+        agentFailure("not_submitted", "COVER_NOT_FOUND", 2);
+        return;
       }
       const existing = rendered.attachments.find((a) => a.path === resolved);
       if (existing) {
@@ -632,14 +649,15 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     console.error("publy: draft NOT sent; fix the missing or unrenderable media first:");
     for (const warning of blockers) console.error("fix: " + warning);
     console.error("Run `publy check <file>` to inspect local problems, then preview before retrying.");
-    process.exitCode = 4;
+    agentFailure("not_submitted", "MEDIA_NOT_READY", 4, undefined, blockers);
     return;
   }
 
   const accountName = opts.account ?? config.default_account ?? config.accounts?.[0]?.name;
   if (!accountName) {
     console.error("publy: no account specified (--account or default_account in config)");
-    process.exit(1);
+    agentFailure("not_submitted", "ACCOUNT_NOT_CONFIGURED", 1);
+    return;
   }
   const account = config.accounts?.find((a) => a.name === accountName);
 
@@ -667,7 +685,8 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     const d = new Date(opts.at);
     if (Number.isNaN(d.getTime())) {
       console.error(`publy: invalid --at datetime "${opts.at}"`);
-      process.exit(1);
+      agentFailure("not_submitted", "INVALID_SCHEDULE", 1);
+      return;
     }
     payload.publishAt = d.toISOString();
   }
@@ -712,16 +731,18 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     console.error(`publy: cannot reach server ${server}${detail ? ` (${detail})` : ""}`);
     console.error(`publy: check --server / config server, or run \`publy tunnel\` when a tunnel is configured (e.g. TLS failures on the public domain)`);
     console.error(`publy: outcome UNKNOWN — the draft may already exist. Query before retrying: publy publish-result ${idempotencyKey}`);
-    process.exit(5);
+    agentFailure("unknown", "NETWORK_OUTCOME_UNKNOWN", 5, idempotencyKey);
+    return;
   }
   const { res, body } = result;
   if (!res.ok) {
     console.error(`publy: publish failed (${res.status}) ${body.code ?? ""}: ${body.message ?? "unknown error"}`);
-    process.exit(5);
+    agentFailure(res.status >= 500 ? "unknown" : "rejected", body.code ?? "SERVER_REJECTED", 5, idempotencyKey);
+    return;
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, requestId: body.requestId ?? idempotencyKey, warnings }));
+    console.log(JSON.stringify({ schemaVersion: 1, kind: "publish-result", ok: true, status: body.jobId ? "scheduled" : "confirmed", account: accountName, type, title, mediaId: body.mediaId, deduped: body.deduped ?? false, scheduled: Boolean(body.jobId), jobId: body.jobId, runAt: body.runAt, requestId: body.requestId ?? idempotencyKey, warnings }));
   } else if (body.jobId) {
     console.log(`已创建定时任务 ${body.jobId}，将在 ${body.runAt} 自动发布到 ${accountName}（publy jobs 查看状态）`);
   } else {
