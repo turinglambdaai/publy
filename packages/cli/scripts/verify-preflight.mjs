@@ -63,6 +63,13 @@ try {
   assert.ok(contract.commands.some((c) => c.name === "preview" && c.json === true && c.network === false));
   assert.ok(contract.commands.some((c) => c.name === "jobs list" && c.json === true));
   assert.ok(contract.commands.some((c) => c.name === "publish" && c.effect === "create-wechat-draft"));
+  for (const operation of ["jobs cancel", "jobs retry"]) {
+    const def = contract.commands.find((c) => c.name === operation);
+    assert.equal(def.json, true);
+    assert.equal(def.requiresUserApproval, true);
+    assert.match(def.usage, /--json$/);
+  }
+
   const sendCommand = contract.commands.find((c) => c.name === "publish");
   assert.equal(sendCommand.requiresUserApproval, true);
   assert.match(sendCommand.usage, /publish <file\.md> --account <name> --json/);
@@ -167,6 +174,24 @@ try {
   assert.ok(!badCfgPublish.stdout.includes(privateConfigToken));
   assert.ok(!badCfgPublish.stderr.includes(privateConfigToken));
 
+  for (const [operation, kind] of [
+    ["cancel", "job-cancel"],
+    ["retry", "job-retry"],
+  ]) {
+    const invalidJobConfig = spawnSync(process.execPath,
+      [entrypoint, "jobs", operation, "fake-job-id", "--json"],
+      { encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: malformedConfig } });
+    assert.equal(invalidJobConfig.status, 1);
+    const invalidJobResult = JSON.parse(invalidJobConfig.stdout);
+    assert.equal(invalidJobResult.kind, kind);
+    assert.equal(invalidJobResult.code, "CONFIG_INVALID");
+    assert.equal(invalidJobResult.status, "rejected");
+    assert.equal(invalidJobResult.jobId, "fake-job-id");
+    assert.ok(!invalidJobConfig.stdout.includes(privateConfigToken));
+    assert.ok(!invalidJobConfig.stderr.includes(privateConfigToken));
+  }
+
   // Local Markdown preview must still work with damaged global config:
   // it should not require an account or a repair to private credentials.
   const damagedPreview = spawnSync(process.execPath,
@@ -199,6 +224,24 @@ try {
   fs.writeFileSync(unreachableConfig, JSON.stringify({
     server: "http://127.0.0.1:9", api_key: privateConfigToken,
   }));
+  for (const [operation, kind] of [
+    ["cancel", "job-cancel"],
+    ["retry", "job-retry"],
+  ]) {
+    const uncertainJob = spawnSync(process.execPath,
+      [entrypoint, "jobs", operation, "fake-job-id", "--json"],
+      { encoding: "utf8", timeout: 25000,
+        env: { ...process.env, PUBLY_CONFIG: unreachableConfig } });
+    assert.equal(uncertainJob.status, 5, uncertainJob.stderr);
+    const report = JSON.parse(uncertainJob.stdout);
+    assert.equal(report.kind, kind);
+    assert.equal(report.ok, false);
+    assert.equal(report.status, "unknown", "network outcome may have applied a mutation");
+    assert.equal(report.code, "SERVER_UNREACHABLE");
+    assert.equal(report.jobId, "fake-job-id");
+    assert.ok(!uncertainJob.stdout.includes(privateConfigToken));
+  }
+
   const readUnreachable = spawnSync(process.execPath,
     [entrypoint, "quota", "--json"],
     { encoding: "utf8", timeout: 25000,
