@@ -273,8 +273,20 @@ export function renderMarkdown(raw: string, opts: RenderOptions = {}): RenderRes
   // 3b. images: svg → png, local files → attachment refs
   $("img").each((_, el) => {
     const src = $(el).attr("src");
-    if (!src || src.startsWith("http") || src.startsWith("data:") || src.startsWith(ATTACHMENT_SCHEME)) return;
-    // Preserve relative directories from Typora, Zettlr, MarkText, VS Code
+    if (!src || src.startsWith(ATTACHMENT_SCHEME)) return;
+    // Remote and embedded data images are not uploaded via the official
+    // WeChat media API by this renderer. Never silently ship draft HTML that
+    // only happens to reference them. Do not log their full source URL:
+    // signed image URLs may contain user credentials/query tokens.
+    if (/^https?:/i.test(src)) {
+      warnings.push("Remote image not uploaded: save the HTTP(S) image locally before publishing.");
+      return;
+    }
+    if (/^data:/i.test(src)) {
+      warnings.push("Embedded data image not uploaded: save the image as a local file before publishing.");
+      return;
+    }
+    // Preserve relative directories from Typora and other Markdown files
     // and plain Markdown. Never pick a same-name asset from another folder.
     let filePath = resolveEditorAsset(src, {
       baseDir,

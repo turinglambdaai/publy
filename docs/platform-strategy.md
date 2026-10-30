@@ -1,64 +1,63 @@
-# Publy: narrow destination strategy (2026-10-30)
+# Publy destination and editor scope — 2026-10-30
 
-**Status: active product-scope decision, not a platform integration or release.**
-[中文](platform-strategy.zh-CN.md)
+[简体中文](platform-strategy.zh-CN.md) · **Active product decision**
 
-## One customer, one paid job to be done
+**One publishing destination: WeChat Official Accounts. Two first-class writing
+experiences: Typora and Obsidian.** Standard local Markdown is the shared file
+format, not a promise to integrate every editing product.
 
-Publy helps a writer keep using Typora/Obsidian/VS Code or any compatible
-Markdown editor, review accurate WeChat formatting, and **explicitly deliver
-to one selected WeChat Official Account draft box**, then verify/reconcile
-the outcome. No separate editing database, content-library import or
-automatic mass-sending.
+## What Publy builds
 
-**Editor-neutral input is in scope; multi-platform output is not.** Supporting
-a saved .md from Typora is one input compatibility feature. Adding each
-publication destination is a new API, review, legal, security, support,
-idempotency, content-mapping and account-management product surface.
+The complete experience is **keep the existing Markdown and images → review
+and check locally → choose the target WeChat Official Account → explicitly
+save a draft → confirm the outcome or recover from an unknown result**.
 
-## Destination policy
+- **Typora:** open its existing Markdown file and resolve its relative image
+  paths, local `typora-root-url`, covers and math. Deliver a source-preserving,
+  usable local preview and a simple future nontechnical publishing entry.
+- **Obsidian:** reliable plugin preview and explicit account/draft actions;
+  validate the official three-file community install with fonts, cards and
+  formula rendering. No vault copying.
+- **WeChat:** the only actual delivery protocol. No implicit public send,
+  mass-send, cross-post or automated browser login. First earn user trust in
+  media fidelity, credential boundaries, failures, idempotency and status
+  recovery. Public hosted checkout remains closed until real operational and
+  Commerce/Permit acceptance.
 
-| Channel | Decision | Delivery boundary |
-| --- | --- | --- |
-| WeChat Official Accounts | **P0: sole production publishing destination** | Existing official draft API; reliability, fixed-egress pilot and excellent onboarding take priority over other channels |
-| Zhihu | **Discovery/backlog only** | Strong long-form fit, but third-party authoring/publishing authorization and policy need proof. No simulated login, private cookies, unofficial internal endpoints or unsupported automation. No delivery adapter before a verified, maintainable authorized mechanism and user demand |
-| WordPress, Ghost, DEV/Forem | **Deferred** | Published APIs may make these technically tractable, but easier integration is not a reason to dilute core customer value |
-| Xiaohongshu, Douyin, Weibo, Toutiao, Medium, others | **Not on current roadmap** | Distinct format/account/eligibility/operation requirements; do not imply supported automated publishing |
-| Universal export | **Bounded:** preview, rendered HTML, image cards | Existing local output is not proof of platform-specific paste compatibility. Avoid destination-specific templates until tested demand |
+The shared Markdown engine may read ordinary `.md` files saved by other
+editors, but **we do not ship dedicated integrations, marketing claims,
+regression matrices or support commitments for those products**.
 
-Never present a list of potential channels as already supported. Research
-notes are nonbinding and must not become feature commitments by default.
+## Explicitly excluded
 
-## Sequencing and kill criteria
+**No Zhihu, Toutiao, WordPress, Ghost, DEV/Forem, Xiaohongshu, Douyin,
+Weibo, Medium, or other publishing destination work.** They are not an
+active roadmap, not a discovery backlog, and not a future adapter placeholder.
+Do not investigate their APIs, design a generalized provider framework,
+create provider-specific account UI, or reserve engineering budget for them.
 
-1. **Finish WeChat P0:** original Markdown / media fidelity; safe and usable
-   preflight; reliable preview; accessible explicit account/draft confirmation;
-   correct statuses and idempotent unknown-outcome recovery; genuine clean
-   install and real WeChat acceptance. See #7, #8, #12, #14, #15, #25, #26.
-2. **Make paid value real:** hosted onboarding, stable egress, credential
-   management, current Commerce/Permit entitlement, fair quota, reconciliation,
-   refund/cancel and support. No checkout until approved. See #17.
-3. **Evaluate only one next destination, Zhihu,** *after* the above acceptance,
-   unless evidence warrants a deliberate revision. Reopen only with: verified
-   lawful official/authorized access for normal users; >=5 distinct potential
-   customers with a concrete repeated publishing task; bounded implementation
-   and support cost; a fixture-based fidelity comparison; and evidence that
-   the new destination increases conversion/retention, not merely feature count.
-   If any prerequisite fails, retain only local export and defer the adapter.
+This decision supersedes earlier Zhihu candidate evaluations and all earlier
+conditional references to new destinations. It also supersedes broad
+multi-editor support commitments outside Typora/Obsidian; an ordinary local
+Markdown file is still a valid input.
 
-No multi-channel one-click broadcast, multi-platform scheduler, marketplace,
-general CMS, full text editor or AI-generated content factory as part of the
-current release. Each new destination requires a separate explicit review
-with customer, API contract, permissions, privacy, rollback and owner.
+## Release priorities in order
 
-## Engineering consequence
+1. **Correct source and media:** filenames and relative paths, Typora roots,
+   Obsidian vault embeds, safe HTML, covers, equations and cards; no silent
+   asset substitution or dropped images.
+2. **User-level quality:** offline preview and visible warnings, exact selected
+   account, explicit draft-only submit, status/unknown-outcome recovery, clean
+   installs and first-use validation on Windows/macOS/Linux, keyboard and
+   accessibility, polished error states.
+3. **WeChat real-world reliability:** fixed-egress and whitelist acceptance,
+   official draft confirmation, credentials and backup/restore, retry/idempotency
+   after network loss and process restart.
+4. **Commercial readiness:** hosted onboarding only after operations,
+   entitlements via Commerce/Permit, quotas, cancellation/refund, abuse
+   resistance and support are proven.
 
-Keep the core renderer and user workflow editor-neutral. An internal
-destination seam may be narrow and testable, but **do not** prebuild an
-abstract provider framework with speculative adapters. The WeChat publishing
-protocol remains the only active production implementation. Prefer direct
-product corrections and observed customer feedback over architecture that
-exists only to accommodate hypothetical platforms.
-
-This policy changes product priorities, not current licenses, billing,
-official integration availability or public release status.
+No new destination is required to call Publy complete. Any future expansion
+would require an explicit **new** product decision; it should not be worked on
+under this roadmap. The existing licence and public release status do not
+change with this decision.

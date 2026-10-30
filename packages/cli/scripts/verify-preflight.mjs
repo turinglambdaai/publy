@@ -58,6 +58,10 @@ try {
   const embeddedPrefix = "data:image/png;base64,";
   assert.ok(previewHtml.includes(embeddedPrefix), "local image must be embedded");
   assert.ok(!previewHtml.includes("attachment://photo.png"), "local attachment reference must be replaced");
+  assert.ok(previewHtml.includes("Content-Security-Policy"), "preview must enforce a no-network CSP");
+  assert.ok(previewHtml.includes("default-src 'none'"), "preview must deny unlisted resource loads");
+  assert.ok(previewHtml.includes("img-src data:"), "embedded local images must remain visible");
+  assert.ok(previewHtml.includes("connect-src 'none'"), "preview must not connect to a server");
   const encoded = previewHtml.slice(previewHtml.indexOf(embeddedPrefix) + embeddedPrefix.length).split('"')[0];
   const embeddedBytes = Buffer.from(encoded, "base64");
   assert.deepEqual(embeddedBytes, tinyPng, "preview must embed the exact PNG bytes without mutation");
@@ -69,6 +73,67 @@ try {
   assert.equal(missing.code, 4);
   assert.equal(missing.report.ok, false);
   assert.ok(missing.report.problems.some((p) => p.includes("missing/other.jpg")));
+
+  // A user must never receive a WeChat draft with silently dropped media.
+  // A deliberately unreachable local endpoint makes any accidental submit
+  // fail differently, without calling an external service in this smoke.
+  const fakeConfig = path.join(dir, "fake-publish-config.json");
+  fs.writeFileSync(fakeConfig, JSON.stringify({
+    server: "http://127.0.0.1:9", api_key: "fixture-key",
+    default_account: "fixture", accounts: [{ name: "fixture" }],
+  }));
+  const publishWith = (source) => spawnSync(process.execPath,
+    [entrypoint, "publish", source, "--account", "fixture"],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  const blocked = publishWith(missingPath);
+  assert.equal(blocked.status, 4, blocked.stderr);
+  assert.match(blocked.stderr, /draft NOT sent/);
+  assert.match(blocked.stderr, /Image not found:/);
+  assert.doesNotMatch(blocked.stderr, /outcome UNKNOWN|publish failed \(/);
+  const badCover = path.join(project, "missing-cover.md");
+  fs.writeFileSync(badCover, "---\ncover: assets/absent.png\n---\n\n# Missing cover\n\n![valid](assets/photo.png)");
+  const blockedCover = publishWith(badCover);
+  assert.equal(blockedCover.status, 4, blockedCover.stderr);
+  assert.match(blockedCover.stderr, /Cover not found/);
+
+  const noCoverArticle = path.join(project, "no-cover.md");
+  fs.writeFileSync(noCoverArticle, "# Text only\n\nNo image and no cover");
+  const blockedNoCover = publishWith(noCoverArticle);
+  assert.equal(blockedNoCover.status, 4, blockedNoCover.stderr);
+  assert.match(blockedNoCover.stderr, /Missing cover:/);
+
+  const emptyImagePost = path.join(project, "empty-image-post.md");
+  fs.writeFileSync(emptyImagePost, "---\ntype: image\n---\n\nJust some words");
+  const blockedImagePost = publishWith(emptyImagePost);
+  assert.equal(blockedImagePost.status, 4, blockedImagePost.stderr);
+  assert.match(blockedImagePost.stderr, /No local images found/);
+
+  // Local previews may contain unresolved media while the author fixes the
+  // note. They must call that out in the rendered page, not only on stderr.
+  const brokenPreviewPath = path.join(dir, "broken-preview.html");
+  const brokenPreview = spawnSync(process.execPath,
+    [entrypoint, "preview", missingPath, "--no-open", "--out", brokenPreviewPath],
+    { encoding: "utf8", timeout: 25000, env: { ...process.env, PUBLY_CONFIG: fakeConfig } });
+  assert.equal(brokenPreview.status, 0, brokenPreview.stderr);
+  const brokenHtml = fs.readFileSync(brokenPreviewPath, "utf8");
+  assert.match(brokenHtml, /Missing draft media/);
+  assert.ok(brokenHtml.includes("missing/other.jpg"), "preview should list the missing image path");
+  assert.match(brokenHtml, /Preview only, not submitted/);
+
+  // The local cover is valid, but external body images still must NOT
+  // silently enter an incomplete WeChat draft. Query tokens are private.
+  const remoteOnly = path.join(project, "external-body-image.md");
+  const privateToken = "synthetic-secret-in-url";
+  fs.writeFileSync(remoteOnly,
+    "---\ncover: assets/photo.png\n---\n\n![External](https://example.test/photo.png?token=" + privateToken + ")");
+  const remoteResult = run(remoteOnly);
+  assert.equal(remoteResult.code, 4);
+  assert.ok(remoteResult.report.problems.some((w) => w.includes("Remote image not uploaded")));
+  assert.ok(!JSON.stringify(remoteResult.report).includes(privateToken));
+  const blockedRemote = publishWith(remoteOnly);
+  assert.equal(blockedRemote.status, 4, blockedRemote.stderr);
+  assert.match(blockedRemote.stderr, /Remote image not uploaded/);
+  assert.ok(!blockedRemote.stderr.includes(privateToken), "credential URL must not appear in diagnostics");
 
   const cardsPath = path.join(project, "cards.md");
   fs.writeFileSync(cardsPath,

@@ -5,8 +5,8 @@
 ## Editor-independent commercial product decision / 跨编辑器商业产品决定 — 2026-10-30
 
 **The editor is a source, not the product.** Obsidian is one integration,
-while Typora, VS Code, MarkText, Zettlr and ordinary Markdown files should
-enter the same render/check/review/draft workflow without proprietary plugins.
+while Typora and Obsidian must enter the same render/check/review/draft
+workflow without requiring users to migrate their source files.
 Source files and image folders stay in place. A future optional small
 cross-platform *publishing companion* can make open/drag-and-drop,
 preflight, accurate preview, formatted-copy and explicit draft delivery
@@ -21,28 +21,26 @@ shared acceptance criteria. This refines rather than replaces the
 [中文工作流](editor-workflows.zh-CN.md).
 
 **编辑器是内容来源，不是我们的收费产品。** Obsidian 只是一个接入口；
-Typora、VS Code、MarkText、Zettlr 与普通 Markdown 应当走同一条检查、
-预览、复制和草稿投递路径。源文件与图片留在原位置。未来可用小型跨平台
+Typora 与 Obsidian 应当走同一条检查、预览、复制和
+草稿投递路径；普通 Markdown 文件仍由共用引擎处理。源文件与图片留在原位置。未来可用小型跨平台
 发布伴侣提供打开/拖拽、发布前检查、预览与确认，不再造编辑器或数据库。
 真正商业级的门槛是安装、缺图提示、预览一致性、无障碍、恢复与可验证的
 草稿回执，而不是支持的插件数量或界面截图。
 
 ## Destination scope decision / 发布目的地范围决定 — 2026-10-30
 
-Publy remains **WeChat Official Account draft-first**, not a generic
-multi-platform distribution suite. Accepting Typora/Obsidian/other saved
-Markdown as **inputs** is in scope; new publishing **destinations** are
-separate products with security/permission/maintenance costs. Zhihu is only
-a candidate for post-P0 research and lawful authorized access, not an
-active publishing adapter. Defer WordPress/Ghost/DEV and all other
-destinations until proven user demand and readiness. Do not build a
-speculative provider framework or mass-posting UI. Normative scope:
+Publy has **one publishing destination, WeChat Official Account drafts**.
+Typora and Obsidian are its two focus editor experiences. Other Markdown
+files may be readable, but no additional editor plugins are planned.
+**Zhihu, Toutiao, WordPress, Ghost, Xiaohongshu, Douyin and all other
+publishing destinations are explicitly excluded**, not research candidates.
+Do not build a provider framework or mass-posting UI. Normative scope:
 [English](platform-strategy.md) · [中文](platform-strategy.zh-CN.md).
 
 Publy 以**微信公众号草稿为唯一当前正式输出**。兼容 Typora、Obsidian
 等多种 Markdown **输入**，不等于做所有平台的**发布**。
-知乎只列为需要官方权限与真实用户需求验证的下一阶段候选，其他目的地
-暂缓；不为假想场景预建庞大的适配器框架。完整决定见上方中英文文档。
+知乎、今日头条、WordPress、Ghost、小红书、抖音等发布目的地
+全部排除，不保留调研或条件接入计划；不预建平台适配器框架。完整决定见上方中英文文档。
 
 ## Current scope and interaction decision / 当前范围与交互决定
 

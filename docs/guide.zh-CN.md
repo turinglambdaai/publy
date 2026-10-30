@@ -108,10 +108,10 @@ publy publish article.md
 
 服务端自动把封面中心裁切为公众号要求的 2.35:1。封面三种来源：frontmatter `cover` 字段、`--cover` 参数、正文首图。
 
-### 从 Typora 等任意 Markdown 文件检查后再发
+### 从 Typora 或 Obsidian 检查后再发
 
-Typora、VS Code、Zettlr、MarkText 和纯文件工作流都可以把原始 `.md`
-交给开发版 Publy，不必迁移编辑器。嵌套图片目录和 Typora 本地
+Typora 原始 `.md` 文件和 Obsidian 的 Markdown 笔记都可以交给开发版
+Publy；不必迁移编辑器，也不计划开发其他编辑器插件。嵌套图片目录和 Typora 本地
 `typora-root-url` 均按原文解析；缺图不会静默替换成别的同名文件。
 
 ```bash
@@ -122,6 +122,13 @@ publy check "D:/Notes/article.md" --json  # 输出给 agent 的结构化问题�
 退出码：成功 0、文件输入错误 2、发布前检查不通过 4。该功能不修改源笔记、
 不建立草稿。尚未提供经过跨平台验收的用户安装器，当前为源码构建工具。
 设计与后续支持的编辑器见 [跨编辑器工作流](editor-workflows.zh-CN.md)。
+
+**防止缺图草稿：** `publy check` 与 `publy publish` 都会检查缺失图片/
+封面、无法渲染的公式/SVG、不能经公众号素材接口上传的外链图片或内嵌
+data 图片。先将外链图片保存到原笔记的本地资源文件夹；本地 HTML 预览启用
+CSP 阻止页面自动请求远程图片/脚本，内嵌本地图片仍可查看。没有封面也没有
+正文图片的文章、没有素材的图片消息，都不得创建草稿。失败会以退出码 4
+终止，发生在网络请求前；错误日志不打印带令牌的完整图片 URL。
 
 ### 写作前先看效果
 

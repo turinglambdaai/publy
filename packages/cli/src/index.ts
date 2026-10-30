@@ -105,6 +105,14 @@ function escapeHtml(s: string): string {
  * The source document remains where it is. This function makes no server
  * calls, and does not publish or alter the source file.
  */
+/** Publishing an incomplete image set is worse than a failed local check.
+ * Share these rules between `check` and `publish` so that a warning cannot
+ * become a silently incomplete draft in the official account.
+ */
+function blockingAssetWarning(warning: string): boolean {
+  return /^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered|Remote image not uploaded:|Embedded data image not uploaded:)/i.test(warning);
+}
+
 async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> {
   const source = path.resolve(file);
   const problems: string[] = [];
@@ -153,7 +161,7 @@ async function cmdCheck(file: string, opts: Record<string, any>): Promise<void> 
         attachments = rendered.attachments.length;
         warnings.push(...rendered.warnings);
         for (const warning of rendered.warnings) {
-          if (/^(?:Assets not found:|Image not found:|Cover not found:|SVG conversion failed|Math not rendered)/i.test(warning)) {
+          if (blockingAssetWarning(warning)) {
             problems.push(warning);
           }
         }
@@ -240,9 +248,18 @@ async function cmdPreview(file: string, opts: Record<string, any>): Promise<void
   for (const w of result.warnings) console.error(`warn: ${w}`);
   const out = opts.out ? path.resolve(opts.out) : path.join(os.tmpdir(), `publy-preview-${Date.now()}.html`);
   const preview = inlineLocalPreviewImages(result.html, result.attachments);
+  const warnings = result.warnings.filter(blockingAssetWarning);
+  // The preview is intentionally allowed to show incomplete sources: that is
+  // how a writer fixes a note. But missing media must be VISIBLE in the page,
+  // not only hidden in terminal stderr while a seemingly finished article
+  // appears underneath.
+  const warningPanel = warnings.length
+    ? `<section role="alert" style="border:2px solid #b42318;background:#fff4f2;color:#7a271a;padding:14px 18px;border-radius:10px;margin:12px 0"><strong>草稿素材未就绪 / Missing draft media</strong><p style="margin:8px 0">下列问题必须在投递公众号草稿前修复：</p><ul>${warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join("")}</ul></section>`
+    : "";
+  const localHeader = `<header style="padding:12px 16px;background:#e7f1ff;border-radius:9px;color:#123962;margin-bottom:12px;font:14px system-ui,sans-serif" role="status"><strong>Publy · 本地预览</strong> — 此内容尚未投递到公众号草稿箱 / Preview only, not submitted</header>`;
   fs.writeFileSync(
     out,
-    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><div style="max-width:578px;width:100%">${preview}</div></body></html>`,
+    `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; connect-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(result.title || "preview")}</title></head><body style="margin:0;background:#ddd;display:flex;justify-content:center"><main style="max-width:578px;width:100%;padding:14px 8px;box-sizing:border-box">${localHeader}${warningPanel}${preview}</main></body></html>`,
   );
   console.error(`preview → ${out}`);
   if (opts.open !== false) openInBrowser(out);
@@ -457,6 +474,30 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
     html = rendered.html;
     images = attachments;
     title = opts.title || rendered.title || path.basename(file, path.extname(file));
+  }
+
+  // Failed image references must stop before any HTTP POST. An explicit
+  // --cover wins over stale source frontmatter, so suppress that one warning
+  // only after the override file has been validated in the article branch.
+  const blockers = warnings.filter((warning) =>
+    blockingAssetWarning(warning) &&
+    !(type === "article" && opts.cover && warning.startsWith("Cover not found:")),
+  );
+  // The official WeChat draft requires a usable cover for articles and at
+  // least one image for text-mode image posts. The regular preflight already
+  // reports these, so publish must enforce the same invariant.
+  if (type === "article" && !coverName && images.length === 0) {
+    blockers.push("Missing cover: provide --cover, cover: frontmatter or a local body image.");
+  }
+  if (type === "image_post" && images.length === 0) {
+    blockers.push("No local images found for image-post draft.");
+  }
+  if (blockers.length) {
+    console.error("publy: draft NOT sent; fix the missing or unrenderable media first:");
+    for (const warning of blockers) console.error("fix: " + warning);
+    console.error("Run `publy check <file>` to inspect local problems, then preview before retrying.");
+    process.exitCode = 4;
+    return;
   }
 
   const accountName = opts.account ?? config.default_account ?? config.accounts?.[0]?.name;

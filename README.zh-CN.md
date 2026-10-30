@@ -6,7 +6,7 @@
 
 [English](README.md) · **中文**
 
-- **写作留在 Typora、Obsidian、VS Code、Zettlr、MarkText 或任意 Markdown 编辑器。** 用原始文件做 `publy check a.md` 检查图片与封面，再决定是否预览和投递草稿。当前 CLI 仍是开发者源码构建版本。
+- **继续使用 Typora 或 Obsidian 写作。** 用原始文件做 `publy check a.md` 检查图片与封面，再决定是否预览和投递草稿。当前 CLI 仍是开发者源码构建版本。
 - **图片消息是一等公民。** `publy card post.md` 确定性渲染主题化 3:4 卡片——像素级正确的汉字，秒级出图，不靠 AI 生图。
 - **无需 npm 主题发布。** 内置主题可直接预览；独立签名/版本化主题包仍在规划，不能把 `theme add` 当作已经交付的功能。
 - **开源核心，不做锁定。** CLI 与自托管 server 开源（AGPL-3.0），与云服务同一协议。未来托管服务的价值是：IP 白名单稳定出口、AppSecret 托管、token 生命周期、定时、多账号。
@@ -15,7 +15,7 @@
 
 状态：本地渲染与投递组件已存在；公开托管开通与商业运营尚未开放。
 
-**一个文件、多种写作工具：** [跨编辑器使用与商业级验收](docs/editor-workflows.zh-CN.md) · [English](docs/editor-workflows.md)。读取原始 Markdown 不要求某款编辑器插件；尚需真实干净电脑验收。
+**一个文件、两种重点写作入口：** [跨编辑器使用与商业级验收](docs/editor-workflows.zh-CN.md) · [English](docs/editor-workflows.md)。普通 Markdown 仍由共用引擎读取，但不开发其他编辑器插件；还需真实干净电脑验收。
 
 ## 开始使用
 

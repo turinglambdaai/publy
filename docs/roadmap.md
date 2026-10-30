@@ -32,9 +32,11 @@ are **implementation history**, not acceptance of current production gates.
 Publy must earn a real-user subscription via an excellent **existing editor
 → original Markdown → preflight → preview/copy → explicit selected WeChat
 draft → verified outcome** journey, not a larger list of unverified editor
-plugins. Typora, VS Code, Zettlr, MarkText and plain Markdown are first-class
-file sources alongside Obsidian; cloud-document adapters and a native
-file-picker companion remain staged, **not delivered**. The first developer
+plugins. **Typora and Obsidian are the only first-class writing
+experiences.** Ordinary Markdown remains a shared input format, not another
+editor-support program. Cloud-document and extra editor adapters are out
+of scope; a small file-picker companion is only a delivery UX candidate,
+**not delivered**. The first developer
 slice is source-relative/Typora image-path fidelity and an offline
 `publy check` command; retain exact image identity and file immutability.
 See [product UX #25](https://github.com/turlamai/publy/issues/25),

@@ -22,9 +22,9 @@ The commands below use `publy` as shorthand for the source-built CLI entry. **Pu
 
 ## Check any saved Markdown before delivery
 
-Works on original files from Typora, Obsidian, VS Code, Zettlr, MarkText and
-other compatible Markdown editors; a proprietary editor plugin is not
-required. In the development CLI:
+Use the original file from Typora or an Obsidian vault. Both use the same
+Markdown parser and asset preflight; no additional editor integrations are
+planned. In the development CLI:
 
 ```sh
 publy check "/path/to/article.md"
@@ -37,6 +37,16 @@ preflight problems exit 4, success exits 0. It never contacts the server or
 submits a WeChat draft. Typora source-relative image folders and local
 `typora-root-url` are supported. For complete supported/unsupported source
 types and clean-install goals, see [editor-independent workflows](editor-workflows.md).
+
+**Media gate:** `publy check` and `publy publish` both reject a missing
+local image or cover, an unrenderable SVG/formula, or a remote / embedded
+data image that would not be uploaded as WeChat material. Download such
+pictures into the note's local asset folder first. Browser HTML previews
+use a restrictive CSP blocking automatic remote image/script/network loads;
+local images display as embedded data. Links navigate only on user action. The CLI does not print
+signed remote-image URL query parameters in its errors. A missing article
+cover (unless a local body image exists) or an image post with no images
+also blocks draft submission before any network request.
 
 ## Preview before delivery
 
