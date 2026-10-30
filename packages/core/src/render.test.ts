@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { renderMarkdown, captionToHtml, stripMarkdown } from "./render.js";
+import * as cheerio from "cheerio";
 import { cropCoverTo235 as crop } from "./crop.js";
 
 const SAMPLE = `---
@@ -131,6 +132,25 @@ test("renderMarkdown removes active raw HTML and unsafe URL attributes", () => {
   assert.match(result.html, /allowed bold/);
   assert.match(result.html, /visible span/);
   assert.match(result.html, /https:\/\/example\.test\/safe/);
+});
+
+test("decoded footnote href cannot create active markup", () => {
+  // HTML entity decoding makes the href contain literal '<img ...>' after
+  // parsing. Re-inserting that URL without escaping would create an element.
+  const source = '<a href="https://example.test/?q=&lt;img src=x onerror=evil()&gt;">safe label</a>';
+  const result = renderMarkdown(source, { theme: "claude" });
+  const $ = cheerio.load(result.html);
+  assert.equal($("img, script, iframe, [onerror]").length, 0);
+  assert.equal($(".publy-footnotes").length, 1);
+  assert.match($(".publy-footnotes").text(), /<img src=x onerror=evil\(\)>/);
+});
+
+test("plain-text footer cannot inject an image or event handler", () => {
+  const footer = '<img src="https://attacker.test/pixel" onerror="evil()">';
+  const result = renderMarkdown("# Safe", { theme: "claude", footer });
+  const $ = cheerio.load(result.html);
+  assert.equal($("img, script, iframe, [onerror]").length, 0);
+  assert.ok($("#publy").text().includes(footer), "footer should remain visible as text");
 });
 
 test("remote and data images are explicitly reported without leaking signed URLs", () => {
