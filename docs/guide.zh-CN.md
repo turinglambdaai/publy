@@ -27,13 +27,9 @@ markdown 文件 → publy CLI → publy-server（你的服务器）→ 微信官
 
 微信公众号 API 要求 IP 白名单，家用/办公网络的出口 IP 会变，所以发布动作必须由一台固定 IP 的机器完成。publy-server 就部署在这台机器上（见文末「自托管服务器」）。
 
-### 2. 本机安装 CLI
+### 2. 本机 CLI（开发期）
 
-```bash
-npm i -g @turinglambdaai/publy
-```
-
-或从源码（开发期）：
+**Publy 不再通过 npm Registry 发布新的 CLI 包。** 当前尚未提供通过验收的独立安装包，普通用户不应按旧版 npm 命令安装。发行方式与 Racket 原生程序实验见 [无需 npm 的分发计划](distribution.md)。在独立程序完成前，开发者可从源码构建：
 
 ```bash
 git clone https://github.com/turlamai/publy.git && cd publy
@@ -41,7 +37,7 @@ pnpm install --frozen-lockfile && pnpm -r build
 # 把 publy 命令指向 packages/cli/dist/index.js（全局 bin 或 alias）
 ```
 
-字体、主题与样例随包分发，装完即用，无需联网下载。
+源码构建后的资源和依赖按实际构建产物提供；不得将开发环境构建成功当作干净电脑上的一键安装验收。
 
 ### 3. 配置客户端
 

@@ -1,7 +1,7 @@
 {
   "name": "@turinglambdaai/publy",
   "version": "1.1.0",
-  "description": "Agent-era publishing pipeline for WeChat Official Accounts: Markdown typesetting, image-post card rendering, reliable publishing",
+  "description": "Internal Publy CLI development build; not published to npm",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -51,5 +51,6 @@
     "typescript": "^5.6.0",
     "@publy/core": "workspace:*",
     "@publy/shared": "workspace:*"
-  }
+  },
+  "private": true
 }

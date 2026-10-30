@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Publy — The agent-era publishing pipeline for WeChat</title>
-    <meta name="description" content="Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, themes as npm packages, and a self-hosted server for WeChat draft delivery.">
+    <meta name="description" content="Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, bundled themes and a theme gallery, and a self-hosted server for WeChat draft delivery.">
     <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -68,7 +68,7 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
                 <li><a href="#features" class="optional" data-en="Features" data-zh="功能">Features</a></li>
                 <li><a href="#start" data-en="How it works" data-zh="工作流">How it works</a></li>
                 <li><a href="#docs" class="optional" data-en="Help" data-zh="帮助">Help</a></li>
-                <li><a href="https://github.com/turinglambdaai/publy" class="optional">GitHub</a></li>
+                <li><a href="https://github.com/turlamai/publy" class="optional">GitHub</a></li>
                 <li class="lang-dropdown-wrapper">
                     <button class="lang-btn" onclick="void 0">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -103,8 +103,8 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
 
             <p class="lead" data-en="Free local tools and self-hosting. Public hosting is not open for registration or payment." data-zh="本地工具与自托管免费。公开托管尚未开放注册或付款。">Free local tools and self-hosting. Public hosting is not open for registration or payment.</p>
             <div class="hero-buttons animate-on-scroll">
-                <a href="https://www.npmjs.com/package/@turinglambdaai/publy" class="btn btn-primary" data-en="npm i -g @turinglambdaai/publy" data-zh="npm i -g @turinglambdaai/publy">npm i -g @turinglambdaai/publy</a>
-                <a data-en-href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md" data-zh-href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.zh-CN.md" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md" class="btn btn-secondary" data-en="User guide" data-zh="使用手册">User guide</a>
+                <a href="https://github.com/turlamai/publy/blob/main/docs/distribution.md" class="btn btn-primary" data-en="Distribution status" data-zh="发行进度">Distribution status</a>
+                <a data-en-href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md" data-zh-href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.zh-CN.md" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md" class="btn btn-secondary" data-en="User guide" data-zh="使用手册">User guide</a>
                 <a href="https://themes.publy.jrtx.site/" class="btn btn-secondary" data-en="Theme gallery" data-zh="主题画廊">Theme gallery</a>
             </div>
 
@@ -118,8 +118,8 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
                         </div>
                         <div class="window-title">terminal</div>
                     </div>
-                    <div class="code-body"><span class="comment"># install once — fonts, themes and samples bundled</span>
-<span class="prompt">$</span> <span class="cmd">npm i -g @turinglambdaai/publy</span>
+                    <div class="code-body"><span class="comment"># CLI source-build demo; standalone installers are in development</span>
+<span class="prompt">$</span> <span class="cmd">publy preview article.md</span>
 
 <span class="comment"># the whole publishing flow, from the editor</span>
 <span class="prompt">$</span> <span class="cmd">publy publish article.md</span>
@@ -162,7 +162,7 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
                     <div class="card-icon">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                     </div>
-                    <h3 data-en="Themes as npm packages" data-zh="主题即 npm 包">Themes as npm packages</h3>
+                    <h3 data-en="Theme previews and styles" data-zh="主题预览与样式">Theme previews and styles</h3>
                     <p data-en="The theme gallery replaces scattered gists: every theme ships with a rendering preview, and publy theme add installs it after you've seen it."
                        data-zh="主题画廊告别 gist：每个主题都带渲染预览，publy theme add 装前可预览。">Every theme ships with a preview; publy theme add installs after you've seen it.</p>
                 </div>
@@ -218,9 +218,8 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
 <span class="prompt">$</span> <span class="cmd">publy card post.md --theme naive</span>
 <span class="ok">✓</span> 6 cards · <span class="str">1.8s</span> · pixel-exact glyphs
 
-<span class="comment"># themes: install with a preview, not a leap of faith</span>
-<span class="prompt">$</span> <span class="cmd">publy theme add @publy/theme-naive</span>
-<span class="ok">✓</span> installed · <span class="str">preview at localhost:7818</span></div>
+<span class="comment"># preview a bundled theme before using it</span>
+<span class="prompt">$</span> <span class="cmd">publy theme preview claude</span></div>
                 </div>
             </div>
 
@@ -231,11 +230,11 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
     </section>
 
     <!-- Design docs -->
-    <section id="docs"><div class="container"><h2 class="reader-en " lang="en">Help for your first delivery</h2><h2 class="reader-zh " lang="zh">首次投递的帮助</h2><div class="bento-grid"><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md">Install and use</a><a class="reader-zh" lang="zh" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">安装与使用</a></div><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turinglambdaai/publy/blob/main/docs/privacy.md">Data and privacy</a><a class="reader-zh" lang="zh" href="https://github.com/turinglambdaai/publy/blob/main/docs/privacy.zh-CN.md">数据与隐私</a></div><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turinglambdaai/publy/blob/main/docs/terms.md">Service availability</a><a class="reader-zh" lang="zh" href="https://github.com/turinglambdaai/publy/blob/main/docs/terms.zh-CN.md">服务可用状态</a></div></div></div></section>
+    <section id="docs"><div class="container"><h2 class="reader-en " lang="en">Help for your first delivery</h2><h2 class="reader-zh " lang="zh">首次投递的帮助</h2><div class="bento-grid"><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md">Install and use</a><a class="reader-zh" lang="zh" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">安装与使用</a></div><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turlamai/publy/blob/main/docs/privacy.md">Data and privacy</a><a class="reader-zh" lang="zh" href="https://github.com/turlamai/publy/blob/main/docs/privacy.zh-CN.md">数据与隐私</a></div><div class="bento-card"><a class="reader-en" lang="en" href="https://github.com/turlamai/publy/blob/main/docs/terms.md">Service availability</a><a class="reader-zh" lang="zh" href="https://github.com/turlamai/publy/blob/main/docs/terms.zh-CN.md">服务可用状态</a></div></div></div></section>
 
     <!-- Footer -->
     <section id="start-here" class="product-start" aria-label="Get started / 开始使用">
-<h2 class="reader-en " lang="en">Start with one useful session.</h2><h2 class="reader-zh " lang="zh">从一次有效使用开始。</h2><p class="reader-en start-status" lang="en">CLI, default themes, Obsidian and self-hosting remain free under their existing licences. Public hosted subscriptions are not open; there is no unlimited plan for sale.</p><p class="reader-zh start-status" lang="zh">CLI、默认主题、Obsidian 和自托管按现行许可证保持免费。公开托管订阅尚未开放，不销售无限量套餐。</p><p class="reader-en " lang="en">CLI and Obsidian workflows; this is not a Rivet/Glaze desktop application. Published release assets currently include the Obsidian plugin. A server needs stable outbound IP and the account’s actual official API permissions.</p><p class="reader-zh " lang="zh">提供 CLI 与 Obsidian 工作流；不是 Rivet/Glaze 桌面应用。当前发布附件包含 Obsidian 插件。服务端需要稳定出口 IP，以及公众号实际具备的官方 API 权限。</p><div class="product-start-grid"><article><h3 class="reader-en " lang="en">01</h3><h3 class="reader-zh " lang="zh">01</h3><p class="reader-en " lang="en">Install from the source instructions and preview a non-sensitive Markdown article locally before configuring delivery.</p><p class="reader-zh " lang="zh">按源码安装说明安装，先在本地预览一篇非敏感 Markdown，再配置投递。</p></article><article><h3 class="reader-en " lang="en">02</h3><h3 class="reader-zh " lang="zh">02</h3><p class="reader-en " lang="en">Configure your own server and account, whitelist its actual outbound IP, and keep AppSecret on that server. Use HTTPS or a private tunnel for access.</p><p class="reader-zh " lang="zh">配置自己的服务器与账号，将真实出口 IP 加入白名单，AppSecret 仅放在服务端。访问使用 HTTPS 或私有隧道。</p></article><article><h3 class="reader-en " lang="en">03</h3><h3 class="reader-zh " lang="zh">03</h3><p class="reader-en " lang="en">Publish one test draft and confirm its result in the WeChat backend. A delivered draft is not a publicly published or mass-sent article.</p><p class="reader-zh " lang="zh">投递一份测试草稿，在微信后台确认结果。草稿投递成功不等于文章已公开发布或群发。</p></article></div><p class="reader-en start-limits" lang="en">Public hosted registration, payment, tenant isolation, retention/deletion and reliable job recovery are not yet qualified (<a href="https://github.com/turinglambdaai/publy/issues/7">#7</a>, <a href="https://github.com/turinglambdaai/publy/issues/8">#8</a>). Do not send AppSecret to an unannounced hosted endpoint or an issue.</p><p class="reader-zh start-limits" lang="zh">公开托管注册、支付、租户隔离、留存删除与可靠任务恢复尚未通过验收（<a href="https://github.com/turinglambdaai/publy/issues/7">#7</a>、<a href="https://github.com/turinglambdaai/publy/issues/8">#8</a>）。不要将 AppSecret 发往未公告的托管端点或 issue。</p><div class="start-links"><a class="reader-en" lang="en" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md">Installation, privacy &amp; recovery</a><a class="reader-zh" lang="zh" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">安装、隐私与恢复</a><a href="https://github.com/turinglambdaai/publy/issues"><span class="reader-en " lang="en">Get help</span><span class="reader-zh " lang="zh">反馈与帮助</span></a></div>
+<h2 class="reader-en " lang="en">Start with one useful session.</h2><h2 class="reader-zh " lang="zh">从一次有效使用开始。</h2><p class="reader-en start-status" lang="en">CLI, default themes, Obsidian and self-hosting remain free under their existing licences. Public hosted subscriptions are not open; there is no unlimited plan for sale.</p><p class="reader-zh start-status" lang="zh">CLI、默认主题、Obsidian 和自托管按现行许可证保持免费。公开托管订阅尚未开放，不销售无限量套餐。</p><p class="reader-en " lang="en">CLI and Obsidian workflows; this is not a Rivet/Glaze desktop application. Published release assets currently include the Obsidian plugin. A server needs stable outbound IP and the account’s actual official API permissions.</p><p class="reader-zh " lang="zh">提供 CLI 与 Obsidian 工作流；不是 Rivet/Glaze 桌面应用。当前发布附件包含 Obsidian 插件。服务端需要稳定出口 IP，以及公众号实际具备的官方 API 权限。</p><div class="product-start-grid"><article><h3 class="reader-en " lang="en">01</h3><h3 class="reader-zh " lang="zh">01</h3><p class="reader-en " lang="en">Install from the source instructions and preview a non-sensitive Markdown article locally before configuring delivery.</p><p class="reader-zh " lang="zh">按源码安装说明安装，先在本地预览一篇非敏感 Markdown，再配置投递。</p></article><article><h3 class="reader-en " lang="en">02</h3><h3 class="reader-zh " lang="zh">02</h3><p class="reader-en " lang="en">Configure your own server and account, whitelist its actual outbound IP, and keep AppSecret on that server. Use HTTPS or a private tunnel for access.</p><p class="reader-zh " lang="zh">配置自己的服务器与账号，将真实出口 IP 加入白名单，AppSecret 仅放在服务端。访问使用 HTTPS 或私有隧道。</p></article><article><h3 class="reader-en " lang="en">03</h3><h3 class="reader-zh " lang="zh">03</h3><p class="reader-en " lang="en">Publish one test draft and confirm its result in the WeChat backend. A delivered draft is not a publicly published or mass-sent article.</p><p class="reader-zh " lang="zh">投递一份测试草稿，在微信后台确认结果。草稿投递成功不等于文章已公开发布或群发。</p></article></div><p class="reader-en start-limits" lang="en">Public hosted registration, payment, tenant isolation, retention/deletion and reliable job recovery are not yet qualified (<a href="https://github.com/turlamai/publy/issues/7">#7</a>, <a href="https://github.com/turlamai/publy/issues/8">#8</a>). Do not send AppSecret to an unannounced hosted endpoint or an issue.</p><p class="reader-zh start-limits" lang="zh">公开托管注册、支付、租户隔离、留存删除与可靠任务恢复尚未通过验收（<a href="https://github.com/turlamai/publy/issues/7">#7</a>、<a href="https://github.com/turlamai/publy/issues/8">#8</a>）。不要将 AppSecret 发往未公告的托管端点或 issue。</p><div class="start-links"><a class="reader-en" lang="en" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md">Installation, privacy &amp; recovery</a><a class="reader-zh" lang="zh" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">安装、隐私与恢复</a><a href="https://github.com/turlamai/publy/issues"><span class="reader-en " lang="en">Get help</span><span class="reader-zh " lang="zh">反馈与帮助</span></a></div>
 </section>
 <footer>
         <div class="footer-content">
@@ -248,15 +247,15 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
                 Publy
             </div>
             <div class="footer-links">
-                <a href="https://github.com/turinglambdaai/publy">GitHub</a>
+                <a href="https://github.com/turlamai/publy">GitHub</a>
                 <a href="https://themes.publy.jrtx.site/" data-en="Theme gallery" data-zh="主题画廊">Theme gallery</a>
-                <a href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md" data-en="User guide" data-zh="使用指南">User guide</a>
-                <a href="https://github.com/turinglambdaai/publy/blob/main/LICENSE">AGPL-3.0 License</a>
+                <a href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md" data-en="User guide" data-zh="使用指南">User guide</a>
+                <a href="https://github.com/turlamai/publy/blob/main/LICENSE">AGPL-3.0 License</a>
             </div>
-            <div class="footer-note">© 2026 turinglambdaai</div>
+            <div class="footer-note">© 2026 turlamai</div>
         </div>
     </footer>
-<nav id="product-support" aria-label="Support / 支持"><a href="https://github.com/turinglambdaai/publy/issues"><span class="support-zh">反馈</span><span class="support-en" lang="en">Feedback</span></a> <a href="https://github.com/turinglambdaai/publy/releases"><span class="support-zh">发布与更新</span><span class="support-en" lang="en">Releases</span></a> <a href="https://github.com/turinglambdaai/publy/blob/main/LICENSE"><span class="support-zh">源码许可</span><span class="support-en" lang="en">Source license</span></a> <a class="support-zh" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">使用与帮助</a> <a class="support-en" lang="en" href="https://github.com/turinglambdaai/publy/blob/main/docs/USER-GUIDE.md">Usage & help</a></nav>
+<nav id="product-support" aria-label="Support / 支持"><a href="https://github.com/turlamai/publy/issues"><span class="support-zh">反馈</span><span class="support-en" lang="en">Feedback</span></a> <a href="https://github.com/turlamai/publy/releases"><span class="support-zh">发布与更新</span><span class="support-en" lang="en">Releases</span></a> <a href="https://github.com/turlamai/publy/blob/main/LICENSE"><span class="support-zh">源码许可</span><span class="support-en" lang="en">Source license</span></a> <a class="support-zh" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.zh-CN.md">使用与帮助</a> <a class="support-en" lang="en" href="https://github.com/turlamai/publy/blob/main/docs/USER-GUIDE.md">Usage & help</a></nav>
 
     <script>
         // Unified language policy for product sites:
@@ -272,11 +271,11 @@ html:lang(en) .reader-zh,html:lang(zh) .reader-en{display:none!important}@media(
         var pageMetadata = {
             en: {
                 title: 'Publy — The agent-era publishing pipeline for WeChat',
-                description: 'Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, themes as npm packages, and a self-hosted server for WeChat draft delivery.'
+                description: 'Write in Obsidian, let your agent publish. One CLI for Markdown typesetting and image-post card rendering, bundled themes and a theme gallery, and a self-hosted server for WeChat draft delivery.'
             },
             zh: {
                 title: 'Publy — agent 时代的公众号发布管线',
-                description: '写作留在 Obsidian，发布交给 agent。一个 CLI 负责排版与图片消息渲染，主题即 npm 包，托管服务负责稳定发布。'
+                description: '写作留在 Obsidian，发布交给 agent。一个 CLI 负责排版与图片消息渲染，主题预览与样式，托管服务负责稳定发布。'
             }
         };
 
