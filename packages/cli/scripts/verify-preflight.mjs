@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -466,6 +466,74 @@ try {
   assert.match(uncertain.requestId, /^[a-f0-9]{32}$/);
   assert.ok(!uncertain.problems?.length);
   
+  // A real loopback HTTP stub catches protocol errors that a missing port
+  // cannot: malformed 200 JSON, explicit 400 denial, and a 500 response.
+  // None may leak the server response body or lose requestId on uncertainty.
+  const responseServerScript = path.join(dir, "agent-response-stub.mjs");
+  const responsePortFile = path.join(dir, "agent-response-port.txt");
+  const privateServerMarker = "remote-secret-never-log";
+  fs.writeFileSync(responseServerScript, `
+import fs from "node:fs";
+import http from "node:http";
+const server = http.createServer((_req, res) => {
+  const key = _req.headers["x-api-key"];
+  res.setHeader("Content-Type", "application/json");
+  if (key === "bad-response") {
+    res.writeHead(200); res.end('{"mediaId":'); return;
+  }
+  if (key === "denied-response") {
+    res.writeHead(400); res.end(JSON.stringify({
+      code: "BAD_ARGUMENT", message: "${privateServerMarker}",
+    })); return;
+  }
+  res.writeHead(500); res.end(JSON.stringify({
+    code: "UPSTREAM_FAILED", message: "${privateServerMarker}",
+  }));
+});
+server.listen(0, "127.0.0.1", () => {
+  fs.writeFileSync(process.argv[2], String(server.address().port));
+});
+`);
+  const responseServer = spawn(process.execPath,
+    [responseServerScript, responsePortFile],
+    { stdio: "ignore", windowsHide: true });
+  try {
+    const clock = new Int32Array(new SharedArrayBuffer(4));
+    for (let attempt = 0; attempt < 100 && !fs.existsSync(responsePortFile); attempt++) {
+      Atomics.wait(clock, 0, 0, 50);
+    }
+    assert.ok(fs.existsSync(responsePortFile), "local protocol mock must start");
+    const responseConfig = path.join(dir, "response-server-config.json");
+    const responsePort = fs.readFileSync(responsePortFile, "utf8").trim();
+    fs.writeFileSync(responseConfig, JSON.stringify({
+      server: "http://127.0.0.1:" + responsePort,
+      api_key: "bad-response", default_account: "fixture",
+      accounts: [{ name: "fixture" }],
+    }));
+    for (const [key, expectedStatus, expectedCode] of [
+      ["bad-response", "unknown", "NETWORK_OUTCOME_UNKNOWN"],
+      ["denied-response", "rejected", "BAD_ARGUMENT"],
+      ["failed-response", "unknown", "UPSTREAM_FAILED"],
+    ]) {
+      const runReply = spawnSync(process.execPath,
+        [entrypoint, "publish", goodPath, "--json", "--account", "fixture",
+          "--api-key", key],
+        { encoding: "utf8", timeout: 25000,
+          env: { ...process.env, PUBLY_CONFIG: responseConfig } });
+      assert.equal(runReply.status, 5, key + " " + runReply.stderr);
+      const report = JSON.parse(runReply.stdout);
+      assert.equal(report.kind, "publish-result");
+      assert.equal(report.status, expectedStatus);
+      assert.equal(report.code, expectedCode);
+      assert.match(report.requestId, /^[a-f0-9]{32}$/);
+      assert.ok(!runReply.stdout.includes(privateServerMarker));
+      assert.ok(!runReply.stderr.includes(privateServerMarker));
+      assert.ok(!runReply.stderr.includes("SyntaxError:"));
+    }
+  } finally {
+    responseServer.kill();
+  }
+
   // The local cover is valid, but external body images still must NOT
   // silently enter an incomplete WeChat draft. Query tokens are private.
   const remoteOnly = path.join(project, "external-body-image.md");
