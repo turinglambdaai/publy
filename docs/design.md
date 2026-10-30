@@ -2,6 +2,31 @@
 
 > 当前决策：2026-10-23 interaction review。本文件负责产品形态与交互，商业权益以 `PRICING.md` / `PRICING.zh-CN.md` 为准，实际可用性以用户指南和发行/运营证据为准。下述当前范围优先于早期设想；旧里程碑勾选不是公开上线证明。
 
+## Editor-independent commercial product decision / 跨编辑器商业产品决定 — 2026-10-30
+
+**The editor is a source, not the product.** Obsidian is one integration,
+while Typora, VS Code, MarkText, Zettlr and ordinary Markdown files should
+enter the same render/check/review/draft workflow without proprietary plugins.
+Source files and image folders stay in place. A future optional small
+cross-platform *publishing companion* can make open/drag-and-drop,
+preflight, accurate preview, formatted-copy and explicit draft delivery
+accessible without a terminal or npm; it must **not** become a second editor
+or library database. A good-looking plugin does not make the overall product
+commercial-grade if first-time installs, local media and recovery are broken.
+Keep source-agnostic rendering, preview, warnings, signed/offline
+distribution, accessibility, crash/retry and real WeChat draft outcomes as
+shared acceptance criteria. This refines rather than replaces the
+2026-10-23 write-in-existing-editor / no-new-editor decision. See
+[English workflows](editor-workflows.md) and
+[中文工作流](editor-workflows.zh-CN.md).
+
+**编辑器是内容来源，不是我们的收费产品。** Obsidian 只是一个接入口；
+Typora、VS Code、MarkText、Zettlr 与普通 Markdown 应当走同一条检查、
+预览、复制和草稿投递路径。源文件与图片留在原位置。未来可用小型跨平台
+发布伴侣提供打开/拖拽、发布前检查、预览与确认，不再造编辑器或数据库。
+真正商业级的门槛是安装、缺图提示、预览一致性、无障碍、恢复与可验证的
+草稿回执，而不是支持的插件数量或界面截图。
+
 ## Current scope and interaction decision / 当前范围与交互决定
 
 The primary task is **write in the existing editor → local preview/copy → explicitly deliver to the selected WeChat account's drafts → inspect the result**. The CLI and Obsidian plugin are both clients; neither an additional desktop editor nor a theme marketplace is required for this loop. Local rendering/copy and the self-host path remain free under the existing licence. Public hosted service is not yet open for sale.
