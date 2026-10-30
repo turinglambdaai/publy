@@ -803,9 +803,10 @@ async function cmdPublish(file: string, opts: Record<string, any>): Promise<void
  * to stdout. Remote status codes are not private diagnostics, while server
  * URLs, API keys and response bodies may contain sensitive information.
  */
-async function readServerJson(
+async function requestServerJson(
   config: CliConfig,
   endpoint: string,
+  method: "GET" | "POST" | "DELETE" = "GET",
 ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; code: string }> {
   if (!config.server || !config.api_key) return { ok: false, code: "SERVER_NOT_CONFIGURED" };
   let target: URL;
@@ -820,6 +821,7 @@ async function readServerJson(
   let response: Response;
   try {
     response = await fetch(target.toString(), {
+      method,
       headers: { "x-api-key": config.api_key },
       signal: AbortSignal.timeout(15_000),
     });
@@ -828,7 +830,8 @@ async function readServerJson(
   }
   if (!response.ok) {
     return { ok: false, code: response.status === 401 || response.status === 403
-      ? "UNAUTHORIZED" : response.status === 429 ? "RATE_LIMITED" : "SERVER_REJECTED" };
+      ? "UNAUTHORIZED" : response.status === 429 ? "RATE_LIMITED"
+        : response.status >= 500 ? "SERVER_ERROR" : "SERVER_REJECTED" };
   }
   let body: unknown;
   try {
@@ -840,6 +843,23 @@ async function readServerJson(
     return { ok: false, code: "INVALID_SERVER_RESPONSE" };
   }
   return { ok: true, body: body as Record<string, unknown> };
+}
+/** A remote job mutation can have occurred before a response was lost.
+ * Preserve the job ID and mark uncertain outcomes explicitly for agents.
+ */
+function reportJobMutationFailure(
+  opts: { json?: boolean },
+  kind: "job-cancel" | "job-retry",
+  jobId: string,
+  code: string,
+): void {
+  const uncertain = ["SERVER_UNREACHABLE", "SERVER_ERROR", "INVALID_SERVER_RESPONSE"].includes(code);
+  if (opts.json) console.log(JSON.stringify({
+    schemaVersion: 1, ok: false, kind, jobId, code,
+    status: uncertain ? "unknown" : "rejected",
+  }));
+  console.error("publy: " + code);
+  process.exitCode = code === "CONFIG_INVALID" ? 1 : 5;
 }
 function readAgentConfig(
   opts: { json?: boolean },
@@ -876,8 +896,8 @@ const AGENT_USAGE: Record<string, string> = {
   publish: "publy publish <file.md> --account <name> --json",
   "publish-result": "publy publish-result <requestId> --json",
   "jobs list": "publy jobs list --json",
-  "jobs cancel": "publy jobs cancel <jobId>",
-  "jobs retry": "publy jobs retry <jobId>",
+  "jobs cancel": "publy jobs cancel <jobId> --json",
+  "jobs retry": "publy jobs retry <jobId> --json",
   history: "publy history --json",
   quota: "publy quota --json",
   "account list": "publy account list --json",
@@ -898,8 +918,8 @@ const AGENT_COMMANDS = [
   { name: "publish", json: true, network: true, effect: "create-wechat-draft" },
   { name: "publish-result", json: true, network: true, effect: "read" },
   { name: "jobs list", json: true, network: true, effect: "read" },
-  { name: "jobs cancel", json: false, network: true, effect: "cancel-scheduled-job" },
-  { name: "jobs retry", json: false, network: true, effect: "re-admit-job" },
+  { name: "jobs cancel", json: true, network: true, effect: "cancel-scheduled-job" },
+  { name: "jobs retry", json: true, network: true, effect: "re-admit-job" },
   { name: "history", json: true, network: true, effect: "read" },
   { name: "quota", json: true, network: true, effect: "read" },
   { name: "account list", json: true, network: false, effect: "read-local-config" },
@@ -1020,7 +1040,7 @@ export function createProgram(): Command {
         ...config, server: opts.server ?? config.server,
         api_key: opts.apiKey ?? config.api_key,
       };
-      const reply = await readServerJson(requestConfig, `/v1/publish-result/${encodeURIComponent(key)}`);
+      const reply = await requestServerJson(requestConfig, `/v1/publish-result/${encodeURIComponent(key)}`);
       if (!reply.ok) { reportReadFailure(opts, "publish-result", reply.code); return; }
       const body = reply.body as { status?: string; mediaId?: string; account?: string; title?: string } & { code?: string; message?: string };
       if (opts.json) {
@@ -1055,7 +1075,7 @@ export function createProgram(): Command {
   jobsCmd.command("list").description("list scheduled jobs").option("--json", "machine-readable job list").action(async (opts: {json?: boolean}) => {
     const config = readAgentConfig(opts, "jobs");
     if (!config) return;
-    const reply = await readServerJson(config, "/v1/jobs");
+    const reply = await requestServerJson(config, "/v1/jobs");
     if (!reply.ok) { reportReadFailure(opts, "jobs", reply.code); return; }
     const body = reply.body as { jobs?: JobInfo[] };
     if (opts.json) {
@@ -1071,15 +1091,22 @@ export function createProgram(): Command {
     .command("cancel")
     .argument("<id>")
     .description("cancel a pending job")
-    .action(async (id: string) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}`, config.server!).toString(), {
-        method: "DELETE",
-        headers: { "x-api-key": config.api_key! },
-      });
-      const body = (await res.json()) as { ok?: boolean } & { code?: string; message?: string };
-      console.log(res.ok && body.ok ? "cancelled" : `failed: ${body.code ?? res.status} ${body.message ?? ""}`);
-      process.exit(res.ok && body.ok ? 0 : 5);
+    .option("--json", "machine-readable cancellation outcome (changes server state)")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      let config: CliConfig;
+      try { config = loadConfig(); }
+      catch { reportJobMutationFailure(opts, "job-cancel", id, "CONFIG_INVALID"); return; }
+      const reply = await requestServerJson(config, `/v1/jobs/${encodeURIComponent(id)}`, "DELETE");
+      if (!reply.ok) { reportJobMutationFailure(opts, "job-cancel", id, reply.code); return; }
+      if (reply.body.ok !== true) {
+        reportJobMutationFailure(opts, "job-cancel", id, "SERVER_REJECTED");
+        return;
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({ schemaVersion: 1, ok: true, kind: "job-cancel", status: "cancelled", jobId: id }));
+      } else {
+        console.log("cancelled");
+      }
     });
   // interrupted jobs never auto-rerun after a crash (#8); the owner retries
   // explicitly — the original idempotency key rides along, so a lost run that
@@ -1088,18 +1115,25 @@ export function createProgram(): Command {
     .command("retry")
     .argument("<id>")
     .description("re-admit an interrupted/failed job (idempotency-checked)")
-    .action(async (id: string) => {
-      const config = loadConfig();
-      const res = await fetch(new URL(`/v1/jobs/${encodeURIComponent(id)}/retry`, config.server!).toString(), {
-        method: "POST",
-        headers: { "x-api-key": config.api_key! },
-      });
-      const body = (await res.json()) as { ok?: boolean; job?: JobInfo } & { code?: string; message?: string };
-      if (res.ok && body.ok) {
-        console.log(`job ${body.job?.id.slice(0, 8)} re-admitted (${body.job?.status})`);
+    .option("--json", "machine-readable retry outcome (changes server state)")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      let config: CliConfig;
+      try { config = loadConfig(); }
+      catch { reportJobMutationFailure(opts, "job-retry", id, "CONFIG_INVALID"); return; }
+      const reply = await requestServerJson(config, `/v1/jobs/${encodeURIComponent(id)}/retry`, "POST");
+      if (!reply.ok) { reportJobMutationFailure(opts, "job-retry", id, reply.code); return; }
+      const body = reply.body as { ok?: boolean; job?: JobInfo };
+      if (body.ok !== true || !body.job?.id) {
+        reportJobMutationFailure(opts, "job-retry", id, "INVALID_SERVER_RESPONSE");
+        return;
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({
+          schemaVersion: 1, ok: true, kind: "job-retry",
+          status: body.job.status, jobId: body.job.id,
+        }));
       } else {
-        console.error(`failed: ${body.code ?? res.status} ${body.message ?? ""}`);
-        process.exit(5);
+        console.log(`job ${body.job.id.slice(0, 8)} re-admitted (${body.job.status})`);
       }
     });
 
@@ -1111,7 +1145,7 @@ export function createProgram(): Command {
     .action(async (opts) => {
       const config = readAgentConfig(opts, "history");
       if (!config) return;
-      const reply = await readServerJson(config, `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
+      const reply = await requestServerJson(config, `/v1/history?limit=${encodeURIComponent(opts.limit)}`);
       if (!reply.ok) { reportReadFailure(opts, "history", reply.code); return; }
       const body = reply.body as { history?: { ts: string; event: string; account?: string; title?: string; mediaId?: string; error?: string }[] };
       if (opts.json) {
@@ -1130,7 +1164,7 @@ export function createProgram(): Command {
     .action(async (opts: {json?: boolean}) => {
       const config = readAgentConfig(opts, "quota");
       if (!config) return;
-      const reply = await readServerJson(config, "/v1/quota");
+      const reply = await requestServerJson(config, "/v1/quota");
       if (!reply.ok) { reportReadFailure(opts, "quota", reply.code); return; }
       const body = reply.body as { admin?: boolean; plan?: string; used?: number; limit?: number; expiresAt?: number; unlimited?: boolean };
       if (opts.json) {
