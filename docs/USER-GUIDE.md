@@ -25,7 +25,7 @@ considering delivery. Neither command sends a draft. Typora's local
 are reported, and the original source stays untouched. This is developer
 source-build functionality, **not yet a no-setup public installer**.
 
-[Supported input paths, limitations and commercial user-experience standard](editor-workflows.md)
+[Typora quick start](typora.md) · [Supported input paths, limitations and commercial user-experience standard](editor-workflows.md)
 · [简体中文](editor-workflows.zh-CN.md)
 
 ## Your first successful session
