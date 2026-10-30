@@ -73,6 +73,21 @@ try {
   assert.equal(badJsonSet.status, 1);
   assert.equal(JSON.parse(badJsonSet.stdout).code, "CONFIG_KEY_INVALID");
   assert.ok(!badJsonSet.stdout.includes(jsonSecret));
+  // Even a malformed key may itself contain a credential; omit untrusted
+  // key names from structured error payloads instead of reflecting them.
+  const sensitiveKey = "unknown-key-with-secret-" + jsonSecret;
+  const invalidSensitiveKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", sensitiveKey, "value", "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(invalidSensitiveKey.status, 1);
+  const invalidSensitiveResult = JSON.parse(invalidSensitiveKey.stdout);
+  assert.equal(invalidSensitiveResult.code, "CONFIG_KEY_INVALID");
+  assert.equal(Object.hasOwn(invalidSensitiveResult, "key"), false);
+  assert.ok(!invalidSensitiveKey.stdout.includes(jsonSecret));
+  assert.ok(!invalidSensitiveKey.stderr.includes(jsonSecret));
+
 
   // A malformed existing config can include credentials in the parser error.
   // JSON mode must return only a stable code, never parser excerpts.
