@@ -558,6 +558,40 @@ try {
   assert.ok(fs.readFileSync(typoraPreviewPath, "utf8").includes("data:image/png;base64,"));
   assert.equal(fs.readFileSync(typoraFile, "utf8"), typoraSource, "Typora source must remain exactly unchanged");
 
+  // An encoded slash/backslash must not be promoted into a directory
+  // separator and silently select an existing, unrelated cover. The normal
+  // %uXXXX and %25uXXXX Chinese filename forms must keep working.
+  const doubleEscapedUnicode = path.join(project, "Typora double-escaped Unicode.md");
+  const doubleEscapedSource = [
+    "---",
+    "typora-root-url: " + JSON.stringify(typoraRoot.split(path.sep).join("/")),
+    "cover: /blog/assets/%25u5C01%25u9762%20%25u56FE%25u7247.png",
+    "---", "", "# Local review",
+  ].join("\\n");
+  fs.writeFileSync(doubleEscapedUnicode, doubleEscapedSource);
+  const doubleEscapedCheck = run(doubleEscapedUnicode);
+  assert.equal(doubleEscapedCheck.code, 0, JSON.stringify(doubleEscapedCheck.report));
+  assert.equal(doubleEscapedCheck.report.ok, true);
+  assert.equal(fs.readFileSync(doubleEscapedUnicode, "utf8"), doubleEscapedSource);
+
+  for (const encodedSeparator of ["%2F", "%5C", "%u002F", "%u005C", "%25u002F", "%25u005C"]) {
+    const unsafeFile = path.join(project, "Typora encoded separator " + encodedSeparator + ".md");
+    const unsafeSource = [
+      "---",
+      "typora-root-url: " + JSON.stringify(typoraRoot.split(path.sep).join("/")),
+      "cover: /blog" + encodedSeparator + "assets" + encodedSeparator + "%u5C01%u9762%20%u56FE%u7247.png",
+      "---", "", "# Local review",
+    ].join("\\n");
+    fs.writeFileSync(unsafeFile, unsafeSource);
+    const unsafeCheck = run(unsafeFile);
+    assert.equal(unsafeCheck.code, 4, encodedSeparator + ": " + JSON.stringify(unsafeCheck.report));
+    assert.equal(unsafeCheck.report.ok, false);
+    assert.equal(unsafeCheck.report.attachmentCount, 0);
+    assert.ok(unsafeCheck.report.problems.some((p) => p.startsWith("Cover not found:")),
+      "encoded separator must block the draft preflight: " + encodedSeparator);
+    assert.equal(fs.readFileSync(unsafeFile, "utf8"), unsafeSource);
+  }
+
   // Typora can also save absolute file:/// image links, including Chinese
   // paths. They must resolve to the exact same local bytes, without exporting
   // a clickable file:// link into the WeChat HTML.
