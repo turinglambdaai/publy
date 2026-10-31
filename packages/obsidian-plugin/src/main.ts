@@ -89,11 +89,10 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   langAuto: { zh: "自动", en: "Auto" },
   langReload: { zh: "Publy: 界面语言已保存——命令名等将在重载插件后完全生效", en: "Publy: language saved — command names update fully after reload" },
   intro: {
-    zh: "三步开始发布：① 服务开通账号（自托管或购买托管）拿 Server 地址和 API key → ② 填在下面，点「测试连接」确认 → ③ 打开任意笔记，点左侧 send 图标发布（不配置也能用：预览排版、复制 rich text，均纯本地）。",
-    en: "Three steps to publish: (1) get a Server URL + API key (self-hosted or hosted) -> (2) fill them below and hit Test connection -> (3) open any note and click the send ribbon icon (preview & copy work locally with zero config).",
+    zh: "本地预览和复制富文本无需服务或账号。若要保存到公众号草稿箱，请先配置自己的 Publy 服务端、API key 和公众号账号，再测试连接；当前不提供可购买的托管服务。",
+    en: "Local preview and rich-text copy need no server or account. To save to WeChat drafts, configure your own Publy server, API key and WeChat account, then test the connection. Paid hosting is not currently available.",
   },
   guideLink: { zh: "使用手册", en: "Guide" },
-  buyLink: { zh: "购买托管服务", en: "Get the hosted service" },
   setServer: { zh: "Server 地址", en: "Server URL" },
   setServerDesc: { zh: "Publy 服务地址，带协议，例如 https://publy-api.example.com", en: "Publy server URL incl. protocol, e.g. https://publy-api.example.com" },
   setKey: { zh: "API key", en: "API key" },
@@ -160,7 +159,7 @@ const STRINGS: Record<string, { zh: string; en: string }> = {
   typeImagePost: { zh: "图片消息", en: "image post" },
   typeArticle: { zh: "文章", en: "article" },
   acctFetchFail: { zh: "获取账号列表失败：{msg}", en: "Failed to list accounts: {msg}" },
-  acctNone: { zh: "这个 key 名下没有公众号账号——先在服务端绑定（购买页 /v1/bind 或 publy account add）", en: "No WeChat accounts under this key — bind one first (/v1/bind on the purchase page, or publy account add)" },
+  acctNone: { zh: "这个 key 名下没有公众号账号——请先在自托管服务端绑定（publy account add）", en: "No WeChat accounts under this key — bind one on your self-hosted server (publy account add)" },
   acctSwitched: { zh: "已切换到「{name}」", en: "Switched to [{name}]" },
   acctModalTitle: { zh: "切换公众号账号", en: "Switch WeChat account" },
   acctCurrent: { zh: "{name}（当前）", en: "{name} (current)" },
@@ -1823,8 +1822,6 @@ class PublySettingTab extends PluginSettingTab {
       a.target = "_blank";
     };
     mkLink(t("guideLink"), "https://publy.jrtx.site");
-    links.appendText(" · ");
-    mkLink(t("buyLink"), "https://publy-api.jrtx.site/");
     links.style.marginTop = "4px";
 
     new Setting(containerEl).setName(t("setServer")).setDesc(t("setServerDesc")).addText((text) =>
