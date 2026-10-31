@@ -57,6 +57,10 @@ export function resolveEditorAsset(reference: string, opts: EditorAssetOptions):
   // Decode file URLs exactly once. Decoding the path first would turn %23
   // into a URL fragment and %25 into a stray percent before fileURLToPath.
   const raw = reference.trim();
+  // Encoded path separators are ambiguous: decoding them can silently pick
+  // another existing image/cover (including double-escaped Typora %u forms).
+  // Fail preflight rather than turn an encoded filename into a directory path.
+  if (/%(?:2f|5c|u002f|u005c|25(?:2f|5c|u002f|u005c))/i.test(raw)) return null;
   if (/^file:\/\//i.test(raw)) {
     try {
       return existingFile(fileURLToPath(raw));
