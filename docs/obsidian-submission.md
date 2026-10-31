@@ -4,10 +4,10 @@
 
 [English user guide](USER-GUIDE.md) · [中文使用指南](USER-GUIDE.zh-CN.md)
 
-## 1. 当前发布阻塞
+## 1. 当前发布阻塞与已关闭安全项
 
 - [#12](https://github.com/turlamai/publy/issues/12)：标准社区安装只获取 Release 的 `main.js`、`manifest.json`、`styles.css`。当前插件卡片/WASM/字体依赖 ZIP 中的 `node_modules/` 和 `fonts/`；**ZIP 侧载通过不等于社区目录安装通过**。必须先完成只用三个文件的干净库实机验收。
-- [#13](https://github.com/turlamai/publy/issues/13)：`MarkdownIt({html:true})` → `innerHTML` 的原生 HTML 预览需要安全边界和回归测试。
+- **已关闭的安全项** [#13](https://github.com/turlamai/publy/issues/13)：原生 Markdown HTML 预览的安全边界已在 [PR #24](https://github.com/turlamai/publy/pull/24)、[PR #41](https://github.com/turlamai/publy/pull/41) 和 [PR #43](https://github.com/turlamai/publy/pull/43) 的安全加固后关闭。此项不再列为未解决的代码阻塞；但现有自动化回归不能替代 [#15](https://github.com/turlamai/publy/issues/15) 所需的真实 Obsidian 桌面验收。
 - [#14](https://github.com/turlamai/publy/issues/14)：仓库主线源码现为 `0.8.7`，但最后一个公开插件 Release 为 `0.8.3`。统一的根/子目录清单只表示源码元数据一致；**还需要从已审查 SHA 创建相同版本的 Release** 才能提审。
 - [#15](https://github.com/turlamai/publy/issues/15)：需要增补真实 Obsidian 桌面安装/交互测试；现有 Node stub 不是原生测试。
 
