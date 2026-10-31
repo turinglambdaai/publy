@@ -567,7 +567,7 @@ try {
     "typora-root-url: " + JSON.stringify(typoraRoot.split(path.sep).join("/")),
     "cover: /blog/assets/%25u5C01%25u9762%20%25u56FE%25u7247.png",
     "---", "", "# Local review",
-  ].join("\\n");
+  ].join("\n");
   fs.writeFileSync(doubleEscapedUnicode, doubleEscapedSource);
   const doubleEscapedCheck = run(doubleEscapedUnicode);
   assert.equal(doubleEscapedCheck.code, 0, JSON.stringify(doubleEscapedCheck.report));
@@ -581,7 +581,7 @@ try {
       "typora-root-url: " + JSON.stringify(typoraRoot.split(path.sep).join("/")),
       "cover: /blog" + encodedSeparator + "assets" + encodedSeparator + "%u5C01%u9762%20%u56FE%u7247.png",
       "---", "", "# Local review",
-    ].join("\\n");
+    ].join("\n");
     fs.writeFileSync(unsafeFile, unsafeSource);
     const unsafeCheck = run(unsafeFile);
     assert.equal(unsafeCheck.code, 4, encodedSeparator + ": " + JSON.stringify(unsafeCheck.report));
