@@ -98,6 +98,65 @@ try {
       "temporary credential files must be cleaned up after atomic rename");
   }
 
+  // Structured config writes must not expose secrets, even in error paths.
+  const jsonConfig = path.join(dir, "json-config.json");
+  const jsonSecret = "agent-config-secret-must-stay-private";
+  const jsonSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "api_key", jsonSecret, "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(jsonSet.status, 0, jsonSet.stderr);
+  const configResult = JSON.parse(jsonSet.stdout);
+  assert.equal(configResult.kind, "config-set");
+  assert.equal(configResult.code, "CONFIG_SAVED");
+  assert.equal(configResult.ok, true);
+  assert.equal(configResult.networkUsed, false);
+  assert.equal(configResult.submitted, false);
+  assert.ok(!jsonSet.stdout.includes(jsonSecret));
+  assert.equal(JSON.parse(fs.readFileSync(jsonConfig, "utf8")).api_key, jsonSecret);
+  const badJsonSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "unrecognized_key", jsonSecret, "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(badJsonSet.status, 1);
+  assert.equal(JSON.parse(badJsonSet.stdout).code, "CONFIG_KEY_INVALID");
+  assert.ok(!badJsonSet.stdout.includes(jsonSecret));
+  // Even a malformed key may itself contain a credential; omit untrusted
+  // key names from structured error payloads instead of reflecting them.
+  const sensitiveKey = "unknown-key-with-secret-" + jsonSecret;
+  const invalidSensitiveKey = spawnSync(process.execPath,
+    [entrypoint, "config", "set", sensitiveKey, "value", "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: jsonConfig },
+    });
+  assert.equal(invalidSensitiveKey.status, 1);
+  const invalidSensitiveResult = JSON.parse(invalidSensitiveKey.stdout);
+  assert.equal(invalidSensitiveResult.code, "CONFIG_KEY_INVALID");
+  assert.equal(Object.hasOwn(invalidSensitiveResult, "key"), false);
+  assert.ok(!invalidSensitiveKey.stdout.includes(jsonSecret));
+  assert.ok(!invalidSensitiveKey.stderr.includes(jsonSecret));
+
+
+  // A malformed existing config can include credentials in the parser error.
+  // JSON mode must return only a stable code, never parser excerpts.
+  const malformedSetConfig = path.join(dir, "malformed-agent-config.json");
+  const malformedSecret = "do-not-echo-this-parser-token";
+  fs.writeFileSync(malformedSetConfig, '{"api_key":"' + malformedSecret + '",');
+  const malformedSet = spawnSync(process.execPath,
+    [entrypoint, "config", "set", "server", "https://example.invalid", "--json"], {
+      encoding: "utf8", timeout: 25000,
+      env: { ...process.env, PUBLY_CONFIG: malformedSetConfig },
+    });
+  assert.equal(malformedSet.status, 1);
+  assert.equal(JSON.parse(malformedSet.stdout).code, "CONFIG_INVALID");
+  assert.ok(!malformedSet.stdout.includes(malformedSecret));
+  assert.ok(!malformedSet.stderr.includes(malformedSecret));
+  assert.equal(fs.readFileSync(malformedSetConfig, "utf8"),
+    '{"api_key":"' + malformedSecret + '",',
+    "failed config update must preserve the original file");
+
   // Agent contract discovery is offline and truthful: don't claim JSON
   // support for operations that still only offer human-oriented output.
   const cli = (...args) => spawnSync(process.execPath, [entrypoint, ...args],
